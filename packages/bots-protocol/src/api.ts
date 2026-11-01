@@ -429,7 +429,7 @@ export const ROUTES = [
 		Obj({
 			id: Id,
 			decision: Type.Union([Type.Literal("allow"), Type.Literal("always"), Type.Literal("deny")]),
-			/** A passkey assertion, for spending approvals. */
+			/** A passkey assertion for spending approvals: its challenge is the UTF-8 bytes of the approval's digest. */
 			passkey: Opt(Type.Unknown()),
 		}),
 		Obj({

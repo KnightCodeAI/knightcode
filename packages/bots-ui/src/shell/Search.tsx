@@ -9,7 +9,8 @@ export interface Hit {
 	title: string;
 	snippet?: string;
 	kind: SearchHit["kind"];
-	route: Route;
+	/** Where the hit opens: a route, or a path for a place inside one (a chat at an entry). */
+	route: Route | string;
 }
 
 /** Hits for `query`: bots and groups first (instant), then messages, pages and skills. */
@@ -79,7 +80,7 @@ function toHit(hit: SearchHit): Hit | undefined {
 						title: hit.title,
 						snippet: hit.snippet,
 						kind: "message",
-						route: { name: "bot", botId: hit.botId, pane: "details" },
+						route: `/bots/${encodeURIComponent(hit.botId)}?entry=${encodeURIComponent(hit.id)}`,
 					}
 				: undefined;
 		case "page":

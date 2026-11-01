@@ -8,7 +8,13 @@ import { IconButton } from "../primitives/IconButton.tsx";
 import { Menu, MenuItem } from "../primitives/Menu.tsx";
 import { navigate } from "../shell/routes.ts";
 import { useBots, useResource, useStore } from "../state/store.ts";
+import { ErrorBoundary } from "../primitives/ErrorBoundary.tsx";
 import { BlockView } from "./blocks/BlockView.tsx";
+
+/** The previewed version, but only on the page it came from. */
+export function shownVersion(preview: { pageId: string; page: Page } | undefined, pageId: string): Page | undefined {
+	return preview?.pageId === pageId ? preview.page : undefined;
+}
 
 /** The page at /pages/<id>. */
 export function PageView({ pageId }: { pageId: string }) {
@@ -16,7 +22,10 @@ export function PageView({ pageId }: { pageId: string }) {
 	const key = `page:${pageId}`;
 	const { data: page, error } = useResource(key, (api) => api.getPage({ id: pageId }));
 	const { data: bots } = useBots();
-	const [version, setVersion] = useState<Page>();
+	const [preview, setPreview] = useState<{ pageId: string; page: Page }>();
+	const version = shownVersion(preview, pageId);
+	// A version fetched for this page; a late answer for another page never shows here.
+	const setVersion = (page: Page | undefined) => setPreview(page && { pageId: page.id, page });
 	const { data: versions } = useResource(`page-versions:${pageId}:${page?.version}`, (api) =>
 		api.listPageVersions({ id: pageId }),
 	);
@@ -105,7 +114,12 @@ export function PageView({ pageId }: { pageId: string }) {
 				)}
 				<div className="kb-page__blocks">
 					{shown.blocks.map((block) => (
-						<BlockView key={block.id} block={block} pageId={page.id} />
+						<ErrorBoundary
+							key={block.id}
+							fallback={<p className="kb-settings__hint">This block could not be shown.</p>}
+						>
+							<BlockView block={block} pageId={page.id} />
+						</ErrorBoundary>
 					))}
 				</div>
 			</div>

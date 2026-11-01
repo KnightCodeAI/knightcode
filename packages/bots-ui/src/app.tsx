@@ -45,7 +45,11 @@ export function BotsApp({ api, connect, platform, sandboxOrigin, sidebarHeader }
 			new BotsStore(api, new ThreadSocket(connect, async () => (await api.issueTicket({ scope: "socket" })).ticket)),
 		[api, connect],
 	);
-	useEffect(() => () => store.socket.close(), [store]);
+	// React runs this twice in development (setup, cleanup, setup), so setup reopens what cleanup closed.
+	useEffect(() => {
+		store.socket.reopen();
+		return () => store.socket.close();
+	}, [store]);
 	// The desktop app sets the theme on the page itself.
 	useEffect(() => {
 		if (platform === "web") applyThemePreference();

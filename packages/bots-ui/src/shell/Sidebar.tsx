@@ -25,10 +25,15 @@ import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useSt
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
 import { IconButton } from "../primitives/IconButton.tsx";
 import { Menu, MenuItem, MenuSeparator, MenuSub } from "../primitives/Menu.tsx";
+import { usePlatform } from "../platform.ts";
 import { MobileApp } from "./MobileApp.tsx";
+import { signOut } from "./signOut.ts";
 import { useToast } from "../primitives/Toast.tsx";
 import { BOTS, type BotList, useBots, useResource, useStore } from "../state/store.ts";
 import { navigate, type Route } from "./routes.ts";
+
+/** The archived bots, fetched while the archive is open. */
+const ARCHIVED_BOTS = "bots:archived";
 
 export interface SidebarProps {
 	route: Route;
@@ -41,9 +46,13 @@ export interface SidebarProps {
 export function Sidebar({ route, onSearch, header }: SidebarProps) {
 	const { data } = useBots();
 	const [showArchived, setShowArchived] = useState(false);
+	// The active list leaves archived bots out, so the archive is its own request.
+	const { data: archived } = useResource(showArchived ? ARCHIVED_BOTS : null, (api) =>
+		api.listBots({ archived: true }),
+	);
 	const activeBot = route.name === "bot" ? route.botId : undefined;
 	const activeGroup = route.name === "group" ? route.groupId : undefined;
-	const bots = (data?.bots ?? []).filter((bot) => bot.archived === showArchived);
+	const bots = showArchived ? (archived?.bots ?? []) : (data?.bots ?? []).filter((bot) => !bot.archived);
 	const groups = showArchived ? [] : (data?.groups ?? []);
 	const sections = showArchived ? [] : (data?.sections ?? []);
 	const placed = new Set(sections.flatMap((s) => s.itemIds));
@@ -117,6 +126,9 @@ function BotRow({ bot, active, sections }: { bot: Bot; active: boolean; sections
 	const patch = async (update: Promise<Bot>) => {
 		const next = await update;
 		store.set<BotList>(BOTS, (list) => list && { ...list, bots: list.bots.map((b) => (b.id === next.id ? next : b)) });
+		// Archiving and restoring move a bot between the two lists.
+		store.reload(BOTS);
+		store.reload(ARCHIVED_BOTS);
 		return next;
 	};
 	const moveTo = async (sectionId: string | undefined) => {
@@ -297,6 +309,8 @@ function Footer({ onShowArchived }: { onShowArchived: () => void }) {
 	const percent = included ? Math.min(100, Math.round((used / included) * 100)) : 0;
 	const planLabel = billing?.plan === "trial" ? "Trial" : billing?.plan === "active" ? "Bots plan" : "No plan";
 	const [mobile, setMobile] = useState(false);
+	// The desktop app owns its session; signing out happens there.
+	const web = usePlatform() === "web";
 	return (
 		<div className="kb-sidebar__footer" data-ref="sidebar-footer">
 			<div>
@@ -359,9 +373,11 @@ function Footer({ onShowArchived }: { onShowArchived: () => void }) {
 					<MenuItem icon={<Archive size={14} />} onSelect={onShowArchived}>
 						Archived bots
 					</MenuItem>
-					<MenuItem icon={<LogOut size={14} />} onSelect={() => navigate("/logout")}>
-						Log out
-					</MenuItem>
+					{web && (
+						<MenuItem icon={<LogOut size={14} />} onSelect={() => void signOut()}>
+							Log out
+						</MenuItem>
+					)}
 				</Menu>
 				<button
 					type="button"

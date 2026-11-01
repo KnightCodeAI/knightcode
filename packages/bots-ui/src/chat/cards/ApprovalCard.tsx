@@ -3,6 +3,7 @@ import type { Approval } from "@knightcode/bots-protocol";
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../../primitives/Button.tsx";
+import { type ApprovalDecision, approvalDecisions } from "../spend.ts";
 
 const STATE_LABEL: Record<Approval["state"], string> = {
 	pending: "Waiting for you",
@@ -11,9 +12,11 @@ const STATE_LABEL: Record<Approval["state"], string> = {
 	expired: "Expired",
 };
 
-export type ApprovalDecision = "allow" | "always" | "deny";
+export type { ApprovalDecision } from "../spend.ts";
 
 /** Buttons show only while pending; the card never blocks the chat around it. */
+const DECISION_LABELS: Record<ApprovalDecision, string> = { deny: "Deny", always: "Always allow", allow: "Allow once" };
+
 export function ApprovalCard({
 	approval,
 	onAnswer,
@@ -67,15 +70,16 @@ export function ApprovalCard({
 				)}
 				{pending && (
 					<div className="kb-card-actions">
-						<Button variant="secondary" disabled={busy} onClick={() => void answer("deny")}>
-							Deny
-						</Button>
-						<Button variant="secondary" disabled={busy} onClick={() => void answer("always")}>
-							Always allow
-						</Button>
-						<Button variant="primary" disabled={busy} onClick={() => void answer("allow")}>
-							Allow once
-						</Button>
+						{approvalDecisions(approval).map((decision) => (
+							<Button
+								key={decision}
+								variant={decision === "allow" ? "primary" : "secondary"}
+								disabled={busy}
+								onClick={() => void answer(decision)}
+							>
+								{DECISION_LABELS[decision]}
+							</Button>
+						))}
 					</div>
 				)}
 			</section>

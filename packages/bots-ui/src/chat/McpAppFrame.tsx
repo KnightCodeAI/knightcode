@@ -33,12 +33,18 @@ export function McpAppFrame({ appUrl, title = "App", onAction }: McpAppFrameProp
 			className="kb-app-frame"
 			src={appUrl}
 			title={title}
-			sandbox="allow-scripts allow-forms"
+			sandbox={PANEL_SANDBOX}
 			referrerPolicy="no-referrer"
 			allow=""
 		/>
 	);
 }
+
+/**
+ * The panel frame's sandbox. allow-same-origin keeps the panel on its own origin (otherwise it is "null" and the
+ * origin check above could never pass); that is safe only because `isAllowed` refuses the app's own origin.
+ */
+export const PANEL_SANDBOX = "allow-scripts allow-forms allow-same-origin";
 
 /** True when `appUrl` is on the sandbox origin and that origin is not the app's own. */
 export function isAllowed(appUrl: string, sandbox: string | undefined): boolean {

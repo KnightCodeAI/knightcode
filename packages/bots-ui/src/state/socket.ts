@@ -97,10 +97,23 @@ export class ThreadSocket {
 		this.send({ type: "answer", ...target, entryId, value, requestId: crypto.randomUUID() });
 	}
 
-	/** Closes the connection for good. */
+	/** Closes the connection; `reopen` starts it again (React runs an effect's cleanup and setup twice in development). */
 	close(): void {
 		this.closed = true;
-		this.socket?.close();
+		const socket = this.socket;
+		this.socket = undefined;
+		this.ready = false;
+		socket?.close();
+	}
+
+	/** Undoes `close`: every watched thread resumes from the version it holds, so nothing is missed or repeated. */
+	reopen(): void {
+		if (!this.closed) return;
+		this.closed = false;
+		if (this.watches.size === 0 && this.queue.length === 0) return;
+		for (const watch of this.watches.values())
+			this.queue.unshift({ type: "subscribe", ...watch.target, since: watch.version });
+		void this.open();
 	}
 
 	private send(frame: ClientFrame): void {

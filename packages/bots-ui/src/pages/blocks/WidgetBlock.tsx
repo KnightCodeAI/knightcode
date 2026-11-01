@@ -1,6 +1,6 @@
 // A live widget: data the bot's source refreshed (a routine's output, a connector read, a file), shown as a number,
 // list, table or chart. Refreshes read data directly; no model runs.
-import type { ChartSpec, PageBlock } from "@knightcode/bots-protocol";
+import { type ChartSpec, ChartSpecSchema, type PageBlock, parse } from "@knightcode/bots-protocol";
 import { Chart } from "../../chat/rich/Chart.tsx";
 import { formatDay, formatTime } from "../../chat/layout.ts";
 import { cellText } from "./TableBlock.tsx";
@@ -42,8 +42,8 @@ function WidgetBody({ block }: { block: Widget }) {
 				</ul>
 			);
 		case "table": {
-			const rows = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
-			const columns = [...new Set(rows.flatMap((row) => (row && typeof row === "object" ? Object.keys(row) : [])))];
+			const rows = tableRows(data);
+			const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))];
 			return (
 				<div className="kb-page-table">
 					<table>
@@ -78,9 +78,20 @@ function WidgetBody({ block }: { block: Widget }) {
 	}
 }
 
-function isChartSpec(value: unknown): value is ChartSpec {
-	const v = value as ChartSpec;
-	return Boolean(
-		v && Array.isArray(v.labels) && Array.isArray(v.series) && ["line", "bar", "area", "pie"].includes(v.kind),
+/** A widget's rows: the objects in its data, anything else left out (the data is whatever a source returned). */
+export function tableRows(data: unknown): Record<string, unknown>[] {
+	if (!Array.isArray(data)) return [];
+	return data.filter(
+		(row): row is Record<string, unknown> => row !== null && typeof row === "object" && !Array.isArray(row),
 	);
+}
+
+/** Whether `value` is a chart the Chart component can draw, checked against the protocol's schema. */
+export function isChartSpec(value: unknown): value is ChartSpec {
+	try {
+		parse(ChartSpecSchema, value);
+		return true;
+	} catch {
+		return false;
+	}
 }

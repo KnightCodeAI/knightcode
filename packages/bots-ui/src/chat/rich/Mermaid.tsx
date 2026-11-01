@@ -27,7 +27,12 @@ export function Mermaid({ source }: { source: string }) {
 		let live = true;
 		configure();
 		mermaid.render(id, source).then(
-			(result) => live && setSvg(result.svg),
+			(result) => {
+				if (!live) return;
+				// A source that failed while it streamed in and now parses draws normally.
+				setError(undefined);
+				setSvg(result.svg);
+			},
 			(cause: unknown) => live && setError(cause instanceof Error ? cause.message : "This diagram could not be drawn."),
 		);
 		return () => {

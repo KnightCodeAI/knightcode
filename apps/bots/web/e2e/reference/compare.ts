@@ -90,9 +90,13 @@ const CONNECT_CARD = '[data-card="connect-app"]';
 export const SCREENS: Record<string, ScreenRoute> = {
 	shell: { path: "/bots/finley" },
 	chat: { path: "/bots/finley?pane=closed" },
+	// The reference was captured with a prompt typed, not streaming: this compares the composer holding a draft. A
+	// reply in progress is pinned by chat.e2e's own composer-streaming baseline.
 	"chat-streaming": { path: "/bots/finley?pane=closed", steps: typeInComposer("Review PR 12"), mask: [TRANSCRIPT] },
 	"composer-mention": { path: "/bots/finley", steps: typeInComposer("@"), mask: [TRANSCRIPT, PANE] },
 	"card-question": { path: "/bots/finley?pane=closed" },
+	// The reference has no approval or takeover card; its captures measure the connect-app card, so these compare the
+	// card chrome all cards share. KnightCode's approval and takeover cards are pinned by chat.e2e's own baselines.
 	"card-approval": { path: "/bots/finley?pane=closed", mask: [TRANSCRIPT], scope: CONNECT_CARD },
 	"card-takeover": { path: "/bots/finley?pane=closed", mask: [TRANSCRIPT], scope: CONNECT_CARD },
 	"bot-create": { path: "/new", referenceMask: true },
@@ -124,6 +128,8 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	"settings-payments": { path: "/settings/payments", referenceMask: true, scope: SETTINGS_LAYER },
 	"settings-channels": { path: "/settings/channels", referenceMask: true, scope: SETTINGS_LAYER },
 	"settings-billing": { path: "/settings/billing", referenceMask: true, scope: SETTINGS_LAYER },
+	// The reference has no onboarding checklist: its first-run screen is the chat with the connect-app card, which
+	// this compares. The checklist is pinned by settings.e2e's own onboarding-checklist baseline.
 	onboarding: { path: "/bots/finley?pane=closed&onboarding=1", referenceMask: true },
 	// Interaction states: menus, hovers and the avatar picker, from the screen the reference resets to.
 	"x-account-menu": {

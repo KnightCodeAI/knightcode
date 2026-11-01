@@ -2,7 +2,7 @@
 // to edit and save, or discard.
 import type { SkillDraft } from "@knightcode/bots-protocol";
 import { Circle, Square } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../primitives/Button.tsx";
 import { Input, Textarea } from "../primitives/Input.tsx";
 import { useToast } from "../primitives/Toast.tsx";
@@ -29,7 +29,23 @@ export function TeachTask({
 		await onTake(true);
 		setPhase({ kind: "recording", sessionId });
 	};
+	// Closing the panel, or leaving it, while recording stops the session and releases control.
+	const recording = useRef<string | undefined>(undefined);
+	recording.current = phase.kind === "recording" ? phase.sessionId : undefined;
+	const abandon = () => {
+		const sessionId = recording.current;
+		if (!sessionId) return;
+		recording.current = undefined;
+		void store.api
+			.stopTeaching({ botId, sessionId })
+			.catch(() => undefined)
+			.then(() => onTake(false));
+	};
+	const abandonOnLeave = useRef(abandon);
+	abandonOnLeave.current = abandon;
+	useEffect(() => () => abandonOnLeave.current(), []);
 	const stop = async (sessionId: string) => {
+		recording.current = undefined;
 		const draft = await store.api.stopTeaching({ botId, sessionId });
 		await onTake(false);
 		setPhase({ kind: "draft", draft });
@@ -38,7 +54,14 @@ export function TeachTask({
 		<section className="kb-dock" aria-label="Teach a task">
 			<header className="kb-dock__head">
 				<span>Teach a task</span>
-				<button type="button" className="kb-link-button" onClick={onClose}>
+				<button
+					type="button"
+					className="kb-link-button"
+					onClick={() => {
+						abandon();
+						onClose();
+					}}
+				>
 					Close
 				</button>
 			</header>

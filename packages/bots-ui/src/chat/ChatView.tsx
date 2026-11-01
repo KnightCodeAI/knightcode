@@ -5,10 +5,11 @@ import { AtSign, CalendarClock, Plug, Sparkles, Users } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
 import { useToast } from "../primitives/Toast.tsx";
-import { navigate } from "../shell/routes.ts";
+import { navigate, useQueryParam } from "../shell/routes.ts";
 import type { ThreadTarget } from "../state/socket.ts";
 import { BOTS, INBOX, useBots, useConversation, useResource, useStore } from "../state/store.ts";
 import { Composer, type Draft, type Suggestion } from "./Composer.tsx";
+import { confirmSpend } from "./spend.ts";
 import type { ChatActions } from "./Message.tsx";
 import { Transcript } from "./Transcript.tsx";
 
@@ -55,7 +56,8 @@ export function ChatView({ bot, paneOpen, phone }: ChatViewProps) {
 					</span>
 				</div>
 			</header>
-			<Thread target={target} view={view} name={bot.name} botId={bot.id} />
+			{/* Keyed by bot: a draft, its reply and its files never carry over to another conversation. */}
+			<Thread key={bot.id} target={target} view={view} name={bot.name} botId={bot.id} />
 		</>
 	);
 }
@@ -94,13 +96,24 @@ export function Thread({
 		[skillList],
 	);
 	const [context, setContext] = useState<{ replyTo?: { id: string; text: string }; quote?: string; nonce: number }>();
+	const entry = useQueryParam("entry");
 	const refreshBots = () => store.reload(BOTS);
 
 	const actions: ChatActions = {
 		answer: (entryId, value) => store.socket.answer(target, entryId, value),
 		connectApp: (appId) => navigate({ name: "connectors", appId }),
 		answerApproval: async (approval, decision) => {
-			const result = await store.api.answerApproval({ id: approval.id, decision });
+			// A purchase goes ahead only with the person's passkey over this exact action.
+			let passkey: unknown;
+			if (approval.action.spend && decision !== "deny") {
+				passkey = await confirmSpend(approval);
+				if (passkey === undefined) return toast({ text: "Purchase not approved: the passkey check did not finish." });
+			}
+			const result = await store.api.answerApproval({
+				id: approval.id,
+				decision,
+				...(passkey === undefined ? {} : { passkey }),
+			});
 			store.reload(INBOX);
 			refreshBots();
 			if (result.result === "expired") toast({ text: "That approval expired. Ask the bot to try again." });
@@ -157,7 +170,7 @@ export function Thread({
 
 	return (
 		<>
-			<Transcript view={view} bots={bots} botId={botId} botName={name} actions={actions} />
+			<Transcript view={view} bots={bots} botId={botId} botName={name} actions={actions} focus={entry} />
 			{below}
 			<Composer
 				placeholder={`Message ${name}`}

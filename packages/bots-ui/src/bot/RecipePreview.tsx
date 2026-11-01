@@ -49,14 +49,29 @@ export function redactCredentials(text: string): { text: string; removed: number
 	return { text: out, removed };
 }
 
-/** The recipe as it will be sent: unticked instructions dropped, credential-like text removed everywhere. */
+/** `value` with credential-like text removed from every string in it, however deep. */
+function redactDeep<T>(value: T): T {
+	if (typeof value === "string") return redactCredentials(value).text as T;
+	if (Array.isArray(value)) return value.map(redactDeep) as T;
+	if (value && typeof value === "object")
+		return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, redactDeep(inner)])) as T;
+	return value;
+}
+
+/**
+ * The recipe as it will be sent: credential-like text removed from every field (names included), unticked
+ * instructions dropped, and memory reduced to the entries chosen. Memory keeps its positions, so the chosen indexes
+ * still point at the right entries, but an entry that was not chosen, or that holds a credential, goes out empty.
+ */
 export function cleanRecipe(recipe: Recipe, selection: RecipeSelection): Recipe {
-	const clean = (text: string) => redactCredentials(text).text;
+	const chosen = new Set([...selection.memory, ...selection.sharedMemory]);
+	const clean = redactDeep(recipe);
 	return {
-		...recipe,
-		profile: { ...recipe.profile, description: selection.instructions ? clean(recipe.profile.description) : "" },
-		skills: recipe.skills.map((s) => ({ ...s, description: clean(s.description), content: clean(s.content) })),
-		routines: recipe.routines.map((r) => ({ ...r, description: clean(r.description), content: clean(r.content) })),
+		...clean,
+		profile: { ...clean.profile, description: selection.instructions ? clean.profile.description : "" },
+		memory: recipe.memory.map((entry, i) =>
+			chosen.has(i) && !memoryBlocked(entry.content) ? { ...entry, content: entry.content } : { ...entry, content: "" },
+		),
 	};
 }
 

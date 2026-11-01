@@ -27,8 +27,12 @@ const sw = self as unknown as Scope;
 
 /** Only paths on this origin open; anything else opens the home screen. */
 function target(path: unknown): string {
-	const url = new URL(typeof path === "string" ? path : "/", sw.location.origin);
-	return url.origin === sw.location.origin ? url.href : sw.location.origin;
+	try {
+		const url = new URL(typeof path === "string" ? path : "/", sw.location.origin);
+		return url.origin === sw.location.origin ? url.href : sw.location.origin;
+	} catch {
+		return sw.location.origin;
+	}
 }
 
 sw.addEventListener("install", () => void sw.skipWaiting());
@@ -37,7 +41,13 @@ sw.addEventListener("activate", (event) => event.waitUntil(sw.clients.claim()));
 sw.addEventListener("push", (event) => {
 	let payload: Payload = {};
 	try {
-		payload = (event.data?.json() ?? {}) as Payload;
+		const body: unknown = event.data?.json();
+		// Only an object's string fields are used; anything else falls back to the defaults.
+		if (body && typeof body === "object") {
+			const fields = body as Record<string, unknown>;
+			const text = (key: string) => (typeof fields[key] === "string" ? (fields[key] as string) : undefined);
+			payload = { title: text("title"), body: text("body"), path: text("path"), tag: text("tag") };
+		}
 	} catch {
 		// A payload that is not JSON still shows a notification.
 	}

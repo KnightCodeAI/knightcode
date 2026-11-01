@@ -14,6 +14,7 @@ import { getThemePreference, setThemePreference, type ThemePreference } from "..
 import { PlanCard } from "../usage/Usage.tsx";
 import { formatDay } from "../chat/layout.ts";
 import { usePlatform } from "../platform.ts";
+import { signOut } from "../shell/signOut.ts";
 import { ConnectProviders } from "./ConnectProviders.tsx";
 import { DevicePush } from "./DevicePush.tsx";
 import { SettingsCard, SettingsRow, SettingsSection } from "./parts.tsx";
@@ -99,7 +100,7 @@ export function Account() {
 								Export data
 							</Button>
 							{web && (
-								<Button variant="secondary" onClick={() => (window.location.href = "/auth/sign-out")}>
+								<Button variant="secondary" onClick={() => void signOut()}>
 									Sign Out
 								</Button>
 							)}

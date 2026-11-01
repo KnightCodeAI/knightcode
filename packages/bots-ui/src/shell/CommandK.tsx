@@ -186,7 +186,7 @@ export function CommandK({ open, onOpenChange }: CommandKProps) {
 function HitLead({ hit }: { hit: Hit }) {
 	const { data } = useBots();
 	const bot =
-		hit.route.name === "bot" && hit.kind === "bot"
+		typeof hit.route !== "string" && hit.route.name === "bot" && hit.kind === "bot"
 			? data?.bots.find((b) => b.id === (hit.route as { botId: string }).botId)
 			: undefined;
 	if (bot) return <BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={24} />;

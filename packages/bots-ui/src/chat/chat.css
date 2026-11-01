@@ -987,3 +987,17 @@
 .kb-record-icon {
 	color: var(--kb-color-danger);
 }
+
+/* An entry opened from a link: a brief wash that fades. */
+[data-entry][data-highlighted] {
+	animation: kb-entry-found 2.4s var(--kb-ease-out);
+	border-radius: var(--kb-radius-lg);
+}
+@keyframes kb-entry-found {
+	from {
+		background-color: var(--kb-color-fill-strong);
+	}
+	to {
+		background-color: transparent;
+	}
+}

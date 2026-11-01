@@ -45,6 +45,8 @@ export function InfoPane({ bot, view, routineId }: InfoPaneProps) {
 			data-ref="info-pane"
 			data-closed={closed ? "" : undefined}
 			aria-hidden={closed}
+			// Closed, its controls leave the tab order too.
+			inert={closed}
 		>
 			<header className="kb-pane__top" data-ref="info-pane-top">
 				<span style={{ display: "flex", gap: 8 }} data-ref="info-pane-actions">

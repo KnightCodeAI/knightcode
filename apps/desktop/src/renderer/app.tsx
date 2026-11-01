@@ -286,30 +286,35 @@ export function App() {
 	useEffect(() => client.onHostEvent((event) => event.event === "key" && runBinding(event.binding)), []);
 	useTheme();
 	useMouseHistory();
-	useBinding("desktop.thread.new", () => showNew());
-	useBinding("desktop.project.open", () => void addProject());
-	useBinding("desktop.sidebar.toggle", () => setSidebarOpen(!sidebarOpen));
-	useBinding("desktop.palette", () => setPaletteOpen(!paletteOpen));
-	useBinding("desktop.settings", () => navigate({ kind: "settings", page: "general" }));
-	useBinding("desktop.shortcuts", () => navigate({ kind: "settings", page: "shortcuts" }));
-	useBinding("desktop.nav.back", (event) => navigateHistory(event, -1));
-	useBinding("desktop.nav.forward", (event) => navigateHistory(event, 1));
+	// The coding app's own shortcuts act only while it is showing; KnightCode Bots has its own (Ctrl/Cmd+K search).
+	const coding = product === "coding";
+	useBinding("desktop.thread.new", () => showNew(), coding);
+	useBinding("desktop.project.open", () => void addProject(), coding);
+	useBinding("desktop.sidebar.toggle", () => setSidebarOpen(!sidebarOpen), coding);
+	useBinding("desktop.palette", () => setPaletteOpen(!paletteOpen), coding);
+	useBinding("desktop.settings", () => navigate({ kind: "settings", page: "general" }), coding);
+	useBinding("desktop.shortcuts", () => navigate({ kind: "settings", page: "shortcuts" }), coding);
+	useBinding("desktop.nav.back", (event) => navigateHistory(event, -1), coding);
+	useBinding("desktop.nav.forward", (event) => navigateHistory(event, 1), coding);
 	useBinding("desktop.view.zoomIn", () => runAppCommand("zoomIn"));
 	useBinding("desktop.view.zoomOut", () => runAppCommand("zoomOut"));
 	useBinding("desktop.view.zoomReset", () => runAppCommand("resetZoom"));
 	useBinding("desktop.view.fullScreen", () => runAppCommand("toggleFullScreen"));
 	useBinding("desktop.app.quit", () => runAppCommand("quit"));
 	useBinding("desktop.window.close", () => runAppCommand("close"));
-	useBinding("desktop.thread.clearUnread", () => clearUnread());
+	useBinding("desktop.thread.clearUnread", () => clearUnread(), coding);
 	useAutoArchive();
 	// Codex's thread navigation: sidebar slots, recent slots, the next or previous sidebar item, the next waiting.
-	useBindings([
-		...GO_TO_THREAD.map((binding, slot) => ({ binding, run: () => openSlot(slot) })),
-		...GO_TO_RECENT.map((binding, slot) => ({ binding, run: () => openRecent(slot) })),
-		{ binding: "desktop.thread.next", run: () => openNextInSidebar(1) },
-		{ binding: "desktop.thread.previous", run: () => openNextInSidebar(-1) },
-		{ binding: "desktop.thread.nextAttention", run: () => openNextNeedingAttention() },
-	]);
+	useBindings(
+		[
+			...GO_TO_THREAD.map((binding, slot) => ({ binding, run: () => openSlot(slot) })),
+			...GO_TO_RECENT.map((binding, slot) => ({ binding, run: () => openRecent(slot) })),
+			{ binding: "desktop.thread.next", run: () => openNextInSidebar(1) },
+			{ binding: "desktop.thread.previous", run: () => openNextInSidebar(-1) },
+			{ binding: "desktop.thread.nextAttention", run: () => openNextNeedingAttention() },
+		],
+		coding,
+	);
 	return (
 		<div className="kc-app flex h-full flex-col bg-shell">
 			<TitleBar />

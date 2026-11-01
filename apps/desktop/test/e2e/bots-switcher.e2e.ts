@@ -30,6 +30,11 @@ test("the sidebar's product name switches to KnightCode Bots and back", async ()
 	// The whole name fits beside the bots sidebar's buttons.
 	const name = bots.getByRole("button", { name: /^KnightCode Bots/ }).getByText("KnightCode Bots", { exact: true });
 	expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+	// The coding app's shortcuts stand down: Ctrl/Cmd+K opens only the bots search.
+	await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
+	await expect(page.getByRole("combobox", { name: "Search" })).toBeVisible();
+	await expect(page.getByLabel("Search threads and commands")).toHaveCount(0);
+	await page.keyboard.press("Escape");
 	// Remembered across launches, in desktop state.
 	await expect
 		.poll(() => {

@@ -39,7 +39,13 @@ export function GroupChat({ group }: { group: Group }) {
 					</span>
 				</div>
 			</header>
-			<Thread target={target} view={view} name={group.name} below={<TurnIndicator view={view} bots={bots} />} />
+			<Thread
+				key={group.id}
+				target={target}
+				view={view}
+				name={group.name}
+				below={<TurnIndicator view={view} bots={bots} />}
+			/>
 		</>
 	);
 }

@@ -18,7 +18,10 @@ import { ManagedBots } from "./ManagedBots.tsx";
 import { ModelPicker } from "./ModelPicker.tsx";
 
 type Patch = Partial<
-	Pick<Bot, "name" | "purpose" | "instructions" | "model" | "avatar" | "notify" | "showTools" | "suggestions">
+	Pick<
+		Bot,
+		"name" | "purpose" | "instructions" | "model" | "avatar" | "notify" | "showTools" | "suggestions" | "computerAccess"
+	>
 >;
 
 /** The dialog. Each field saves when it changes; instructions save as a new version. */
@@ -120,6 +123,16 @@ export function BotSettings({ bot, onClose }: { bot: Bot; onClose: () => void })
 						label="Show tools used"
 						checked={bot.showTools}
 						onCheckedChange={(showTools) => void update({ showTools })}
+					/>
+				</Field>
+				<Field
+					label="Computer access"
+					hint="With it, the bot can do in its browser or shell what a connector's Blocked rules stop; turn it off to make those rules hold."
+				>
+					<Toggle
+						label="Computer access"
+						checked={bot.computerAccess}
+						onCheckedChange={(computerAccess) => void update({ computerAccess })}
 					/>
 				</Field>
 				<Field label="Manages" hint="Bots this one may change (a Chief of Staff).">

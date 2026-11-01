@@ -16,6 +16,8 @@ test("vault never shows values and bot emails are human-friendly", async ({ page
 test("onboarding checklist items disappear when done", async ({ page }) => {
 	await page.goto("/?onboarding=1");
 	await expect(page.getByRole("list", { name: "Get started" }).getByRole("listitem")).toHaveCount(5);
+	// KnightCode's own baseline of the checklist (the reference has no onboarding screen).
+	await expect(page.getByRole("list", { name: "Get started" })).toHaveScreenshot("onboarding-checklist.png");
 });
 for (const screen of ["settings-account", "settings-approvals", "settings-vault", "settings-payments", "settings-channels", "settings-billing", "onboarding"])
 	test(`${screen} matches the reference`, async ({ page }) => compareToReference(page, screen));
