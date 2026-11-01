@@ -1,6 +1,5 @@
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import { stripVTControlCharacters } from "node:util";
+import { childProcessTransport, MAX_FRAME, type Transport } from "./transport.ts";
 
 /** Frame types (docs/protocol.md). */
 const REQUEST = 1;
@@ -10,14 +9,12 @@ const EVENT = 4;
 const CANCEL = 5;
 const PING = 6;
 
-const MAX_FRAME = 16 * 1024 * 1024;
 const PING_INTERVAL_MS = 5000;
 /** The daemon pings every five seconds; this much silence means the connection is gone. */
 const SILENCE_LIMIT_MS = 30_000;
 /** How long starting the daemon and its `hello` may take. */
 const START_TIMEOUT_MS = 60_000;
-/** How much stderr a startup error shows: short, because a tool error can reach the model. */
-const STDERR_TAIL_CHARS = 2000;
+/** How many lines of stderr a startup error shows (the transport keeps the last 2000 characters). */
 const STDERR_TAIL_LINES = 20;
 
 export type Json = Record<string, unknown>;
@@ -71,9 +68,14 @@ export interface ConnectionOptions {
 	/**
 	 * Command that starts the daemon, before its `serve --token <hex>` arguments, e.g. `["ssh", "-T", "--", "host",
 	 * "~/.knightcode/mobile/tools/knightcode-env"]`. A function computes it at each start (detecting and deploying first, for example);
-	 * its failure fails that start, and the next request tries again.
+	 * its failure fails that start, and the next request tries again. Give this or `transport`.
 	 */
-	command: readonly string[] | (() => Promise<readonly string[]>);
+	command?: readonly string[] | (() => Promise<readonly string[]>);
+	/**
+	 * Opens a transport to a daemon, at the first request and again after a connection is lost (a WebSocket to a cloud
+	 * computer, for one). Its failure fails that start, and the next request tries again.
+	 */
+	transport?: () => Transport | Promise<Transport>;
 	/** Receives the daemon's and the transport's diagnostic output. */
 	onLog?: (text: string) => void;
 }
@@ -153,47 +155,18 @@ function withStderr(message: string, stderr: string): string {
 	return `${message}\nremote stderr:\n${lines.slice(-STDERR_TAIL_LINES).join("\n")}`;
 }
 
-/** One running daemon. */
+/** One running daemon, reached through one transport. */
 class Session {
 	readonly id: number;
-	readonly child: ChildProcessWithoutNullStreams;
-	readonly token: string;
+	readonly transport: Transport;
 	readonly pending = new Map<number, Pending>();
-	/** Received bytes not yet parsed, without concatenating on every chunk. */
-	chunks: Buffer[] = [];
-	buffered = 0;
-	synced = false;
 	lastSeen = Date.now();
 	timer: ReturnType<typeof setInterval> | undefined;
 	live = true;
-	stderrTail = "";
 
-	constructor(id: number, child: ChildProcessWithoutNullStreams, token: string) {
+	constructor(id: number, transport: Transport) {
 		this.id = id;
-		this.child = child;
-		this.token = token;
-	}
-
-	/** The first `length` buffered bytes as one buffer, without consuming them. */
-	peek(length: number): Buffer {
-		if (this.chunks[0]!.length < length) {
-			this.chunks = [Buffer.concat(this.chunks)];
-		}
-		return this.chunks[0]!.subarray(0, length);
-	}
-
-	consume(length: number): void {
-		this.buffered -= length;
-		while (length > 0) {
-			const first = this.chunks[0]!;
-			if (first.length <= length) {
-				this.chunks.shift();
-				length -= first.length;
-			} else {
-				this.chunks[0] = first.subarray(length);
-				length = 0;
-			}
-		}
+		this.transport = transport;
 	}
 }
 
@@ -284,25 +257,40 @@ export class Connection {
 		});
 	}
 
-	#write(session: Session, data: Buffer): void {
-		if (session.live) session.child.stdin.write(data);
+	#write(session: Session, data: Uint8Array): void {
+		if (session.live) session.transport.send(data);
 	}
 
-	async #start(): Promise<{ info: RemoteInfo; session: Session }> {
+	/** A transport from the options: the given factory, or the daemon command on a child process. */
+	async #open(): Promise<Transport> {
+		const factory = this.#options.transport;
+		if (factory) {
+			try {
+				return await factory();
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				throw new RemoteError({ code: "spawn_error", message, lost: true });
+			}
+		}
 		let command: readonly string[];
 		try {
-			const option = this.#options.command;
+			const option = this.#options.command ?? [];
 			command = typeof option === "function" ? await option() : option;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			throw new RemoteError({ code: "spawn_error", message, lost: true });
 		}
-		if (this.#closed) throw closed();
-		const [program, ...args] = command;
-		if (program === undefined) throw new RemoteError({ code: "spawn_error", message: "No daemon command" });
-		const token = randomBytes(16).toString("hex");
-		const child = spawn(program, [...args, "serve", "--token", token], { stdio: ["pipe", "pipe", "pipe"] });
-		const session = new Session(++this.#sessions, child, token);
+		if (command[0] === undefined) throw new RemoteError({ code: "spawn_error", message: "No daemon command" });
+		return childProcessTransport({ command, ...(this.#options.onLog ? { onLog: this.#options.onLog } : {}) });
+	}
+
+	async #start(): Promise<{ info: RemoteInfo; session: Session }> {
+		const transport = await this.#open();
+		if (this.#closed) {
+			transport.close();
+			throw closed();
+		}
+		const session = new Session(++this.#sessions, transport);
 		this.#session = session;
 		let ready = false;
 		let startTimer: ReturnType<typeof setTimeout> | undefined;
@@ -311,42 +299,39 @@ export class Connection {
 				() => reject(lost(`knightcode-env did not answer within ${START_TIMEOUT_MS / 1000} s`)),
 				START_TIMEOUT_MS,
 			);
-			child.once("error", (error) =>
-				reject(new RemoteError({ code: "spawn_error", message: error.message, lost: true })),
-			);
-			child.once("close", (code) => reject(lost(`knightcode-env exited with code ${code} before it was ready`)));
+			transport.onClose((reason, details) => {
+				if (ready) return;
+				reject(
+					details?.code === "spawn_error"
+						? new RemoteError({ code: "spawn_error", message: reason, lost: true })
+						: lost(reason),
+				);
+			});
 		});
 		failed.catch(() => {});
-		child.stdout.on("data", (chunk: Buffer) => this.#onData(session, chunk));
-		child.stderr.setEncoding("utf8").on("data", (text: string) => {
-			if (!ready) session.stderrTail = (session.stderrTail + text).slice(-STDERR_TAIL_CHARS);
-			this.#options.onLog?.(text);
-		});
-		child.on("error", () => this.#teardown(session, lost("knightcode-env connection lost")));
-		// A ready session fails as soon as the daemon exits, even while a process it started keeps a pipe open.
-		child.on("exit", () => {
+		transport.onFrame((frame) => this.#onFrame(session, frame));
+		// A ready session fails as soon as its transport ends.
+		transport.onClose(() => {
 			if (ready) this.#teardown(session, lost("knightcode-env connection lost"));
 		});
-		child.on("close", () => this.#teardown(session, lost("knightcode-env connection lost")));
-		child.stdin.on("error", () => {});
 		session.timer = setInterval(() => {
 			this.#write(session, frame(PING, 0, {}));
-			if (Date.now() - session.lastSeen > SILENCE_LIMIT_MS) {
-				this.#teardown(session, lost("knightcode-env connection timed out"));
-			}
+			const seen = Math.max(session.lastSeen, transport.lastActivity?.() ?? 0);
+			if (Date.now() - seen > SILENCE_LIMIT_MS) this.#teardown(session, lost("knightcode-env connection timed out"));
 		}, PING_INTERVAL_MS);
-		session.timer.unref();
+		session.timer.unref?.();
 		try {
 			const { json } = await Promise.race([this.#send(session, "hello", { protocol: 1 }, {}), failed]);
 			if (json.protocol !== 1) throw lost(`Unsupported protocol ${json.protocol}`);
 			ready = true;
-			session.stderrTail = "";
+			transport.established?.();
 			return { info: json as unknown as RemoteInfo, session };
 		} catch (error) {
-			// Add the captured stderr to whatever ended the start; only a pre-ready exit waits for it to drain.
+			// Add what the daemon wrote to stderr while starting to whatever ended the start.
+			const stderr = transport.diagnostics?.() ?? "";
 			const failure =
 				error instanceof RemoteError
-					? new RemoteError({ ...error.fields, message: withStderr(error.message, session.stderrTail) })
+					? new RemoteError({ ...error.fields, message: withStderr(error.message, stderr) })
 					: error instanceof Error
 						? error
 						: lost(String(error));
@@ -365,60 +350,37 @@ export class Connection {
 			this.#session = undefined;
 			this.#ready = undefined;
 		}
-		session.child.stdin.end();
-		session.child.kill();
+		session.transport.close();
 		const pending = [...session.pending.values()];
 		session.pending.clear();
 		for (const request of pending) request.reject(error);
 	}
 
-	#onData(session: Session, chunk: Buffer): void {
+	#onFrame(session: Session, frame: Uint8Array): void {
 		if (!session.live) return;
 		session.lastSeen = Date.now();
-		session.chunks.push(chunk);
-		session.buffered += chunk.length;
-		if (!session.synced) {
-			// Shell startup files may print before the daemon runs; skip everything before its sync line.
-			const marker = Buffer.from(`PI-ENV ${session.token}\n`, "utf8");
-			const all = session.peek(session.buffered);
-			const index = all.indexOf(marker);
-			if (index === -1) {
-				if (session.buffered > 1024 * 1024) {
-					session.consume(session.buffered - marker.length);
-				}
-				return;
-			}
-			const noise = all.subarray(0, index).toString("utf8").trim();
-			if (noise !== "") this.#options.onLog?.(noise);
-			session.consume(index + marker.length);
-			session.synced = true;
+		const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+		const length = frame.length >= 4 ? view.getUint32(0) : 0;
+		if (frame.length < 13 || length < 9 || length > MAX_FRAME || frame.length !== 4 + length) {
+			this.#teardown(session, lost("Corrupt frame from knightcode-env"));
+			return;
 		}
-		while (session.live && session.buffered >= 4) {
-			const length = session.peek(4).readUInt32BE(0);
-			if (length < 9 || length > MAX_FRAME) {
-				this.#teardown(session, lost("Corrupt frame from knightcode-env"));
-				return;
-			}
-			if (session.buffered < 4 + length) return;
-			const body = session.peek(4 + length).subarray(4);
-			const type = body.readUInt8(0);
-			const id = body.readUInt32BE(1);
-			const jsonLength = body.readUInt32BE(5);
-			let json: Json;
-			try {
-				if (9 + jsonLength > length) throw new Error("JSON length out of range");
-				const parsed: unknown = JSON.parse(body.subarray(9, 9 + jsonLength).toString("utf8"));
-				if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("not an object");
-				json = parsed as Json;
-			} catch {
-				this.#teardown(session, lost("Corrupt frame from knightcode-env"));
-				return;
-			}
-			// A plain Uint8Array copy, like `NodeExecutionEnv`'s reader results, not a view of the receive buffer.
-			const payload = new Uint8Array(body.subarray(9 + jsonLength));
-			session.consume(4 + length);
-			this.#dispatch(session, type, id, json, payload);
+		const type = view.getUint8(4);
+		const id = view.getUint32(5);
+		const jsonLength = view.getUint32(9);
+		let json: Json;
+		try {
+			if (9 + jsonLength > length) throw new Error("JSON length out of range");
+			const parsed: unknown = JSON.parse(new TextDecoder().decode(frame.subarray(13, 13 + jsonLength)));
+			if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("not an object");
+			json = parsed as Json;
+		} catch {
+			this.#teardown(session, lost("Corrupt frame from knightcode-env"));
+			return;
 		}
+		// A plain Uint8Array copy, like `NodeExecutionEnv`'s reader results, not a view of the frame.
+		const payload = frame.slice(13 + jsonLength);
+		this.#dispatch(session, type, id, json, payload);
 	}
 
 	#dispatch(session: Session, type: number, id: number, json: Json, payload: Uint8Array): void {

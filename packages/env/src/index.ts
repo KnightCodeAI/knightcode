@@ -9,6 +9,13 @@ export {
 	type RequestOptions,
 } from "./connection.ts";
 export { LocalExecutionEnv, type LocalExecutionEnvOptions } from "./list-files.ts";
+export {
+	type ChildProcessTransportOptions,
+	childProcessTransport,
+	type Transport,
+	type WebSocketLike,
+	webSocketTransport,
+} from "./transport.ts";
 export { RemoteExecutionEnv, type RemoteExecutionEnvOptions } from "./remote-env.ts";
 export {
 	acceptHostKey,
