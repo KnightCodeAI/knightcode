@@ -484,7 +484,7 @@ git commit -m "feat(bots): add routines, activity and usage screens"
 - Produces: a renderer for every block kind; no block renders HTML or runs
   script from page data.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/pages.e2e.ts
@@ -503,10 +503,10 @@ for (const screen of ["pages", "page", "inbox", "catch-up"])
 	test(`${screen} matches the reference`, async ({ page }) => compareToReference(page, screen));
 ```
 
-- [ ] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui pages`)
-- [ ] **Step 3: Implement pages, inbox, tasks and catch-up**
-- [ ] **Step 4: Run ui, then run reference for the four screens**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui pages`)
+- [x] **Step 3: Implement pages, inbox, tasks and catch-up**
+- [x] **Step 4: Run ui, then run reference for the four screens**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src/pages packages/bots-ui/src/inbox apps/bots/web/e2e/pages.e2e.ts

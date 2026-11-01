@@ -9,6 +9,7 @@
 @import "./connectors/connectors.css";
 @import "./routines/routines.css";
 @import "./settings/settings.css";
+@import "./pages/pages.css";
 
 *,
 *::before,

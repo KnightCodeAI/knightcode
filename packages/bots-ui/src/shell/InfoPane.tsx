@@ -87,6 +87,8 @@ export function InfoPane({ bot, view, routineId }: InfoPaneProps) {
 						)}
 						{view === "memory" && <MemoryViewer bot={bot} />}
 						{view === "library" && <Library bot={bot} />}
+						{/* The list's end, as measured: a 1 px marker after the content. */}
+						{view === "library" && <div className="kb-pane__end" aria-hidden />}
 						{tab === "computer" && <ComputerPane bot={bot} />}
 					</div>
 				</div>

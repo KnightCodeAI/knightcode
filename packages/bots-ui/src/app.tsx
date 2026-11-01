@@ -1,10 +1,14 @@
 // The KnightCode Bots app: one store and socket, the three-column shell, and the screen the URL names.
-import { type ApiClient, type WebSocketLike } from "@knightcode/bots-protocol";
+import { type ApiClient, type CatchUp as CatchUpData, type WebSocketLike } from "@knightcode/bots-protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BotSettings } from "./bot/BotSettings.tsx";
 import { CreateBot } from "./bot/CreateBot.tsx";
 import { ChatView } from "./chat/ChatView.tsx";
 import { Catalog } from "./connectors/Catalog.tsx";
+import { awayFor, CatchUp, isAway, markActive } from "./inbox/CatchUp.tsx";
+import { Inbox } from "./inbox/Inbox.tsx";
+import { PagesLibrary } from "./pages/Library.tsx";
+import { PageView } from "./pages/PageView.tsx";
 import { SettingsDialog } from "./settings/SettingsDialog.tsx";
 import { SkillsLibrary } from "./skills/Library.tsx";
 import { SandboxOriginContext } from "./chat/McpAppFrame.tsx";
@@ -14,7 +18,7 @@ import { InfoPane } from "./shell/InfoPane.tsx";
 import { navigate, type Route, useQueryParam, useRoute } from "./shell/routes.ts";
 import { Sidebar } from "./shell/Sidebar.tsx";
 import { ThreadSocket } from "./state/socket.ts";
-import { BotsStore, StoreContext, useBots } from "./state/store.ts";
+import { BotsStore, StoreContext, useBots, useResource } from "./state/store.ts";
 
 export interface BotsAppProps {
 	api: ApiClient;
@@ -56,15 +60,35 @@ function Shell() {
 	if (route.name === "bot") lastBot.current = route.botId;
 
 	const firstBot = data?.bots.find((b) => !b.archived);
+	const catchUp = useCatchUp(route.name === "home");
 	useEffect(() => {
-		if (route.name === "home" && firstBot)
+		if (route.name === "home" && firstBot && catchUp === null)
 			navigate({ name: "bot", botId: lastBot.current ?? firstBot.id, pane: "details" }, { replace: true });
-	}, [route.name, firstBot]);
+	}, [route.name, firstBot, catchUp]);
+	useEffect(() => {
+		const active = () => markActive();
+		active();
+		window.addEventListener("pointerdown", active);
+		window.addEventListener("keydown", active);
+		return () => {
+			window.removeEventListener("pointerdown", active);
+			window.removeEventListener("keydown", active);
+		};
+	}, []);
 
-	const botId = route.name === "bot" ? route.botId : isOverlay(route) ? (lastBot.current ?? firstBot?.id) : undefined;
+	const view = mainView(route, catchUp);
+	// Dialogs and main views keep a bot's details pane beside them, as the pane is open by default.
+	const botId =
+		route.name === "bot" ? route.botId : isOverlay(route) || view ? (lastBot.current ?? firstBot?.id) : undefined;
 	const bot = data?.bots.find((b) => b.id === botId);
-	// Dialogs open over the chat with its details pane, as the pane is open by default.
-	const pane = route.name === "bot" ? route.pane : isOverlay(route) ? "details" : "closed";
+	const pane =
+		route.name === "bot"
+			? route.pane
+			: route.name === "page" || route.name === "pages"
+				? "library"
+				: bot
+					? "details"
+					: "closed";
 	const edit = useQueryParam("edit");
 	const avatar = useQueryParam("avatar");
 	const editing = edit !== null || avatar !== null;
@@ -76,7 +100,19 @@ function Shell() {
 			<div className="kb-shell" data-ref="shell">
 				<Sidebar route={route} onSearch={openPalette} />
 				<main className="kb-chat" data-ref="chat">
-					{bot ? <ChatView bot={bot} paneOpen={pane !== "closed"} /> : <MainView route={route} loading={!data} />}
+					{view ? (
+						<MainContent
+							view={view}
+							catchUp={catchUp}
+							onCatchUpDone={() =>
+								firstBot && navigate({ name: "bot", botId: lastBot.current ?? firstBot.id, pane: "details" })
+							}
+						/>
+					) : bot && route.name !== "home" ? (
+						<ChatView bot={bot} paneOpen={pane !== "closed"} />
+					) : (
+						<MainView route={route} loading={!data} />
+					)}
 				</main>
 				{bot && <InfoPane bot={bot} view={pane} routineId={route.name === "bot" ? route.routineId : undefined} />}
 			</div>
@@ -91,6 +127,44 @@ function Shell() {
 			)}
 		</>
 	);
+}
+
+type MainViewKind = { kind: "inbox" } | { kind: "pages" } | { kind: "page"; pageId: string } | { kind: "catch-up" };
+
+/** The views that take the chat column: the inbox, pages, and the catch-up on return. */
+function mainView(route: Route, catchUp: CatchUpData | null | undefined): MainViewKind | undefined {
+	if (route.name === "inbox") return { kind: "inbox" };
+	if (route.name === "pages") return { kind: "pages" };
+	if (route.name === "page") return { kind: "page", pageId: route.pageId };
+	if (route.name === "home" && catchUp) return { kind: "catch-up" };
+	return undefined;
+}
+
+function MainContent({
+	view,
+	catchUp,
+	onCatchUpDone,
+}: {
+	view: MainViewKind;
+	catchUp: CatchUpData | null | undefined;
+	onCatchUpDone: () => void;
+}) {
+	if (view.kind === "inbox") return <Inbox />;
+	if (view.kind === "pages") return <PagesLibrary />;
+	if (view.kind === "page") return <PageView pageId={view.pageId} />;
+	return catchUp ? <CatchUp catchUp={catchUp} onDone={onCatchUpDone} /> : null;
+}
+
+/** On the home screen after a long absence, the catch-up if something happened; null when there is none to show. */
+function useCatchUp(home: boolean): CatchUpData | null | undefined {
+	const away = useQueryParam("away");
+	const [gap] = useState(() => awayFor(away));
+	const { data } = useResource(home && isAway(away ? awayFor(away) : gap) ? "catch-up" : null, (api) =>
+		api.getCatchUp({}),
+	);
+	if (!home) return undefined;
+	if (!isAway(away ? awayFor(away) : gap)) return null;
+	return data === undefined ? undefined : data.catchUp;
 }
 
 function isOverlay(route: Route): boolean {
