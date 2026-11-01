@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { REFERENCE_DIR } from "../../vite.config.ts";
+import { MASK_COLOR, type MaskBox, paintMasksInPage } from "./masks.ts";
 
 type Theme = "dark" | "light";
 
@@ -20,6 +21,8 @@ interface Measurement {
 	match: "full" | "chrome";
 	viewport: { width: number; height: number };
 	elements: MeasuredElement[];
+	/** The boxes the reference capture painted over. */
+	mask: MaskBox[];
 }
 
 /** How KnightCode reaches the state each reference screen shows. */
@@ -31,6 +34,13 @@ interface ScreenRoute {
 	mask?: string[];
 	/** Look refs up inside this element: the reference measured a stand-in card that shares its chrome. */
 	scope?: string;
+	/**
+	 * Paint the reference's own mask boxes instead of `mask`: the reference shows a stand-in panel of another size there,
+	 * so both sides cover exactly the same pixels.
+	 */
+	referenceMask?: boolean;
+	/** Refs whose width follows text that differs by design (a different setting's value): only their right edge is compared. */
+	textSized?: string[];
 }
 
 const typeInComposer = (text: string) => async (page: Page) => {
@@ -56,10 +66,10 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	"card-question": { path: "/bots/finley?pane=closed" },
 	"card-approval": { path: "/bots/finley?pane=closed", mask: [TRANSCRIPT], scope: CONNECT_CARD },
 	"card-takeover": { path: "/bots/finley?pane=closed", mask: [TRANSCRIPT], scope: CONNECT_CARD },
-	"bot-create": { path: "/new" },
-	templates: { path: "/new?tab=templates", mask: ['[data-ref="dialog-body"]'] },
-	"bot-settings": { path: "/bots/finley/settings" },
-	memory: { path: "/bots/finley/memory", mask: [TABPANEL] },
+	"bot-create": { path: "/new", referenceMask: true },
+	templates: { path: "/new?tab=templates", referenceMask: true },
+	"bot-settings": { path: "/bots/finley/settings", textSized: ["settings-control"] },
+	memory: { path: "/bots/finley/memory", referenceMask: true },
 	computer: { path: "/bots/finley/computer", mask: ['[data-ref="screen-viewer"]'] },
 	"computer-takeover": { path: "/bots/finley/computer?control=1", mask: [TABPANEL] },
 	teach: { path: "/bots/finley/computer?teach=1", mask: [TABPANEL] },
@@ -82,12 +92,23 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	"settings-channels": { path: "/settings/channels", mask: [SETTINGS_BODY, '[data-ref="settings-nav"]'] },
 	"settings-billing": { path: "/settings/billing" },
 	onboarding: { path: "/bots/finley?pane=closed&onboarding=1", mask: [TRANSCRIPT] },
-	"x-account-menu": { path: "/bots/finley", steps: (page) => page.getByRole("button", { name: "Open account menu" }).click() },
+	"x-account-menu": {
+		path: "/bots/finley",
+		steps: (page) => page.getByRole("button", { name: "Open account menu" }).click(),
+	},
 	"x-search": { path: "/bots/finley", steps: (page) => page.getByRole("button", { name: "Search" }).click() },
 	"x-row-hover": { path: "/bots/finley", steps: (page) => page.locator('[data-ref="sidebar-row"]').first().hover() },
 };
 
-const STYLE_KEYS = ["color", "background", "fontSize", "fontWeight", "lineHeight", "borderRadius", "boxShadow"] as const;
+const STYLE_KEYS = [
+	"color",
+	"background",
+	"fontSize",
+	"fontWeight",
+	"lineHeight",
+	"borderRadius",
+	"boxShadow",
+] as const;
 const VIEWPORTS: [number, number][] = [
 	[1440, 900],
 	[1280, 800],
@@ -107,15 +128,18 @@ export async function compareToReference(page: Page, screen: string): Promise<vo
 				const measurement = JSON.parse(readFileSync(file, "utf8")) as Measurement;
 				await open(page, route, theme, width, height);
 				const mismatches: string[] = [];
-				for (const element of measurement.elements) mismatches.push(...(await compareElement(page, element, route.scope)));
+				for (const element of measurement.elements) mismatches.push(...(await compareElement(page, element, route)));
 				expect.soft(mismatches, `${name}: elements that differ from the reference`).toEqual([]);
 				// Already in Playwright's sanitized form (see maskedName in measure-reference.ts), so it is used as is.
-				await paintMasks(page, [AVATARS, ...(route.mask ?? [])]);
+				const css = readFileSync(HIDE_TEXT, "utf8");
+				const targets = [AVATARS, ...(route.referenceMask ? [] : (route.mask ?? []))].map((selector) => ({ selector }));
+				const boxes = route.referenceMask ? measurement.mask : [];
+				await page.evaluate(paintMasksInPage, { targets, boxes, color: MASK_COLOR, css });
 				await expect.soft(page).toHaveScreenshot(`${screen}-${theme}-${width}x${height}-masked.png`, {
 					stylePath: HIDE_TEXT,
 					maxDiffPixelRatio: 0.005,
 				});
-				await paintMasks(page, []);
+				await page.evaluate(paintMasksInPage, { targets: [], boxes: [], color: MASK_COLOR, css: null });
 			});
 }
 
@@ -137,36 +161,26 @@ async function open(page: Page, route: ScreenRoute, theme: Theme, width: number,
 	await page.waitForTimeout(250);
 }
 
-/**
- * Covers every element matching `selectors` with a solid box, exactly as the reference capture did: fixed boxes at the
- * top z-index, which top-layer content (popovers, open dialogs) still paints above. Playwright's own `mask` would
- * also cover the top layer. An empty list removes the boxes.
- */
-async function paintMasks(page: Page, selectors: string[]): Promise<void> {
-	await page.evaluate((selectors) => {
-		for (const old of document.querySelectorAll("[data-compare-mask]")) old.remove();
-		for (const selector of selectors)
-			for (const element of document.querySelectorAll(selector)) {
-				const box = element.getBoundingClientRect();
-				if (box.width === 0 || box.height === 0) continue;
-				const div = document.createElement("div");
-				div.setAttribute("data-compare-mask", "");
-				div.style.cssText = `position:fixed;left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px;background:#FF00FF;z-index:2147483647;pointer-events:none`;
-				document.body.append(div);
-			}
-	}, selectors);
-}
-
 /** What differs between our `data-ref` element and the measured one, as readable lines. */
-async function compareElement(page: Page, element: MeasuredElement, scope?: string): Promise<string[]> {
+async function compareElement(
+	page: Page,
+	element: MeasuredElement,
+	{ scope, textSized }: ScreenRoute,
+): Promise<string[]> {
 	// An element may carry several refs, space-separated, when two reference screens name it differently.
 	const ref = `[data-ref~="${element.ref}"]`;
 	const ours = (scope ? page.locator(scope).locator(ref) : page.locator(ref)).first();
 	if ((await ours.count()) === 0) return [`${element.ref}: missing data-ref`];
 	const actual = await measure(ours);
 	const out: string[] = [];
-	for (const side of ["x", "y", "width", "height"] as const)
-		if (Math.abs(actual.box[side] - element.box[side]) > 1) out.push(`${element.ref} ${side}: ours ${round(actual.box[side])}, reference ${round(element.box[side])}`);
+	const edges = (box: MeasuredElement["box"]) => ({ ...box, right: box.x + box.width });
+	const [mine, theirs] = [edges(actual.box), edges(element.box)];
+	const sides = textSized?.includes(element.ref)
+		? (["y", "height", "right"] as const)
+		: (["x", "y", "width", "height"] as const);
+	for (const side of sides)
+		if (Math.abs(mine[side] - theirs[side]) > 1)
+			out.push(`${element.ref} ${side}: ours ${round(mine[side])}, reference ${round(theirs[side])}`);
 	for (const key of STYLE_KEYS) {
 		const [mine, theirs] = [normalize(actual.styles[key] ?? ""), normalize(element.styles[key] ?? "")];
 		if (mine !== theirs) out.push(`${element.ref} ${key}: ours ${mine}, reference ${theirs}`);
@@ -201,8 +215,12 @@ async function measure(locator: Locator): Promise<{ box: MeasuredElement["box"];
  */
 export function normalize(value: string): string {
 	return value
-		.replace(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/g, (_, r: string, g: string, b: string, a?: string) =>
-			a === undefined || a === "1" ? `rgb(${channel(r)}, ${channel(g)}, ${channel(b)})` : `rgba(${channel(r)}, ${channel(g)}, ${channel(b)}, ${a})`,
+		.replace(
+			/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/g,
+			(_, r: string, g: string, b: string, a?: string) =>
+				a === undefined || a === "1"
+					? `rgb(${channel(r)}, ${channel(g)}, ${channel(b)})`
+					: `rgba(${channel(r)}, ${channel(g)}, ${channel(b)}, ${a})`,
 		)
 		.replace(/ none$/, "")
 		.replace(/-?\d*\.\d+/g, (n) => String(Math.round(Number(n) * 100) / 100))

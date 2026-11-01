@@ -6,6 +6,7 @@ import {
 	BarChart3,
 	BookOpen,
 	Copy,
+	Settings2,
 	FileText,
 	Inbox,
 	LifeBuoy,
@@ -201,6 +202,12 @@ function BotRow({ bot, active, sections }: { bot: Bot; active: boolean; sections
 						Remove from section
 					</MenuItem>
 				)}
+				<MenuItem
+					icon={<Settings2 size={14} />}
+					onSelect={() => navigate(`/bots/${encodeURIComponent(bot.id)}/settings?edit=1`)}
+				>
+					Settings
+				</MenuItem>
 				<MenuItem
 					icon={<Copy size={14} />}
 					onSelect={async () => {

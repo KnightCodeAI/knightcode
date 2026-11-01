@@ -271,6 +271,7 @@ export const ROUTES = [
 			skills: Selection,
 			routines: Selection,
 			plugins: Selection,
+			/** Start the recipe's setup skill right away (the user ticked it). Its Run setup button is added either way. */
 			runSetup: Type.Boolean(),
 			avatar: Opt(AvatarSchema),
 			/** Recipes carry no model; omitted, the account's `defaultModel` is used, and without one the import is refused. */

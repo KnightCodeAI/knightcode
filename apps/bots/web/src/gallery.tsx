@@ -33,7 +33,11 @@ function Row({ title, children }: { title: string; children: ReactNode }) {
 
 function ToastDemo() {
 	const show = useToast();
-	return <Button onClick={() => show({ text: "Renamed to Rex", action: { label: "Undo", onAction: () => undefined } })}>Show toast</Button>;
+	return (
+		<Button onClick={() => show({ text: "Renamed to Rex", action: { label: "Undo", onAction: () => undefined } })}>
+			Show toast
+		</Button>
+	);
 }
 
 /** Renders every primitive in its main states. */
@@ -129,7 +133,11 @@ export function Gallery() {
 				</Row>
 				<Row title="Avatars">
 					{AVATAR_SHAPES.map((shape, i) => (
-						<span key={shape} title={shape} style={{ display: "inline-grid", justifyItems: "center", gap: 4, fontSize: 11 }}>
+						<span
+							key={shape}
+							title={shape}
+							style={{ display: "inline-grid", justifyItems: "center", gap: 4, fontSize: 11 }}
+						>
 							<BotAvatarView shape={shape} color={AVATAR_COLORS[i % AVATAR_COLORS.length]!} size={44} />
 							{shape}
 						</span>

@@ -4,6 +4,7 @@
 @import "./primitives/primitives.css";
 @import "./shell/shell.css";
 @import "./chat/chat.css";
+@import "./bot/bot.css";
 
 *,
 *::before,

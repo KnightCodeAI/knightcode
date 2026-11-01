@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import { type ReactNode, useEffect, useState } from "react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
 import { useBots } from "../state/store.ts";
+import { useTopLayer } from "../primitives/layer.tsx";
 import { navigate } from "./routes.ts";
 import { type Hit, useSearch } from "./Search.tsx";
 
@@ -21,14 +22,15 @@ export function CommandK({ open, onOpenChange }: CommandKProps) {
 		if (!open) setQuery("");
 	}, [open]);
 	useEffect(() => setSelected(0), [query]);
+	const layer = useTopLayer(open);
 	const go = (hit: Hit | undefined) => {
 		if (!hit) return;
 		onOpenChange(false);
 		navigate(hit.route);
 	};
 	return (
-		<DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
-			<DialogPrimitive.Portal>
+		<DialogPrimitive.Root open={open && layer !== undefined} onOpenChange={onOpenChange}>
+			<DialogPrimitive.Portal container={layer}>
 				<DialogPrimitive.Overlay className="kb-dialog-scrim" />
 				<DialogPrimitive.Content className="kb-dialog kb-palette" aria-describedby={undefined} data-ref="search-dialog">
 					<DialogPrimitive.Title className="kb-visually-hidden">Search</DialogPrimitive.Title>

@@ -285,11 +285,11 @@ git commit -m "feat(bots): add the chat screen and cards"
 **Interfaces:**
 - Consumes: `parseRecipe`, `RecipeSchema`, the `ROUTES` for bots, models
   (the model list comes from the API, never from UI constants).
-- Produces: `templates-data.ts` with the 42 templates of spec section 5,
+- Produces: `templates-data.ts` with the 44 templates of spec section 5,
   each with KnightCode-written instructions, suggested connectors and
   routines.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/bot.e2e.ts
@@ -298,7 +298,7 @@ import { compareToReference } from "./reference/compare.ts";
 test("create from a template, import a recipe, and export it again", async ({ page }) => {
 	await page.goto("/new");
 	await page.getByRole("tab", { name: "Templates" }).click();
-	await expect(page.getByRole("listitem")).toHaveCount(42);
+	await expect(page.getByRole("listitem")).toHaveCount(44);
 	await page.getByRole("button", { name: "Import an agent" }).click();
 	await page.getByRole("textbox", { name: "Paste" }).fill(JSON.stringify({ profile: { name: "X", description: "d" }, memory: [{ content: "likes tea" }], skills: [{ name: "setup", description: "d", content: "c" }], routines: [{ name: "daily", slug: "daily", description: "d", content: "p" }], plugins: [], gettingStarted: { skill: "setup" } }));
 	await expect(page.getByRole("checkbox", { name: /likes tea/ })).not.toBeChecked();
@@ -317,20 +317,20 @@ for (const screen of ["bot-create", "templates", "bot-settings", "memory"])
 	test(`${screen} matches the reference`, async ({ page }) => compareToReference(page, screen));
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bunx playwright test --project ui bot`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the screens** (imported memory and routines
+- [x] **Step 3: Implement the screens** (imported memory and routines
   start unticked; a recipe's `gettingStarted.skill` shows as its own item
   and becomes a "Run setup" button; the importer never fetches a URL)
 
-- [ ] **Step 4: Run ui, then run reference for the four screens**
+- [x] **Step 4: Run ui, then run reference for the four screens**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src/bot apps/bots/web/e2e/bot.e2e.ts

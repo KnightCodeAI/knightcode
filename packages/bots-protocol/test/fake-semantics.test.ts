@@ -149,3 +149,54 @@ describe("seeds", () => {
 		expect(seed.catalog.length).toBeGreaterThan(0);
 	});
 });
+
+describe("importing a recipe with a setup skill", () => {
+	const recipe = {
+		profile: { name: "Imported", description: "Help with the inbox" },
+		memory: [],
+		skills: [{ name: "setup", description: "Set up", content: "Ask three questions" }],
+		routines: [],
+		plugins: [],
+		gettingStarted: { skill: "setup" },
+	};
+	const selection = { memory: [], sharedMemory: [], skills: [0], routines: [], plugins: [] };
+
+	it("always adds a Run setup button and never runs setup unless asked", async () => {
+		const { fake, api } = client();
+		const { bot } = await api.importRecipe({ recipe, origin: "other", ...selection, runSetup: false });
+		const view = await api.getHistory({ botId: bot.id });
+		expect(view.entries.some((e) => e.kind === "card" && e.card.type === "run-setup" && e.card.skill === "setup")).toBe(
+			true,
+		);
+		expect(fake.state.runs.some((run) => run.botId === bot.id)).toBe(false);
+	});
+
+	it("starts the setup run when the user ticked it", async () => {
+		const { fake, api } = client();
+		const { bot } = await api.importRecipe({ recipe, origin: "other", ...selection, runSetup: true });
+		expect(fake.state.runs.find((run) => run.botId === bot.id)?.title).toBe("Setup: setup");
+	});
+});
+
+describe("creating a bot from a template", () => {
+	it("applies the template and adds its routines paused", async () => {
+		const seed = defaultSeed();
+		seed.templates = [
+			{
+				id: "daily",
+				name: "Daily Briefing",
+				area: "Productivity",
+				description: "A morning summary",
+				instructions: "Write the brief",
+				avatar: { shape: "egg", color: "yellow" },
+				connectors: ["gmail"],
+				routines: [{ name: "Daily briefing", prompt: "Write this morning's briefing." }],
+			},
+		];
+		const { fake, api } = client(createFakeBackend(seed));
+		const bot = await api.createBot({ name: "Brief", templateId: "daily" });
+		expect(bot.instructions).toBe("Write the brief");
+		const routines = fake.state.routines.filter((r) => r.botId === bot.id);
+		expect(routines.map((r) => [r.name, r.active])).toEqual([["Daily briefing", false]]);
+	});
+});

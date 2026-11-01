@@ -2,6 +2,7 @@
 import { ChevronDown } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import { cx } from "./cx.ts";
+import { useLayer } from "./layer.tsx";
 
 export interface SelectOption {
 	value: string;
@@ -16,19 +17,22 @@ export interface SelectProps {
 	label: string;
 	className?: string;
 	disabled?: boolean;
+	/** For screenshot comparisons. */
+	dataRef?: string;
 }
 
 /** A select whose trigger is labelled `label` for assistive tech. */
-export function Select({ value, onValueChange, options, label, className, disabled }: SelectProps) {
+export function Select({ value, onValueChange, options, label, className, disabled, dataRef }: SelectProps) {
+	const layer = useLayer();
 	return (
 		<SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
-			<SelectPrimitive.Trigger className={cx("kb-select__trigger", className)} aria-label={label}>
+			<SelectPrimitive.Trigger className={cx("kb-select__trigger", className)} aria-label={label} data-ref={dataRef}>
 				<SelectPrimitive.Value />
 				<SelectPrimitive.Icon className="kb-select__icon">
 					<ChevronDown size={10} strokeWidth={2} />
 				</SelectPrimitive.Icon>
 			</SelectPrimitive.Trigger>
-			<SelectPrimitive.Portal>
+			<SelectPrimitive.Portal container={layer}>
 				<SelectPrimitive.Content className="kb-floating" position="popper" sideOffset={6} collisionPadding={8}>
 					<SelectPrimitive.Viewport className="kb-select__viewport">
 						{options.map((option) => (

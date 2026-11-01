@@ -2,6 +2,7 @@
 import { Popover as PopoverPrimitive } from "radix-ui";
 import type { ReactElement, ReactNode } from "react";
 import { cx } from "./cx.ts";
+import { useLayer } from "./layer.tsx";
 
 export interface PopoverProps {
 	trigger: ReactElement;
@@ -25,10 +26,11 @@ export function Popover({
 	label,
 	className,
 }: PopoverProps) {
+	const layer = useLayer();
 	return (
 		<PopoverPrimitive.Root open={open} onOpenChange={onOpenChange}>
 			<PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
-			<PopoverPrimitive.Portal>
+			<PopoverPrimitive.Portal container={layer}>
 				<PopoverPrimitive.Content
 					aria-label={label}
 					className={cx("kb-floating", className)}

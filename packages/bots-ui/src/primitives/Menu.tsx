@@ -2,6 +2,7 @@
 import { DropdownMenu } from "radix-ui";
 import type { ReactElement, ReactNode } from "react";
 import { cx } from "./cx.ts";
+import { useLayer } from "./layer.tsx";
 
 export interface MenuProps {
 	trigger: ReactElement;
@@ -26,10 +27,11 @@ export function Menu({
 	onOpenChange,
 	className,
 }: MenuProps) {
+	const layer = useLayer();
 	return (
 		<DropdownMenu.Root open={open} onOpenChange={onOpenChange}>
 			<DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
-			<DropdownMenu.Portal>
+			<DropdownMenu.Portal container={layer}>
 				<DropdownMenu.Content
 					aria-label={label}
 					className={cx("kb-floating", "kb-menu", className)}

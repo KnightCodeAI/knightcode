@@ -20,3 +20,4 @@ export { currentTheme, useResolvedTheme } from "./theme.ts";
 export * as tokens from "./tokens/tokens.ts";
 export { formatRoute, navigate, parseRoute, type Route, useRoute } from "./shell/routes.ts";
 export { type BotsClient, useBot, useBots, useConversation, useResource, useStore } from "./state/store.ts";
+export { TEMPLATE_AREAS, TEMPLATES } from "./bot/templates-data.ts";

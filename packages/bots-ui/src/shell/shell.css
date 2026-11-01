@@ -143,6 +143,10 @@
 	line-height: var(--kb-line-height-sm);
 	letter-spacing: var(--kb-tracking-wide);
 }
+/* The measured trigger hangs 5 px past the row's padding, lining its chevron up with the group's edge. */
+.kb-group__row .kb-select__trigger {
+	margin-right: -5px;
+}
 .kb-row__needs-you {
 	flex: none;
 	width: 8px;

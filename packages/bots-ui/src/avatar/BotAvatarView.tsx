@@ -31,6 +31,8 @@ export function BotAvatarView({ shape, color, state = "idle", size, className }:
 			face="eyes"
 			shading="flat"
 			color={avatarColors[theme][color]}
+			// The palette colour as is: the library's default boost turns neutral grays red-brown.
+			saturation={1}
 			state={STATES[state]}
 			size={size}
 			aria-hidden

@@ -4,6 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import type { CSSProperties, ReactNode } from "react";
 import { cx } from "./cx.ts";
 import { IconButton } from "./IconButton.tsx";
+import { LayerProvider, useTopLayer } from "./layer.tsx";
 
 export interface DialogProps {
 	open: boolean;
@@ -18,6 +19,8 @@ export interface DialogProps {
 	className?: string;
 	/** For screenshot comparisons and tests. */
 	dataRef?: string;
+	/** Where focus goes on open; by default the first focusable element. */
+	onOpenAutoFocus?: (event: Event) => void;
 }
 
 /** A modal dialog. Escape and the scrim close it. */
@@ -32,17 +35,27 @@ export function Dialog({
 	height,
 	className,
 	dataRef,
+	onOpenAutoFocus,
 }: DialogProps) {
 	const style: CSSProperties = { width, height };
+	const layer = useTopLayer(open);
 	return (
-		<DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
-			<DialogPrimitive.Portal>
+		<DialogPrimitive.Root open={open && layer !== undefined} onOpenChange={onOpenChange}>
+			<DialogPrimitive.Portal container={layer}>
 				<DialogPrimitive.Overlay className="kb-dialog-scrim" />
 				<DialogPrimitive.Content
 					className={cx("kb-dialog", className)}
 					style={style}
 					data-ref={dataRef}
 					aria-describedby={undefined}
+					onOpenAutoFocus={
+						onOpenAutoFocus ??
+						((event) => {
+							// Focus the dialog itself rather than its first control (the close button); Tab moves on from there.
+							event.preventDefault();
+							(event.currentTarget as HTMLElement | null)?.focus();
+						})
+					}
 				>
 					{bare ? (
 						<DialogPrimitive.Title className="kb-visually-hidden">{title}</DialogPrimitive.Title>
@@ -64,8 +77,10 @@ export function Dialog({
 							data-ref="dialog-close"
 						/>
 					</DialogPrimitive.Close>
-					{children}
-					{footer && <footer className="kb-dialog__footer">{footer}</footer>}
+					<LayerProvider value={layer}>
+						{children}
+						{footer && <footer className="kb-dialog__footer">{footer}</footer>}
+					</LayerProvider>
 				</DialogPrimitive.Content>
 			</DialogPrimitive.Portal>
 		</DialogPrimitive.Root>

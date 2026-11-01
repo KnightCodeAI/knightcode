@@ -48,6 +48,7 @@
 }
 .kb-button:disabled {
 	background-color: var(--kb-color-fill-strong);
+	font-weight: var(--kb-font-weight-regular);
 	color: var(--kb-color-text-disabled);
 	box-shadow: var(--kb-shadow-button-disabled);
 	cursor: default;
@@ -190,6 +191,25 @@
 }
 
 /* Dialog */
+/* A top-layer host (see layer.tsx): a transparent full-viewport box; only its contents take pointer events. */
+.kb-layer {
+	position: fixed;
+	inset: 0;
+	width: auto;
+	height: auto;
+	max-width: none;
+	max-height: none;
+	margin: 0;
+	padding: 0;
+	overflow: visible;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	pointer-events: none;
+}
+.kb-layer > * {
+	pointer-events: auto;
+}
 .kb-dialog-scrim {
 	position: fixed;
 	inset: 0;
@@ -234,8 +254,9 @@
 }
 .kb-dialog__close {
 	position: absolute;
-	top: 11px;
-	right: 11px;
+	top: 10px;
+	right: 10px;
+	line-height: normal;
 	z-index: 1;
 }
 .kb-dialog__body {
@@ -387,6 +408,10 @@
 .kb-input::placeholder,
 .kb-textarea::placeholder {
 	color: var(--kb-color-text-placeholder);
+}
+.kb-input:focus-visible,
+.kb-textarea:focus-visible {
+	outline: none;
 }
 .kb-input:focus,
 .kb-textarea:focus {

@@ -1,12 +1,14 @@
 // The KnightCode Bots app: one store and socket, the three-column shell, and the screen the URL names.
 import { type ApiClient, type WebSocketLike } from "@knightcode/bots-protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BotSettings } from "./bot/BotSettings.tsx";
+import { CreateBot } from "./bot/CreateBot.tsx";
 import { ChatView } from "./chat/ChatView.tsx";
 import { SandboxOriginContext } from "./chat/McpAppFrame.tsx";
 import { ToastProvider } from "./primitives/Toast.tsx";
 import { CommandK, useCommandKShortcut } from "./shell/CommandK.tsx";
 import { InfoPane } from "./shell/InfoPane.tsx";
-import { navigate, type Route, useRoute } from "./shell/routes.ts";
+import { navigate, type Route, useQueryParam, useRoute } from "./shell/routes.ts";
 import { Sidebar } from "./shell/Sidebar.tsx";
 import { ThreadSocket } from "./state/socket.ts";
 import { BotsStore, StoreContext, useBots } from "./state/store.ts";
@@ -58,7 +60,13 @@ function Shell() {
 
 	const botId = route.name === "bot" ? route.botId : isOverlay(route) ? (lastBot.current ?? firstBot?.id) : undefined;
 	const bot = data?.bots.find((b) => b.id === botId);
-	const pane = route.name === "bot" ? route.pane : "closed";
+	// Dialogs open over the chat with its details pane, as the pane is open by default.
+	const pane = route.name === "bot" ? route.pane : isOverlay(route) ? "details" : "closed";
+	const edit = useQueryParam("edit");
+	const avatar = useQueryParam("avatar");
+	const editing = edit !== null || avatar !== null;
+	const backToChat = () =>
+		botId ? navigate({ name: "bot", botId, pane: route.name === "bot" ? route.pane : "details" }) : navigate("/");
 
 	return (
 		<>
@@ -70,6 +78,10 @@ function Shell() {
 				{bot && <InfoPane bot={bot} view={pane} />}
 			</div>
 			<CommandK open={paletteOpen} onOpenChange={setPaletteOpen} />
+			{route.name === "new" && <CreateBot tab={route.tab} onClose={backToChat} />}
+			{route.name === "bot" && route.pane === "settings" && editing && bot && (
+				<BotSettings bot={bot} onClose={() => navigate({ name: "bot", botId: bot.id, pane: "settings" })} />
+			)}
 		</>
 	);
 }

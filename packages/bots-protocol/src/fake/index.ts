@@ -307,7 +307,7 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 		}),
 		createBot: ({ templateId, ...fields }) => {
 			const template = templateId ? state.templates.find((t) => t.id === templateId) : undefined;
-			return makeBot({
+			const created = makeBot({
 				...(template
 					? {
 							purpose: template.description,
@@ -320,6 +320,18 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 				name: fields.name,
 				model: chosenModel(fields.model),
 			});
+			// A template's routines arrive paused, with no trigger until the user adds one.
+			for (const routine of template?.routines ?? [])
+				state.routines.push({
+					id: newId("rt"),
+					botId: created.id,
+					name: routine.name,
+					prompt: routine.prompt,
+					triggers: [],
+					grant: { actions: [], targets: [], limits: {} },
+					active: false,
+				});
+			return created;
 		},
 		getBot: ({ botId }) => bot(botId),
 		updateBot: ({ botId, ...patch }) => updateBot(botId, patch),
@@ -432,7 +444,8 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 					: state.catalog.find((e) => e.name.toLowerCase() === p.name.toLowerCase())?.id,
 			);
 			updateBot(created.id, { appIds: matched.filter((id): id is string => id !== undefined) });
-			if (request.runSetup && recipe.gettingStarted)
+			if (recipe.gettingStarted) {
+				if (request.runSetup) startRun(created.id, `Setup: ${recipe.gettingStarted.skill}`);
 				hub.commit(`bot:${created.id}`, [
 					[
 						"p",
@@ -449,6 +462,7 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 						],
 					],
 				]);
+			}
 			return {
 				bot: bot(created.id),
 				unmatchedPlugins: plugins.filter((_, index) => matched[index] === undefined).map((p) => p.name),

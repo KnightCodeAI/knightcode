@@ -1,6 +1,7 @@
 // A small label that appears on hover or focus.
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type { ReactElement, ReactNode } from "react";
+import { useLayer } from "./layer.tsx";
 
 export interface TooltipProps {
 	content: ReactNode;
@@ -10,11 +11,12 @@ export interface TooltipProps {
 
 /** Wraps one focusable child. A provider higher up is optional; each tooltip carries its own. */
 export function Tooltip({ content, children, side = "bottom" }: TooltipProps) {
+	const layer = useLayer();
 	return (
 		<TooltipPrimitive.Provider delayDuration={400} skipDelayDuration={200}>
 			<TooltipPrimitive.Root>
 				<TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-				<TooltipPrimitive.Portal>
+				<TooltipPrimitive.Portal container={layer}>
 					<TooltipPrimitive.Content className="kb-tooltip" side={side} sideOffset={8} collisionPadding={8}>
 						{content}
 					</TooltipPrimitive.Content>

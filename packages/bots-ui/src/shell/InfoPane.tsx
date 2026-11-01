@@ -6,14 +6,16 @@ import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
 import { IconButton } from "../primitives/IconButton.tsx";
 import { Select } from "../primitives/Select.tsx";
 import { Tabs } from "../primitives/Tabs.tsx";
-import { BOTS, type BotList, type BotsStore, useResource, useStore } from "../state/store.ts";
+import { exportRecipe } from "../bot/ExportBot.tsx";
+import { MemoryViewer } from "../bot/MemoryViewer.tsx";
+import { BOTS, type BotList, useResource, useStore } from "../state/store.ts";
 import { navigate, type PaneView } from "./routes.ts";
 
 export interface InfoPaneProps {
 	bot: Bot | undefined;
 	view: PaneView | "closed";
-	/** Content for views later tasks own (computer, memory, routine editor). */
-	slots?: Partial<Record<"computer" | "memory" | "routine", ReactNode>>;
+	/** Content for views later tasks own (computer, routine editor). */
+	slots?: Partial<Record<"computer" | "routine", ReactNode>>;
 }
 
 type Tab = "details" | "library" | "computer";
@@ -23,7 +25,7 @@ const TAB_OF: Record<PaneView, Tab> = {
 	settings: "details",
 	routines: "details",
 	"routine-new": "details",
-	memory: "details",
+	memory: "library",
 	library: "library",
 	computer: "computer",
 };
@@ -46,7 +48,7 @@ export function InfoPane({ bot, view, slots }: InfoPaneProps) {
 					<IconButton
 						label="Share"
 						icon={<Share size={16} strokeWidth={1.75} />}
-						onClick={() => bot && void shareRecipe(store, bot)}
+						onClick={() => bot && void exportRecipe(store, bot)}
 					/>
 					<IconButton
 						label="Close"
@@ -74,10 +76,10 @@ export function InfoPane({ bot, view, slots }: InfoPaneProps) {
 						/>
 					</div>
 					<div className="kb-pane__panel" role="tabpanel" data-ref="info-tabpanel">
-						{view === "memory" && slots?.memory}
 						{(view === "routine-new" || view === "routines") && slots?.routine}
-						{tab === "details" && view !== "memory" && view !== "routine-new" && <Details bot={bot} />}
-						{tab === "library" && <Library bot={bot} />}
+						{tab === "details" && view !== "routine-new" && <Details bot={bot} />}
+						{view === "memory" && <MemoryViewer bot={bot} />}
+						{view === "library" && <Library bot={bot} />}
 						{tab === "computer" &&
 							(slots?.computer ?? <p className="kb-pane__empty">The computer this Bot works on shows up here.</p>)}
 					</div>
@@ -85,17 +87,6 @@ export function InfoPane({ bot, view, slots }: InfoPaneProps) {
 			)}
 		</aside>
 	);
-}
-
-/** Saves the bot as a recipe file, the shareable form of a bot. */
-async function shareRecipe(store: BotsStore, bot: Bot): Promise<void> {
-	const recipe = await store.api.exportBot({ botId: bot.id });
-	const url = URL.createObjectURL(new Blob([JSON.stringify(recipe, null, 2)], { type: "application/json" }));
-	const link = document.createElement("a");
-	link.download = `${bot.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "bot"}.json`;
-	link.href = url;
-	link.click();
-	URL.revokeObjectURL(url);
 }
 
 function PaneHead({ bot }: { bot: Bot }) {
@@ -116,7 +107,7 @@ function PaneHead({ bot }: { bot: Bot }) {
 					className="kb-pane__avatar"
 					data-avatar-box=""
 					aria-label="Edit Bot avatar"
-					onClick={() => navigate(`/bots/${encodeURIComponent(bot.id)}/settings?avatar=1`)}
+					onClick={() => navigate(`/bots/${encodeURIComponent(bot.id)}/settings?edit=1`)}
 				>
 					<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={64} />
 				</button>
@@ -176,6 +167,7 @@ function Details({ bot }: { bot: Bot }) {
 						<span>Model</span>
 						<Select
 							label="Model"
+							dataRef="settings-control"
 							value={`${bot.model.provider}/${bot.model.modelId}`}
 							onValueChange={(value) => {
 								const picked = options.find((m) => `${m.provider}/${m.modelId}` === value);

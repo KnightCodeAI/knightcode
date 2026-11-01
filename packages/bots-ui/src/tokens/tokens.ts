@@ -223,7 +223,7 @@ export const shadows = {
 		control: "rgba(245, 245, 245, 0.06) 0px 0px 0px 0.5px inset",
 		controlFaint: "rgba(245, 245, 245, 0.04) 0px 0px 0px 0.5px inset",
 		button: "rgba(245, 245, 245, 0.15) 0px 0px 0px 0.5px inset",
-		buttonDisabled: "rgba(245, 245, 245, 0.045) 0px 0px 0px 0.5px inset",
+		buttonDisabled: "color(srgb 0.960784 0.960784 0.960784 / 0.045) 0px 0px 0px 0.5px inset",
 		bubble:
 			"rgba(255, 255, 255, 0.03) 0px 0.5px 0px 0px inset, rgba(255, 255, 255, 0.03) 0px -0.5px 0px 0px inset, rgba(245, 245, 245, 0.04) 0px 0px 0px 0.5px inset",
 		swatchRing: "rgb(31, 31, 31) 0px 0px 0px 3px, rgba(245, 245, 245, 0.22) 0px 0px 0px 4px",
@@ -239,7 +239,7 @@ export const shadows = {
 		control: "rgba(28, 28, 28, 0.08) 0px 0px 0px 0.5px inset",
 		controlFaint: "rgba(28, 28, 28, 0.06) 0px 0px 0px 0.5px inset",
 		button: "rgba(28, 28, 28, 0.15) 0px 0px 0px 0.5px inset",
-		buttonDisabled: "rgba(28, 28, 28, 0.045) 0px 0px 0px 0.5px inset",
+		buttonDisabled: "color(srgb 0.109804 0.109804 0.109804 / 0.045) 0px 0px 0px 0.5px inset",
 		bubble:
 			"rgba(255, 255, 255, 0.16) 0px 0.5px 0px 0px inset, rgba(255, 255, 255, 0.16) 0px -0.5px 0px 0px inset, rgba(28, 28, 28, 0.06) 0px 0px 0px 0.5px inset",
 		swatchRing: "rgb(255, 255, 255) 0px 0px 0px 3px, rgba(28, 28, 28, 0.24) 0px 0px 0px 4px",

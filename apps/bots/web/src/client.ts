@@ -9,6 +9,7 @@ import {
 	seedFrom,
 	type WebSocketLike,
 } from "@knightcode/bots-protocol";
+import { TEMPLATES } from "@knightcode/bots-ui";
 
 export interface Client {
 	api: ApiClient;
@@ -17,8 +18,12 @@ export interface Client {
 
 /** The fake backend, seeded with the reference seed when the URL asks for `?seed=reference`. */
 export async function createClient(): Promise<Client> {
-	if (import.meta.env.VITE_FAKE !== "1") throw new Error("the real backend client arrives with the Worker; run with VITE_FAKE=1");
-	const fake = createFakeBackend(await chooseSeed(), { clock: realtimeClock() });
+	if (import.meta.env.VITE_FAKE !== "1")
+		throw new Error("the real backend client arrives with the Worker; run with VITE_FAKE=1");
+	const seed = await chooseSeed();
+	// The fake serves the template gallery the real backend will serve.
+	if (seed.templates.length === 0) seed.templates = TEMPLATES;
+	const fake = createFakeBackend(seed, { clock: realtimeClock() });
 	return { api: createApiClient(fake.fetch, location.origin), connect: () => fake.connect() };
 }
 
