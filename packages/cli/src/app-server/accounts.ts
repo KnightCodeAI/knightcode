@@ -35,7 +35,7 @@ function loginOptions(ctx: AppServerContext): LoginOption[] {
 				providerName: provider.name,
 				type: "api_key",
 				label: apiKey.name,
-				isSubscription: false,
+				isSubscription: apiKey.isSubscription === true,
 			});
 	}
 	return options;
@@ -215,7 +215,9 @@ export function accountHandlers(ctx: AppServerContext): Handlers {
 						provider: entry.providerId,
 						providerName: provider?.name ?? entry.providerId,
 						type: entry.type,
-						isSubscription: entry.type === "oauth" && provider?.auth.oauth?.isSubscription === true,
+						isSubscription:
+							(entry.type === "oauth" && provider?.auth.oauth?.isSubscription === true) ||
+							provider?.auth.apiKey?.isSubscription === true,
 					};
 				}),
 				loginOptions: loginOptions(ctx),

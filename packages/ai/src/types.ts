@@ -8,6 +8,7 @@ import type { MistralOptions } from "./api/mistral-conversations.ts";
 import type { OpenAICodexResponsesOptions } from "./api/openai-codex-responses.ts";
 import type { OpenAICompletionsOptions } from "./api/openai-completions.ts";
 import type { OpenAIResponsesOptions } from "./api/openai-responses.ts";
+import type { GeminiWebOptions } from "./api/gemini-web.ts";
 import type { KnightCodeMessagesOptions } from "./api/knightcode-messages.ts";
 import type {
 	AnthropicMessagesCompat,
@@ -60,6 +61,7 @@ export type {
 	ThinkingLevelMap,
 } from "./providers/model-schema.ts";
 export type { AssistantMessageEventStream } from "./utils/event-stream.ts";
+export type { GeminiWebOptions } from "./api/gemini-web.ts";
 
 export type KnownApi =
 	| "openai-completions"
@@ -71,6 +73,7 @@ export type KnownApi =
 	| "bedrock-converse-stream"
 	| "google-generative-ai"
 	| "google-vertex"
+	| "gemini-web"
 	| "knightcode-messages";
 
 export type Api = KnownApi | (string & {});
@@ -91,6 +94,7 @@ export type KnownProvider =
 	| "anthropic"
 	| "google"
 	| "google-vertex"
+	| "gemini-web"
 	| "openai"
 	| "azure"
 	| "openai-codex"
@@ -160,6 +164,11 @@ export interface ProviderRequestOptions<TModel = Model<Api>> {
 	/** Explicit parent span for telemetry produced by this logical request. */
 	telemetry?: TelemetrySpan;
 	apiKey?: string;
+	/**
+	 * Called when a provider rotates a stored credential during the request, such as Gemini web's session
+	 * cookies. The argument is the new `apiKey` value to persist. Absent means the caller does not store it.
+	 */
+	onApiKeyUpdate?: (apiKey: string) => void | Promise<void>;
 	/**
 	 * Optional fetch implementation for provider HTTP requests.
 	 * Defaults to `globalThis.fetch`. Provider adapters that cannot inject a custom implementation may reject it.
@@ -296,6 +305,7 @@ export interface ApiOptionsMap {
 	"mistral-conversations": MistralOptions;
 	"bedrock-converse-stream": BedrockOptions;
 	"knightcode-messages": KnightCodeMessagesOptions;
+	"gemini-web": GeminiWebOptions;
 }
 
 /**

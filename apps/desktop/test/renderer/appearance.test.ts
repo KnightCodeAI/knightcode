@@ -125,15 +125,15 @@ test("a chosen font face is named by an @font-face alias ahead of its family", (
 });
 
 test("theme presets are well-formed and valid", () => {
-	expect(THEME_PRESETS.length).toBe(28);
+	expect(THEME_PRESETS.length).toBe(29);
 	const ids = new Set(THEME_PRESETS.map((p) => p.id));
-	expect(ids.size).toBe(28);
+	expect(ids.size).toBe(29);
 
 	const builtins = THEME_PRESETS.filter((p) => p.builtin);
 	expect(builtins.map((p) => p.id)).toEqual(["auto", "dark", "light"]);
 
 	const downloadable = THEME_PRESETS.filter((p) => !p.builtin);
-	expect(downloadable.length).toBe(25);
+	expect(downloadable.length).toBe(26);
 
 	for (const preset of THEME_PRESETS) {
 		expect(["dark", "light", "system"]).toContain(preset.mode);
@@ -147,6 +147,10 @@ test("theme presets are well-formed and valid", () => {
 		if (preset.customization.foreground) expect(isHex(preset.customization.foreground)).toBe(true);
 		if (preset.customization.accent) expect(isHex(preset.customization.accent)).toBe(true);
 	}
+
+	const prismatic = THEME_PRESETS.find((p) => p.id === "prismatic")!;
+	expect(prismatic.wallpaper?.source).toBe("/wallpapers/prismatic.webp");
+	expect(prismatic.colors.accent).toBe("#8ab4f8");
 });
 
 test("freebuffTokens derives tokens for wallpaper preset (Alpine)", () => {

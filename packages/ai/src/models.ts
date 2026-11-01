@@ -896,11 +896,20 @@ class ModelsImpl implements MutableModels {
 		const env = resolution.env || options?.env ? { ...(resolution.env ?? {}), ...(options?.env ?? {}) } : undefined;
 		const identity = mergeClientIdentity(this.identity, options?.identity);
 		const { transformHeaders: _transformHeaders, ...providerOptions } = options ?? {};
+		const callerApiKeyUpdate = options?.onApiKeyUpdate;
+		const onApiKeyUpdate = async (nextApiKey: string) => {
+			await this.credentials.modify(model.provider, async (current) => {
+				if (current?.type !== "api_key" || !current.key || current.key === nextApiKey) return undefined;
+				return { ...current, key: nextApiKey };
+			});
+			await callerApiKeyUpdate?.(nextApiKey);
+		};
 		const requestOptions = {
 			...providerOptions,
 			apiKey,
 			headers,
 			env,
+			onApiKeyUpdate,
 			...(identity === undefined ? {} : { identity }),
 		} as Omit<TOptions, "transformHeaders"> & ProviderRequestOptions<TModel>;
 

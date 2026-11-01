@@ -13,6 +13,7 @@ import { cloudflareWorkersAIProvider } from "./cloudflare-workers-ai.ts";
 import modelDataManifest from "./data/.manifest.json" with { type: "json" };
 import { deepseekProvider } from "./deepseek.ts";
 import { fireworksProvider } from "./fireworks.ts";
+import { geminiWebProvider } from "./gemini-web.ts";
 import { githubCopilotProvider } from "./github-copilot.ts";
 import { googleProvider } from "./google.ts";
 import { googleVertexProvider } from "./google-vertex.ts";
@@ -147,6 +148,7 @@ export function builtinProviders(): Provider[] {
 		cloudflareWorkersAIProvider(),
 		deepseekProvider(),
 		fireworksProvider(),
+		geminiWebProvider(),
 		githubCopilotProvider(),
 		googleProvider(),
 		googleVertexProvider(),

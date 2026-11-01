@@ -934,6 +934,9 @@ async function resumeThread(id: string): Promise<void> {
 	}
 }
 
+/** One start at a time: Enter and the Send button can both fire before the first thread exists. */
+let startingThread = false;
+
 export async function startThread(
 	cwd: string,
 	text: string,
@@ -944,18 +947,25 @@ export async function startThread(
 		workspace?: WorkspaceRequest;
 	},
 	images?: ImageInput[],
-): Promise<void> {
-	const { thread, warnings, ui } = await client.request("thread/start", { cwd, ...options });
-	for (const warning of warnings) toast(warning.message);
-	navigate({ kind: "thread", id: thread.id });
-	set((s) => ({
-		...s,
-		held: {
-			...s.held,
-			[thread.id]: { thread, turns: [], queue: { steering: [], followUp: [] }, ui, requests: [], pending: [] },
-		},
-	}));
-	await send(thread.id, text, images);
+): Promise<string | undefined> {
+	if (startingThread) return;
+	startingThread = true;
+	try {
+		const { thread, warnings, ui } = await client.request("thread/start", { cwd, ...options });
+		for (const warning of warnings) toast(warning.message);
+		navigate({ kind: "thread", id: thread.id });
+		set((s) => ({
+			...s,
+			held: {
+				...s.held,
+				[thread.id]: { thread, turns: [], queue: { steering: [], followUp: [] }, ui, requests: [], pending: [] },
+			},
+		}));
+		await send(thread.id, text, images);
+		return thread.id;
+	} finally {
+		startingThread = false;
+	}
 }
 
 /** A press of a widget's button, or a change of its field; the extension answers by setting the widget again. */
@@ -1934,6 +1944,22 @@ export async function undoTurnEdits(threadId: string, turnId: string, reapply = 
  * Codex's "Edit message", which the protocol cannot do in place: the thread forks just before the message (its
  * previous turn's last item) and the edited text goes to the fork. The first message starts a fresh thread instead.
  */
+/** Edits already replacing a chat. A second Send before the first finishes must not create another copy. */
+const replacingThread = new Set<string>();
+
+function withoutForkSuffix(name: string): string {
+	return name.replace(/( \(fork\))+$/, "");
+}
+
+/** Drop the chat an edit replaced. It is no longer the open one, so this must not navigate away. */
+async function retireReplacedThread(threadId: string): Promise<void> {
+	try {
+		await client.request("thread/archive", { threadId });
+	} catch {
+		// The replacement is already open. Leaving the source in the sidebar is the failure, not a crash.
+	}
+}
+
 /** `images`: the edited message's own, which go with the replacement. */
 export async function resendEdited(
 	threadId: string,
@@ -1941,28 +1967,38 @@ export async function resendEdited(
 	text: string,
 	images?: ImageInput[],
 ): Promise<void> {
-	// The first loaded turn may not be the thread's first: load what is before it, so the fork keeps that history.
-	while (state.held[threadId]?.nextCursor && state.held[threadId]!.turns[0]?.id === turnId) {
-		const loaded = state.held[threadId]!.turns.length;
-		await loadEarlier(threadId);
-		// A failed load (it toasts) adds nothing: stop rather than ask again forever.
-		if ((state.held[threadId]?.turns.length ?? loaded) === loaded) break;
-	}
-	const view = state.held[threadId];
-	if (!view) return;
-	const at = view.turns.findIndex((t) => t.id === turnId);
-	if (at === 0 && view.nextCursor) return toast("Could not load the earlier messages to edit this one", "error");
-	const before = view.turns[at - 1]?.items.filter((i) => i.index !== undefined).at(-1);
+	if (replacingThread.has(threadId)) return;
+	replacingThread.add(threadId);
 	try {
+		// The first loaded turn may not be the thread's first: load what is before it, so the fork keeps that history.
+		while (state.held[threadId]?.nextCursor && state.held[threadId]!.turns[0]?.id === turnId) {
+			const loaded = state.held[threadId]!.turns.length;
+			await loadEarlier(threadId);
+			// A failed load (it toasts) adds nothing: stop rather than ask again forever.
+			if ((state.held[threadId]?.turns.length ?? loaded) === loaded) break;
+		}
+		const view = state.held[threadId];
+		if (!view) return;
+		const at = view.turns.findIndex((t) => t.id === turnId);
+		if (at === 0 && view.nextCursor) return toast("Could not load the earlier messages to edit this one", "error");
+		const before = view.turns[at - 1]?.items.filter((i) => i.index !== undefined).at(-1);
 		if (before) {
+			const sourceName = withoutForkSuffix(view.thread.name);
 			const { thread } = await client.request("thread/fork", { threadId, atItemId: before.id });
+			// An edit replaces this chat. The protocol can only do that by copying, so undo the "(fork)" name
+			// and take the source off the sidebar instead of leaving a stack of copies.
+			if (sourceName && sourceName !== thread.name) {
+				await client.request("thread/name/set", { threadId: thread.id, name: sourceName });
+				thread.name = sourceName;
+			}
 			upsertSummary(thread);
 			await openThread(thread.id);
+			await retireReplacedThread(threadId);
 			await send(thread.id, text, images);
 		} else {
 			const { thread } = view;
 			// The thread's own cwd: inside a managed worktree that starts the new thread in the same worktree.
-			await startThread(
+			const created = await startThread(
 				thread.cwd,
 				text,
 				{
@@ -1973,9 +2009,12 @@ export async function resendEdited(
 				},
 				images,
 			);
+			if (created) await retireReplacedThread(threadId);
 		}
 	} catch (error) {
 		toast(errorText(error), "error");
+	} finally {
+		replacingThread.delete(threadId);
 	}
 }
 

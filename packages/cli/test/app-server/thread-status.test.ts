@@ -72,4 +72,7 @@ test("a new thread reports createdAt, and a fork names its origin (§4.2)", asyn
 	const listed = await a.client.request("thread/list", { cwd });
 	expect(listed.threads.find((t) => t.id === fork.id)?.forkedFromId).toBe(thread.id);
 	expect(listed.threads.find((t) => t.id === fork.id)?.name).toBe("hi (fork)");
+	// Forking the fork must not stack another suffix.
+	const { thread: again } = await a.client.request("thread/fork", { threadId: fork.id });
+	expect(again.name).toBe("hi (fork)");
 });

@@ -19,6 +19,7 @@ metadata or executable content is retained.
 | orion.webp | Orion Nebula, C. R. O'Dell (Rice University) and NASA | [NASA Science](https://science.nasa.gov/asset/hubble/orion-nebula/) | [NASA media usage guidelines](https://www.nasa.gov/nasa-brand-center/images-and-media/) |
 | snow-ridge.webp | Snowy mountain peaks under a bright blue sky, Krisztián Korhetz | [Unsplash](https://unsplash.com/photos/snowy-mountain-peaks-under-a-bright-blue-sky-vGuiHBhIETo) | [Unsplash License](https://unsplash.com/license) |
 | spectrum.webp | Blue and purple abstract gradient, Milad Fakurian | [Unsplash](https://unsplash.com/photos/blue-and-purple-abstract-gradient-iFu2HILEng8) | [Unsplash License](https://unsplash.com/license) |
+| prismatic.webp | Photo supplied for the Prismatic preset | User-provided | Use only inside this app unless the owner grants a license |
 | courtyard.webp | VN Background — Rainy Courtyard, toa lalalalalalal | [Summer Engine](https://www.summerengine.com/asset-store/vn-background-rainy-courtyard-a1761775) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) as stated on the asset page |
 
 No built-in preset uses `courtyard.webp` any more (it is 1280 × 720). It stays bundled

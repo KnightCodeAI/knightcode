@@ -12,7 +12,7 @@
 
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { type ReactNode, useState } from "react";
-import { Button, IconButton } from "./button.tsx";
+import { Button } from "./button.tsx";
 import { X } from "./icons.tsx";
 
 /**
@@ -103,17 +103,28 @@ export function Dialog({
 									</DialogPrimitive.Description>
 								) : null}
 							</div>
-							<DialogPrimitive.Close asChild>
-								<IconButton label="Close dialog" size="xs" className="absolute top-4 right-4">
-									<X size={16} />
-								</IconButton>
-							</DialogPrimitive.Close>
 						</>
 					)}
 					{card && description ? (
 						<DialogPrimitive.Description className="sr-only">{description}</DialogPrimitive.Description>
 					) : null}
 					{children}
+					{card ? null : (
+						<DialogPrimitive.Close asChild>
+							<Button
+								variant="ghost"
+								color="secondary"
+								uniform
+								squircle
+								size="xs"
+								aria-label="Close"
+								className="kc-dialog-close"
+								style={{ position: "absolute", top: 16, right: 16, left: "auto", bottom: "auto" }}
+							>
+								<X size={16} />
+							</Button>
+						</DialogPrimitive.Close>
+					)}
 				</DialogPrimitive.Content>
 			</DialogPrimitive.Portal>
 		</DialogPrimitive.Root>

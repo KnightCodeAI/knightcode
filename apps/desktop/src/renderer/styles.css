@@ -646,6 +646,14 @@ body {
 		0 0 0 0.5px var(--kc-hairline),
 		0 4px 8px -2px rgb(0 0 0 / 0.1);
 }
+/* Wins over .kc-button position: relative, which otherwise drops the control into the flow at the bottom left. */
+.kc-dialog > .kc-dialog-close {
+	position: absolute !important;
+	top: 16px !important;
+	right: 16px !important;
+	bottom: auto !important;
+	left: auto !important;
+}
 /*
  * A text field in a dialog or a form: 36px, Codex's control fill, a hairline that turns the focus blue. In the
  * components layer so a caller's utilities (a 28px height, a stronger hairline, a width) win; the focus colour stays

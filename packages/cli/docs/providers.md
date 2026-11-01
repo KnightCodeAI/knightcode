@@ -280,3 +280,16 @@ gcloud auth application-default login
 ```
 
 To use a service-account key file instead, set `GOOGLE_APPLICATION_CREDENTIALS` along with the project and location.
+
+### Gemini web
+
+Signs in to the Gemini web app (gemini.google.com) with your own Google session cookies instead of an API key. Run `/login gemini-web` and paste the `__Secure-1PSID` value, then the `__Secure-1PSIDTS` value, from your browser's cookies for gemini.google.com. KnightCode loads the Gemini page once to check that the session works before saving anything. `GEMINI_WEB_COOKIES` (a bare `__Secure-1PSID` value, or `__Secure-1PSID=...; __Secure-1PSIDTS=...`) works as an environment fallback.
+
+Read this before using it:
+
+- **The cookies are your Google account.** They are not scoped to Gemini. They are stored in plaintext in `~/.knightcode/agent/auth.json` (mode `0600`) and sent to gemini.google.com, plus accounts.google.com when refreshing the session. Only the session cookies are kept.
+- **Uninstalling does not remove them.** `npm uninstall` and deleting the binary leave `~/.knightcode` in place. Run `/logout` for `gemini-web` first, or delete `auth.json`.
+- **It is unofficial.** The web app is a private interface. Google does not support this use, it may violate Google's terms, and the account can be restricted. The format can change without notice and break the provider.
+- **Cookies are refreshed.** Google rotates `__Secure-1PSIDTS` while the session is in use. KnightCode saves the new value, so a restart or reinstall keeps the sign-in. A cookie Google has already rejected still needs a fresh login.
+- **Tool calling is emulated.** The web app has no function calling. KnightCode describes the tools in the prompt and parses `<tool_call>` blocks from the reply, so it is slower and less reliable than a real API provider, and a malformed call is reported back to the model as a tool error.
+- **Limits.** `default` follows the model selected in the Gemini account. `gemini-3.5-flash-lite`, `gemini-3.8-flash`, `gemini-3.1-pro`, and `gemini-4-argon` select those models, with low, medium, and high thinking. If Google answers a selected model with a different one, KnightCode discards the reply and reports that model's quota as exhausted. Text input only, no token usage reporting, and every request is a new temporary chat that is not saved to your Gemini history. The full transcript is re-sent on each turn.

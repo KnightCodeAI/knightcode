@@ -1238,10 +1238,11 @@ export class ThreadManager {
 				if (forkId) this.preparing.delete(forkId);
 			}
 			if (created) this.schedulePrune();
-			// The copy carries its source's name; mark it so the two can be told apart.
-			thread.session.setSessionName(
-				`${thread.session.sessionManager.getSessionName() || thread.toThread().name} (fork)`,
-			);
+			// The copy carries its source's name; mark it so the two can be told apart. A fork of a fork
+			// already has the suffix, so do not stack "(fork) (fork)".
+			const sourceName = thread.session.sessionManager.getSessionName() || thread.toThread().name;
+			const baseName = sourceName.replace(/( \(fork\))+$/, "");
+			thread.session.setSessionName(`${baseName} (fork)`);
 			this.subscribe(thread, by);
 			const summary = thread.toThread();
 			this.ctx.broadcast("thread/started", { thread: summary });

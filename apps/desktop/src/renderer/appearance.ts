@@ -1107,6 +1107,37 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
 			translucentSidebar: true,
 		},
 	},
+	{
+		id: "prismatic",
+		name: "Prismatic",
+		description: "Prismatic theme preset",
+		builtin: false,
+		mode: "dark",
+		colors: {
+			surface: "#121316",
+			accent: "#8ab4f8",
+			text: "#e8eaed",
+		},
+		wallpaper: {
+			source: "/wallpapers/prismatic.webp",
+			// Veil strength, not photo strength. High enough to read text over the stripes, low enough that the photo still shows.
+			opacity: 0.62,
+			blur: 12,
+			gradient: {
+				enabled: false,
+				direction: "bottom",
+				position: 0.5,
+			},
+		},
+		dots: ["#8ab4f8", "#e8eaed", "#121316", "#292b2a"],
+		customization: {
+			background: "#121316",
+			foreground: "#e8eaed",
+			accent: "#8ab4f8",
+			contrast: 65,
+			translucentSidebar: true,
+		},
+	},
 ];
 
 export function freebuffTokens(preset: ThemePreset, resolvedTheme: ThemeName = "dark"): Record<string, string> {
