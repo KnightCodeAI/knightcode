@@ -89,3 +89,54 @@ describe("threads", () => {
 		expect(entries.slice(-3).map((e) => e.kind)).toContain("turn");
 	});
 });
+
+describe("review fixes", () => {
+	it("expires an approval through the op log, settling its inbox item", async () => {
+		const fake = createFakeBackend();
+		const frames: ServerFrame[] = [];
+		const socket = fake.connect();
+		socket.addEventListener("message", (e) => frames.push(decodeFrame(String(e.data)) as ServerFrame));
+		socket.send(encodeFrame({ type: "auth", ticket: "t" }));
+		socket.send(encodeFrame({ type: "subscribe", botId: "inbox" }));
+		await fake.clock.runAll();
+		await fake.clock.advance(25 * 3_600_000);
+		frames.length = 0;
+		const api = createApiClient(fake.fetch, "https://bots.test");
+		expect((await api.answerApproval({ id: "appr-dana", decision: "allow" })).result).toBe("expired");
+		await fake.clock.runAll();
+		expect(JSON.stringify(frames.filter((f) => f.type === "ops"))).toContain("expired");
+		expect((await api.listInbox({})).items.find((i) => i.id === "in-approval")?.done).toBe(true);
+		expect(fake.executed("appr-dana")).toBe(0);
+	});
+
+	it("gives a new bot an address only when it is free and valid", async () => {
+		const { api } = client();
+		expect((await api.createBot({ name: "Reviewer" })).email).toBeUndefined();
+		const helper = await api.createBot({ name: "Helper" });
+		expect(helper.email).toBe("helper.raghav@bots.knightcode.dev");
+		expect((await api.getChannels({})).addresses).toContainEqual({ botId: helper.id, address: helper.email });
+	});
+
+	it("ends a streamed reply with the full text and the run stopped", async () => {
+		const fake = createFakeBackend();
+		const socket = fake.connect();
+		socket.send(encodeFrame({ type: "auth", ticket: "t" }));
+		socket.send(encodeFrame({ type: "submit", botId: "inbox", text: "hello", requestId: "r1" }));
+		await fake.clock.runAll();
+		const view = await createApiClient(fake.fetch, "https://bots.test").getHistory({ botId: "inbox" });
+		const last = view.entries.at(-1);
+		expect(view.running).toBe(false);
+		expect(last).toMatchObject({ kind: "message", role: "assistant", text: fake.state.replies.inbox });
+		expect(last && "streaming" in last).toBe(false);
+	});
+
+	it("says ready with the seed's own account id", async () => {
+		const fake = createFakeBackend();
+		const frames: ServerFrame[] = [];
+		const socket = fake.connect();
+		socket.addEventListener("message", (e) => frames.push(decodeFrame(String(e.data)) as ServerFrame));
+		socket.send(encodeFrame({ type: "auth", ticket: "t" }));
+		await fake.clock.runAll();
+		expect(frames[0]).toEqual({ type: "ready", accountId: fake.state.account.id });
+	});
+});

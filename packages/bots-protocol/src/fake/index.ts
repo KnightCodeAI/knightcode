@@ -72,8 +72,10 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 	const newId = (prefix: string) => `${prefix}-${++counter}`;
 	const now = () => clock.now();
 
-	const hub: FakeHub = new FakeHub(state.threads, {
+	// The hub gets its own copy: seed objects shared with `state` must change only through ops.
+	const hub: FakeHub = new FakeHub(structuredClone(state.threads), {
 		clock,
+		accountId: state.account.id,
 		replyFor: (botId) => state.replies[botId] ?? DEFAULT_REPLY,
 		group: (groupId) => {
 			const group = state.groups.find((g) => g.id === groupId);
@@ -160,8 +162,14 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 			createdAt: now(),
 			...fields,
 		};
-		created.email ??= `${slug(created.name, () => false)}.${state.account.handle ?? "you"}@bots.knightcode.dev`;
 		state.bots.push(created);
+		// The address comes from the name only when it is valid and free; otherwise the user picks one.
+		const local = slug(created.name, () => false);
+		const address = `${local}.${state.account.handle ?? "you"}@bots.knightcode.dev`;
+		if (!created.email && checkName(local) === "ok" && !state.channels.addresses.some((a) => a.address === address)) {
+			created.email = address;
+			state.channels.addresses.push({ botId: id, address });
+		}
 		state.instructionVersions[id] = [
 			{ version: 1, text: created.instructions, createdAt: now(), author: { kind: "user" } },
 		];
@@ -551,24 +559,19 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 			state.files = state.files.filter((f) => f.id !== id);
 			return { ok: true };
 		},
-		listApprovals: ({ botId }) => ({
-			approvals: state.approvals.filter((a) => botId === undefined || a.botId === botId),
-		}),
+		listApprovals: ({ botId }) => {
+			expireDue();
+			return { approvals: state.approvals.filter((a) => botId === undefined || a.botId === botId) };
+		},
 		answerApproval: ({ id, decision }) => {
 			const approval = find(state.approvals, id, "approval");
-			if (approval.state === "pending" && now() > approval.expiresAt) approval.state = "expired";
+			expireDue();
 			// Checked and consumed in one synchronous step, so two answers cannot both run the action.
 			if (approval.state !== "pending") return { result: approval.state === "expired" ? "expired" : "used", approval };
-			approval.state = decision === "deny" ? "denied" : "allowed";
-			if (approval.state === "allowed") executions.set(id, (executions.get(id) ?? 0) + 1);
+			if (decision !== "deny") executions.set(id, (executions.get(id) ?? 0) + 1);
 			if (decision === "always")
 				state.approvalSettings.allow.push({ id: newId("rule"), kind: "tool", value: approval.action.tool });
-			hub.patchCards(
-				(e) => e.kind === "card" && e.card.type === "approval" && e.card.approval.id === id,
-				(index) => [["s", ["entries", index, "card", "approval", "state"], approval.state]],
-			);
-			settleInbox((item) => item.approvalId === id);
-			hub.emit({ kind: "approval", approval });
+			settleApproval(approval, decision === "deny" ? "denied" : "allowed");
 			return { result: "ok", approval };
 		},
 
@@ -974,6 +977,23 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 		setAutoTopUp: (autoTopUp) => Object.assign(state.billing, { autoTopUp }),
 	};
 
+	/** Moves an approval out of pending: the card, the inbox item and every client hear about it. */
+	function settleApproval(approval: Approval, outcome: "allowed" | "denied" | "expired"): void {
+		approval.state = outcome;
+		hub.patchCards(
+			(e) => e.kind === "card" && e.card.type === "approval" && e.card.approval.id === approval.id,
+			(index) => [["s", ["entries", index, "card", "approval", "state"], outcome]],
+		);
+		settleInbox((item) => item.approvalId === approval.id);
+		hub.emit({ kind: "approval", approval });
+	}
+
+	/** Expires every pending approval whose time is up. Checked whenever approvals are read or answered. */
+	function expireDue(): void {
+		for (const approval of state.approvals)
+			if (approval.state === "pending" && now() > approval.expiresAt) settleApproval(approval, "expired");
+	}
+
 	function history(key: ThreadKey, before: string | undefined, limit: number | undefined): ConversationView {
 		const view = threadView(key);
 		const end = before ? view.entries.findIndex((e) => e.id === before) : view.entries.length;
@@ -1041,8 +1061,16 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 			// The matcher pairs each route with its own handler; TypeScript cannot correlate the two unions.
 			const handler = handlers[route.name] as (request: unknown) => unknown;
 			const result = await handler(input);
-			// Checked as the client will see it: JSON drops undefined fields.
-			return Response.json(parse(route.response, JSON.parse(JSON.stringify(result ?? null))));
+			// Checked as the client will see it: JSON drops undefined fields. A bad response is the fake's bug, not the caller's.
+			const json: unknown = JSON.parse(JSON.stringify(result ?? null));
+			try {
+				return Response.json(parse(route.response, json));
+			} catch (error) {
+				return Response.json(
+					{ error: "fake_bug", message: error instanceof Error ? error.message : "bad response" },
+					{ status: 500 },
+				);
+			}
 		} catch (error) {
 			if (error instanceof FakeHttpError)
 				return Response.json({ error: error.code, message: error.message }, { status: error.status });

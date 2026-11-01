@@ -17,6 +17,8 @@ type Target = { botId: string } | { groupId: string };
 /** What the hub needs from the rest of the fake. */
 export interface HubContext {
 	clock: FakeClock;
+	/** Sent in the `ready` frame. */
+	accountId: string;
 	/** The text a bot streams when messaged. */
 	replyFor(botId: string, prompt: string): string;
 	/** Group members in order, the lead and their names, or undefined for an unknown group. */
@@ -122,7 +124,7 @@ export class FakeHub {
 			socket.authed = frame.ticket.length > 0;
 			socket.deliver(
 				socket.authed
-					? { type: "ready", accountId: "acct-raghav" }
+					? { type: "ready", accountId: this.ctx.accountId }
 					: { type: "error", code: "unauthorized", message: "bad ticket" },
 			);
 			return;
