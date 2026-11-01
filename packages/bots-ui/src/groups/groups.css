@@ -1,0 +1,51 @@
+/* Group chats. */
+
+.kb-identity__stack {
+	display: flex;
+}
+.kb-identity__stack-item {
+	display: flex;
+	width: 20px;
+	height: 20px;
+	border-radius: var(--kb-radius-full);
+	box-shadow: 0 0 0 2px var(--kb-color-page);
+}
+.kb-identity__stack-item + .kb-identity__stack-item {
+	margin-left: -6px;
+}
+.kb-identity__count {
+	color: var(--kb-color-text-tertiary);
+	font-size: var(--kb-font-size-xs);
+}
+.kb-turns {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--kb-space-6);
+	min-height: 0;
+	color: var(--kb-color-text-secondary);
+	font-size: var(--kb-font-size-xs);
+	line-height: var(--kb-line-height-xs);
+}
+.kb-turns:not(:empty) {
+	position: absolute;
+	right: 0;
+	bottom: 96px;
+	left: 0;
+	z-index: 1;
+	pointer-events: none;
+}
+.kb-member {
+	align-items: center;
+}
+.kb-member__avatar {
+	display: flex;
+	flex: none;
+	width: 20px;
+	height: 20px;
+}
+.kb-settings__row--start {
+	align-items: center;
+	justify-content: flex-start;
+	flex-wrap: wrap;
+}

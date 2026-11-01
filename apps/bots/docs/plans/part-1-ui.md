@@ -520,7 +520,7 @@ git commit -m "feat(bots): add pages, inbox and catch-up"
   `TurnIndicator.tsx`, `packages/bots-ui/src/bot/ManagedBots.tsx`
 - Test: `apps/bots/web/e2e/groups.e2e.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/groups.e2e.ts
@@ -537,11 +537,11 @@ test("group mentions, everyone, passes and a 2-to-10 member limit", async ({ pag
 test("group matches the reference", async ({ page }) => compareToReference(page, "group"));
 ```
 
-- [ ] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui groups`)
-- [ ] **Step 3: Implement the group screens** (management changes always
+- [x] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui groups`)
+- [x] **Step 3: Implement the group screens** (management changes always
   show the full change on an approval card)
-- [ ] **Step 4: Run ui, then run reference for `group`**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run ui, then run reference for `group`**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src/groups packages/bots-ui/src/bot/ManagedBots.tsx apps/bots/web/e2e/groups.e2e.ts

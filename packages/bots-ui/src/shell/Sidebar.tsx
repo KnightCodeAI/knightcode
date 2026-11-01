@@ -19,6 +19,7 @@ import {
 	Settings,
 	SquarePen,
 	Undo2,
+	Users,
 } from "lucide-react";
 import { type KeyboardEvent, type PointerEvent, useEffect, useState } from "react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
@@ -207,6 +208,12 @@ function BotRow({ bot, active, sections }: { bot: Bot; active: boolean; sections
 					onSelect={() => navigate(`/bots/${encodeURIComponent(bot.id)}/settings?edit=1`)}
 				>
 					Settings
+				</MenuItem>
+				<MenuItem
+					icon={<Users size={14} />}
+					onSelect={() => navigate(`/groups/new/settings?with=${encodeURIComponent(bot.id)}`)}
+				>
+					New group with {bot.name}
 				</MenuItem>
 				<MenuItem
 					icon={<Copy size={14} />}

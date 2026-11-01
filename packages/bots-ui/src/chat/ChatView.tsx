@@ -2,7 +2,7 @@
 // socket (send, stop, answer) and the API (approvals, reactions, files, cards).
 import type { Bot, ConversationView } from "@knightcode/bots-protocol";
 import { AtSign, CalendarClock, Plug, Sparkles, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
 import { useToast } from "../primitives/Toast.tsx";
 import { navigate } from "../shell/routes.ts";
@@ -55,11 +55,14 @@ export function Thread({
 	view,
 	name,
 	botId,
+	below,
 }: {
 	target: ThreadTarget;
 	view: ConversationView | undefined;
 	name: string;
 	botId?: string;
+	/** Shown between the transcript and the composer (a group's turn indicator). */
+	below?: ReactNode;
 }) {
 	const store = useStore();
 	const toast = useToast();
@@ -144,6 +147,7 @@ export function Thread({
 	return (
 		<>
 			<Transcript view={view} bots={bots} botId={botId} botName={name} actions={actions} />
+			{below}
 			<Composer
 				placeholder={`Message ${name}`}
 				running={view?.running ?? false}

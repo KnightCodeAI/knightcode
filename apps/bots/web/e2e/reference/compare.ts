@@ -32,6 +32,8 @@ interface ScreenRoute {
 	steps?: (page: Page) => Promise<void>;
 	/** KnightCode regions to leave out of the pixel comparison, matching the reference's masked regions. */
 	mask?: string[];
+	/** A seed variant from the reference folder (seed.<name>.json) instead of the reference seed. */
+	seed?: string;
 	/** Look refs up inside this element: the reference measured a stand-in card that shares its chrome. */
 	scope?: string;
 	/**
@@ -91,7 +93,7 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	page: { path: "/pages/weekly", referenceMask: true },
 	inbox: { path: "/inbox", referenceMask: true },
 	"catch-up": { path: "/?away=5h", referenceMask: true },
-	group: { path: "/groups/launch", mask: [TRANSCRIPT, '[data-ref="chat-header"]'] },
+	group: { path: "/groups/launch", seed: "group", referenceMask: true },
 	"settings-account": { path: "/settings/account" },
 	"settings-approvals": { path: "/settings/approvals" },
 	"settings-vault": { path: "/settings/vault" },
@@ -154,7 +156,7 @@ async function open(page: Page, route: ScreenRoute, theme: Theme, width: number,
 	await page.setViewportSize({ width, height });
 	await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
 	const separator = route.path.includes("?") ? "&" : "?";
-	await page.goto(`${route.path}${separator}seed=reference`);
+	await page.goto(`${route.path}${separator}seed=${route.seed ?? "reference"}`);
 	await page.evaluate(() => document.fonts.ready);
 	await route.steps?.(page);
 	// The reference captures start with the transcript scrolled to the top, once its entries have arrived.

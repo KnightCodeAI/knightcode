@@ -10,15 +10,17 @@ const here = fileURLToPath(new URL(".", import.meta.url));
 /** Local captures used to compare screens; outside the repository and optional. */
 export const REFERENCE_DIR = process.env.BOTS_REFERENCE_DIR ?? resolve(here, "../../../../kc-bots-reference");
 
-/** Serves the reference seed to the fake backend at /__seed/reference.json, in development only. */
+/** Serves seeds from the reference folder to the fake backend at /__seed/<name>.json, in development only. */
 function referenceSeed(): Plugin {
 	return {
 		name: "knightcode-bots-reference-seed",
 		apply: "serve",
 		configureServer(server) {
-			server.middlewares.use("/__seed/reference.json", (_request, response) => {
-				const file = resolve(REFERENCE_DIR, "seed.json");
-				if (!existsSync(file)) {
+			server.middlewares.use("/__seed/", (request, response) => {
+				// `reference` is seed.json; other names are variants, such as one with a group for the group screen.
+				const name = /^\/([a-z][a-z-]*)\.json$/.exec(request.url ?? "")?.[1];
+				const file = name && resolve(REFERENCE_DIR, name === "reference" ? "seed.json" : `seed.${name}.json`);
+				if (!file || !existsSync(file)) {
 					response.statusCode = 404;
 					response.end();
 					return;

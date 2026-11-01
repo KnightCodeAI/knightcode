@@ -5,6 +5,8 @@ import { BotSettings } from "./bot/BotSettings.tsx";
 import { CreateBot } from "./bot/CreateBot.tsx";
 import { ChatView } from "./chat/ChatView.tsx";
 import { Catalog } from "./connectors/Catalog.tsx";
+import { GroupChat } from "./groups/GroupChat.tsx";
+import { GroupSettings } from "./groups/GroupSettings.tsx";
 import { awayFor, CatchUp, isAway, markActive } from "./inbox/CatchUp.tsx";
 import { Inbox } from "./inbox/Inbox.tsx";
 import { PagesLibrary } from "./pages/Library.tsx";
@@ -81,6 +83,7 @@ function Shell() {
 	const botId =
 		route.name === "bot" ? route.botId : isOverlay(route) || view ? (lastBot.current ?? firstBot?.id) : undefined;
 	const bot = data?.bots.find((b) => b.id === botId);
+	const group = route.name === "group" ? data?.groups.find((g) => g.id === route.groupId) : undefined;
 	const pane =
 		route.name === "bot"
 			? route.pane
@@ -100,7 +103,13 @@ function Shell() {
 			<div className="kb-shell" data-ref="shell">
 				<Sidebar route={route} onSearch={openPalette} />
 				<main className="kb-chat" data-ref="chat">
-					{view ? (
+					{route.name === "group" ? (
+						group ? (
+							<GroupChat group={group} />
+						) : route.groupId === "new" ? null : (
+							<MainView route={route} loading={!data} />
+						)
+					) : view ? (
 						<MainContent
 							view={view}
 							catchUp={catchUp}
@@ -122,6 +131,12 @@ function Shell() {
 			{route.name === "skills" && <SkillsLibrary onClose={backToChat} />}
 			{route.name === "settings" && <SettingsDialog view={route.section} onClose={backToChat} />}
 			{route.name === "activity" && <SettingsDialog view="activity" onClose={backToChat} />}
+			{route.name === "group" && route.settings && (group || route.groupId === "new") && (
+				<GroupSettings
+					group={group}
+					onClose={() => (group ? navigate({ name: "group", groupId: group.id, settings: false }) : backToChat())}
+				/>
+			)}
 			{route.name === "bot" && route.pane === "settings" && editing && bot && (
 				<BotSettings bot={bot} onClose={() => navigate({ name: "bot", botId: bot.id, pane: "settings" })} />
 			)}
@@ -179,7 +194,7 @@ function isOverlay(route: Route): boolean {
 
 function MainView({ route, loading }: { route: Route; loading: boolean }) {
 	if (loading) return null;
-	if (route.name === "not-found" || route.name === "bot")
+	if (route.name === "not-found" || route.name === "bot" || route.name === "group")
 		return (
 			<div className="kb-view">
 				<div className="kb-view__inner">

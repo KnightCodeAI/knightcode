@@ -28,8 +28,9 @@ export async function createClient(): Promise<Client> {
 }
 
 async function chooseSeed(): Promise<FakeSeed> {
-	if (new URLSearchParams(location.search).get("seed") !== "reference") return defaultSeed();
-	const response = await fetch("/__seed/reference.json");
+	const name = new URLSearchParams(location.search).get("seed");
+	if (!name || !/^[a-z][a-z-]*$/.test(name)) return defaultSeed();
+	const response = await fetch(`/__seed/${name}.json`);
 	if (!response.ok) throw new Error("the reference seed is not available");
 	return seedFrom((await response.json()) as Partial<FakeSeed>);
 }

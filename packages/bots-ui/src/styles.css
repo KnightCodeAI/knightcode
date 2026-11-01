@@ -10,6 +10,7 @@
 @import "./routines/routines.css";
 @import "./settings/settings.css";
 @import "./pages/pages.css";
+@import "./groups/groups.css";
 
 *,
 *::before,

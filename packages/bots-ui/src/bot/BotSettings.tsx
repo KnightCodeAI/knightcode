@@ -14,6 +14,7 @@ import { AvatarPicker } from "./CreateBot.tsx";
 import { ExportBot } from "./ExportBot.tsx";
 import { InstructionsHistory } from "./InstructionsHistory.tsx";
 import { KnowledgeFiles } from "./KnowledgeFiles.tsx";
+import { ManagedBots } from "./ManagedBots.tsx";
 import { ModelPicker } from "./ModelPicker.tsx";
 
 type Patch = Partial<
@@ -120,6 +121,9 @@ export function BotSettings({ bot, onClose }: { bot: Bot; onClose: () => void })
 						checked={bot.showTools}
 						onCheckedChange={(showTools) => void update({ showTools })}
 					/>
+				</Field>
+				<Field label="Manages" hint="Bots this one may change (a Chief of Staff).">
+					<ManagedBots bot={bot} />
 				</Field>
 				<Field label="Memory">
 					<Button variant="subtle" size="sm" onClick={() => navigate({ name: "bot", botId: bot.id, pane: "memory" })}>
