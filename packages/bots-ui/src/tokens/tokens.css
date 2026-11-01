@@ -50,6 +50,7 @@
 	--kb-tracking-wide: 0.015em;
 	--kb-tracking-tight: -0.08px;
 	--kb-tracking-title: -0.15px;
+	--kb-tracking-tab: 0.1px;
 	--kb-duration-press: 50ms;
 	--kb-duration-fast: 100ms;
 	--kb-duration-hover: 120ms;
@@ -104,6 +105,8 @@
 	--kb-color-accent: rgb(17, 109, 210);
 	--kb-color-danger: rgb(255, 100, 99);
 	--kb-color-scrim: rgba(0, 0, 0, 0.698);
+	--kb-color-window-divider: rgba(245, 245, 245, 0.16);
+	--kb-color-mark-ink: rgb(245, 245, 245);
 	--kb-color-on-accent: rgb(255, 255, 255);
 	--kb-avatar-black: rgb(255, 255, 255);
 	--kb-avatar-brown: rgb(161, 107, 57);
@@ -159,6 +162,8 @@
 		--kb-color-accent: rgb(22, 128, 243);
 		--kb-color-danger: rgb(207, 43, 53);
 		--kb-color-scrim: rgba(0, 0, 0, 0.5);
+		--kb-color-window-divider: rgba(28, 28, 28, 0.16);
+		--kb-color-mark-ink: rgb(255, 255, 255);
 		--kb-color-on-accent: rgb(255, 255, 255);
 		--kb-avatar-black: rgb(0, 0, 0);
 		--kb-avatar-brown: rgb(160, 107, 57);
@@ -214,6 +219,8 @@
 	--kb-color-accent: rgb(22, 128, 243);
 	--kb-color-danger: rgb(207, 43, 53);
 	--kb-color-scrim: rgba(0, 0, 0, 0.5);
+	--kb-color-window-divider: rgba(28, 28, 28, 0.16);
+	--kb-color-mark-ink: rgb(255, 255, 255);
 	--kb-color-on-accent: rgb(255, 255, 255);
 	--kb-avatar-black: rgb(0, 0, 0);
 	--kb-avatar-brown: rgb(160, 107, 57);

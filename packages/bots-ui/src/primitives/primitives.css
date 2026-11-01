@@ -62,6 +62,8 @@
 	padding: 0;
 	border-radius: var(--kb-radius-full);
 	font-size: var(--kb-font-size-sm);
+	line-height: var(--kb-line-height-sm);
+	letter-spacing: var(--kb-tracking-wide);
 	cursor: pointer;
 	transition:
 		background-color var(--kb-duration-hover) var(--kb-ease-hover),
@@ -310,7 +312,7 @@
 	font: inherit;
 	font-size: var(--kb-font-size-sm);
 	line-height: var(--kb-line-height-sm);
-	letter-spacing: var(--kb-tracking-wide);
+	letter-spacing: var(--kb-tracking-tab);
 	white-space: nowrap;
 	cursor: pointer;
 	transition:

@@ -33,6 +33,10 @@ export const colors = {
 		accent: "rgb(17, 109, 210)",
 		danger: "rgb(255, 100, 99)",
 		scrim: "rgba(0, 0, 0, 0.698)",
+		/** The hairline beside the desktop window controls. */
+		windowDivider: "rgba(245, 245, 245, 0.16)",
+		/** Ink on small status marks (the main bot dot). */
+		markInk: "rgb(245, 245, 245)",
 		onAccent: "rgb(255, 255, 255)",
 	},
 	light: {
@@ -64,6 +68,10 @@ export const colors = {
 		accent: "rgb(22, 128, 243)",
 		danger: "rgb(207, 43, 53)",
 		scrim: "rgba(0, 0, 0, 0.5)",
+		/** The hairline beside the desktop window controls. */
+		windowDivider: "rgba(28, 28, 28, 0.16)",
+		/** Ink on small status marks (the main bot dot). */
+		markInk: "rgb(255, 255, 255)",
 		onAccent: "rgb(255, 255, 255)",
 	},
 } as const satisfies Record<Theme, Record<string, string>>;
@@ -152,7 +160,14 @@ export const lineHeights = {
 export const fontWeights = { regular: 400, medium: 500, semibold: 600 } as const;
 
 /** Tracking as a fraction of the font size, as measured: most text uses 1%, small controls 1.5%. */
-export const letterSpacings = { base: "0.01em", wide: "0.015em", tight: "-0.08px", title: "-0.15px" } as const;
+export const letterSpacings = {
+	base: "0.01em",
+	wide: "0.015em",
+	tight: "-0.08px",
+	title: "-0.15px",
+	/** Pill tabs: the open font runs about 2% wider than the reference at 13 px, and these labels are measured to the pixel. */
+	tab: "0.1px",
+} as const;
 
 /**
  * The open font chosen to match the reference text metrics (same line widths within 1% on measured samples),

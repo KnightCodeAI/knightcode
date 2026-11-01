@@ -166,7 +166,7 @@ git commit -m "feat(bots): add the UI foundation, avatars and primitives"
   `useBots()`, `useBot(id)`, `useConversation(botId)` hooks; routes for
   every screen id.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/shell.e2e.ts
@@ -184,20 +184,20 @@ test("sidebar lists bots, groups, sections and needs-you markers", async ({ page
 test("shell matches the reference", async ({ page }) => compareToReference(page, "shell"));
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bunx playwright test --project ui shell`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the shell** (pin, sections, mark unread,
+- [x] **Step 3: Implement the shell** (pin, sections, mark unread,
   duplicate, archive and restore from the sidebar menu; search across bots
   and conversations; Cmd/Ctrl+K)
 
-- [ ] **Step 4: Run ui, then run reference for `shell`**
+- [x] **Step 4: Run ui, then run reference for `shell`**
 
 Expected: PASS for both.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src apps/bots/web/e2e/shell.e2e.ts

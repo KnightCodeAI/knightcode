@@ -1,0 +1,250 @@
+// A bot's details pane: avatar and name, then Details (routines and settings), Library and Computer.
+import type { Bot, ModelOption } from "@knightcode/bots-protocol";
+import { Share, X } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
+import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { IconButton } from "../primitives/IconButton.tsx";
+import { Select } from "../primitives/Select.tsx";
+import { Tabs } from "../primitives/Tabs.tsx";
+import { BOTS, type BotList, type BotsStore, useResource, useStore } from "../state/store.ts";
+import { navigate, type PaneView } from "./routes.ts";
+
+export interface InfoPaneProps {
+	bot: Bot | undefined;
+	view: PaneView | "closed";
+	/** Content for views later tasks own (computer, memory, routine editor). */
+	slots?: Partial<Record<"computer" | "memory" | "routine", ReactNode>>;
+}
+
+type Tab = "details" | "library" | "computer";
+
+const TAB_OF: Record<PaneView, Tab> = {
+	details: "details",
+	settings: "details",
+	routines: "details",
+	"routine-new": "details",
+	memory: "details",
+	library: "library",
+	computer: "computer",
+};
+
+/** The right column for a bot. Closed, it keeps its place in the grid at zero width so it can slide open. */
+export function InfoPane({ bot, view, slots }: InfoPaneProps) {
+	const store = useStore();
+	const closed = view === "closed";
+	const tab = closed ? "details" : TAB_OF[view];
+	return (
+		<aside
+			className="kb-pane"
+			aria-label="Conversation details"
+			data-ref="info-pane"
+			data-closed={closed ? "" : undefined}
+			aria-hidden={closed}
+		>
+			<header className="kb-pane__top" data-ref="info-pane-top">
+				<span style={{ display: "flex", gap: 8 }} data-ref="info-pane-actions">
+					<IconButton
+						label="Share"
+						icon={<Share size={16} strokeWidth={1.75} />}
+						onClick={() => bot && void shareRecipe(store, bot)}
+					/>
+					<IconButton
+						label="Close"
+						icon={<X size={16} strokeWidth={1.75} />}
+						onClick={() => bot && navigate({ name: "bot", botId: bot.id, pane: "closed" })}
+					/>
+				</span>
+				<span className="kb-pane__divider" aria-hidden />
+			</header>
+			{bot && (
+				<div className="kb-pane__scroll">
+					<PaneHead bot={bot} />
+					<div className="kb-pane__tabs">
+						<Tabs
+							label="Conversation details"
+							value={tab}
+							onValueChange={(next) => navigate({ name: "bot", botId: bot.id, pane: next as Tab })}
+							listClassName="kb-pane__tablist"
+							refs={{ list: "info-tabs", active: "info-tab-active", inactive: "info-tab" }}
+							items={[
+								{ value: "details", label: "Details" },
+								{ value: "library", label: "Library" },
+								{ value: "computer", label: "Computer" },
+							]}
+						/>
+					</div>
+					<div className="kb-pane__panel" role="tabpanel" data-ref="info-tabpanel">
+						{view === "memory" && slots?.memory}
+						{(view === "routine-new" || view === "routines") && slots?.routine}
+						{tab === "details" && view !== "memory" && view !== "routine-new" && <Details bot={bot} />}
+						{tab === "library" && <Library bot={bot} />}
+						{tab === "computer" &&
+							(slots?.computer ?? <p className="kb-pane__empty">The computer this Bot works on shows up here.</p>)}
+					</div>
+				</div>
+			)}
+		</aside>
+	);
+}
+
+/** Saves the bot as a recipe file, the shareable form of a bot. */
+async function shareRecipe(store: BotsStore, bot: Bot): Promise<void> {
+	const recipe = await store.api.exportBot({ botId: bot.id });
+	const url = URL.createObjectURL(new Blob([JSON.stringify(recipe, null, 2)], { type: "application/json" }));
+	const link = document.createElement("a");
+	link.download = `${bot.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "bot"}.json`;
+	link.href = url;
+	link.click();
+	URL.revokeObjectURL(url);
+}
+
+function PaneHead({ bot }: { bot: Bot }) {
+	const store = useStore();
+	const [name, setName] = useState(bot.name);
+	useEffect(() => setName(bot.name), [bot.name]);
+	const save = async () => {
+		const trimmed = name.trim();
+		if (!trimmed || trimmed === bot.name) return setName(bot.name);
+		const next = await store.api.updateBot({ botId: bot.id, name: trimmed });
+		store.set<BotList>(BOTS, (list) => list && { ...list, bots: list.bots.map((b) => (b.id === next.id ? next : b)) });
+	};
+	return (
+		<div>
+			<div className="kb-pane__head">
+				<button
+					type="button"
+					className="kb-pane__avatar"
+					data-avatar-box=""
+					aria-label="Edit Bot avatar"
+					onClick={() => navigate(`/bots/${encodeURIComponent(bot.id)}/settings?avatar=1`)}
+				>
+					<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={64} />
+				</button>
+				<input
+					className="kb-pane__name"
+					aria-label="Bot name"
+					placeholder="Name"
+					value={name}
+					onChange={(event) => setName(event.target.value)}
+					onBlur={() => void save()}
+					onKeyDown={(event) => {
+						if (event.key === "Enter") event.currentTarget.blur();
+						if (event.key === "Escape") setName(bot.name);
+					}}
+				/>
+			</div>
+		</div>
+	);
+}
+
+const THINKING_LABELS: Record<string, string> = { off: "Off", low: "Low", medium: "Medium", high: "High" };
+
+function Details({ bot }: { bot: Bot }) {
+	const store = useStore();
+	const { data: routines } = useResource(`routines:${bot.id}`, (api) => api.listRoutines({ botId: bot.id }));
+	const { data: models } = useResource("models", (api) => api.listModels({}));
+	const options: ModelOption[] = models?.models ?? [];
+	const current = options.find((m) => m.provider === bot.model.provider && m.modelId === bot.model.modelId);
+	const update = async (patch: Partial<Pick<Bot, "model" | "approvals">>) => {
+		const next = await store.api.updateBot({ botId: bot.id, ...patch });
+		store.set<BotList>(BOTS, (list) => list && { ...list, bots: list.bots.map((b) => (b.id === next.id ? next : b)) });
+	};
+	const list = routines?.routines ?? [];
+	return (
+		<>
+			{list.length === 0 ? (
+				<p className="kb-pane__empty" data-ref="empty-text">
+					Routines are recurring tasks this Bot runs on a schedule. Ask it in chat to set one up.
+				</p>
+			) : (
+				<section className="kb-group">
+					<div className="kb-group__title">Routines</div>
+					<ul className="kb-group__list">
+						{list.map((routine) => (
+							<li key={routine.id} className="kb-group__row">
+								<span>{routine.name}</span>
+								<span style={{ color: "var(--kb-color-text-secondary)" }}>{routine.active ? "On" : "Paused"}</span>
+							</li>
+						))}
+					</ul>
+				</section>
+			)}
+			<section className="kb-group" data-ref="settings-group">
+				<div className="kb-group__title">Model</div>
+				<ul className="kb-group__list">
+					<li className="kb-group__row">
+						<span>Model</span>
+						<Select
+							label="Model"
+							value={`${bot.model.provider}/${bot.model.modelId}`}
+							onValueChange={(value) => {
+								const picked = options.find((m) => `${m.provider}/${m.modelId}` === value);
+								if (picked)
+									void update({
+										model: { provider: picked.provider, modelId: picked.modelId, thinking: bot.model.thinking },
+									});
+							}}
+							options={options.map((m) => ({ value: `${m.provider}/${m.modelId}`, label: m.name }))}
+						/>
+					</li>
+					{current && current.thinking.length > 0 && (
+						<li className="kb-group__row">
+							<span>Thinking</span>
+							<Select
+								label="Thinking"
+								value={bot.model.thinking ?? current.thinking[0]!}
+								onValueChange={(thinking) => void update({ model: { ...bot.model, thinking } })}
+								options={current.thinking.map((level) => ({ value: level, label: THINKING_LABELS[level] ?? level }))}
+							/>
+						</li>
+					)}
+					<li className="kb-group__row">
+						<span>Approvals</span>
+						<Select
+							label="Approvals"
+							value={bot.approvals}
+							onValueChange={(approvals) => void update({ approvals: approvals as Bot["approvals"] })}
+							options={[
+								{ value: "default", label: "Default" },
+								{ value: "ask", label: "Ask" },
+								{ value: "auto", label: "Auto" },
+								{ value: "never", label: "Never ask" },
+							]}
+						/>
+					</li>
+				</ul>
+			</section>
+		</>
+	);
+}
+
+function Library({ bot }: { bot: Bot }) {
+	const { data: pages } = useResource("pages", (api) => api.listPages({}));
+	const { data: files } = useResource(`files:${bot.id}`, (api) => api.listFiles({ botId: bot.id }));
+	const own = (pages?.pages ?? []).filter((p) => p.ownerBotId === bot.id);
+	const made = files?.files ?? [];
+	if (own.length === 0 && made.length === 0)
+		return <p className="kb-pane__empty">Pages, files, and apps this Bot makes show up here</p>;
+	return (
+		<section className="kb-group">
+			<ul className="kb-group__list">
+				{own.map((page) => (
+					<li key={page.id} className="kb-group__row">
+						<a
+							href={`/pages/${page.id}`}
+							onClick={(e) => (e.preventDefault(), navigate({ name: "page", pageId: page.id }))}
+							style={{ color: "inherit", textDecoration: "none" }}
+						>
+							{page.title}
+						</a>
+					</li>
+				))}
+				{made.map((file) => (
+					<li key={file.id} className="kb-group__row">
+						<span>{file.name}</span>
+					</li>
+				))}
+			</ul>
+		</section>
+	);
+}

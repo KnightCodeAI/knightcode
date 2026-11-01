@@ -1,4 +1,5 @@
 // Public entry point of @knightcode/bots-ui. Load "@knightcode/bots-ui/styles.css" once alongside it.
+export { BotsApp, type BotsAppProps } from "./app.tsx";
 export { type AvatarState, BotAvatarView, type BotAvatarViewProps } from "./avatar/BotAvatarView.tsx";
 export { SHAPE_OUTLINES } from "./avatar/shapes.ts";
 export { Badge } from "./primitives/Badge.tsx";
@@ -17,3 +18,5 @@ export { Toggle } from "./primitives/Toggle.tsx";
 export { Tooltip } from "./primitives/Tooltip.tsx";
 export { currentTheme, useResolvedTheme } from "./theme.ts";
 export * as tokens from "./tokens/tokens.ts";
+export { formatRoute, navigate, parseRoute, type Route, useRoute } from "./shell/routes.ts";
+export { type BotsClient, useBot, useBots, useConversation, useResource, useStore } from "./state/store.ts";

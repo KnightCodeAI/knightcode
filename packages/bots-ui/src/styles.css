@@ -2,6 +2,8 @@
 @import "@fontsource-variable/libre-franklin/wght.css";
 @import "./tokens/tokens.css";
 @import "./primitives/primitives.css";
+@import "./shell/shell.css";
+@import "./chat/chat.css";
 
 *,
 *::before,
