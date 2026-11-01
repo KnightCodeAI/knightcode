@@ -679,3 +679,11 @@
 		width: auto;
 	}
 }
+
+/* The host's content at the start of the sidebar header (the desktop app's product switcher). */
+.kb-sidebar__header-start {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	margin-right: auto;
+}

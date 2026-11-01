@@ -8,10 +8,12 @@ import { Dialog } from "../primitives/Dialog.tsx";
 import { Input } from "../primitives/Input.tsx";
 import { Select } from "../primitives/Select.tsx";
 import { useToast } from "../primitives/Toast.tsx";
+import { navigate } from "../shell/routes.ts";
 import { useResource, useStore } from "../state/store.ts";
 import { getThemePreference, setThemePreference, type ThemePreference } from "../theme.ts";
 import { PlanCard } from "../usage/Usage.tsx";
 import { formatDay } from "../chat/layout.ts";
+import { usePlatform } from "../platform.ts";
 import { ConnectProviders } from "./ConnectProviders.tsx";
 import { DevicePush } from "./DevicePush.tsx";
 import { SettingsCard, SettingsRow, SettingsSection } from "./parts.tsx";
@@ -39,6 +41,7 @@ export function Account() {
 	const [name, setName] = useState("");
 	const [theme, setTheme] = useState<ThemePreference>(getThemePreference);
 	const [deleting, setDeleting] = useState(false);
+	const web = usePlatform() === "web";
 	useEffect(() => setName(account?.name ?? ""), [account?.name]);
 	const update = (patch: Parameters<typeof store.api.updateAccount>[0]) =>
 		void store.api.updateAccount(patch).then(() => store.reload("account"));
@@ -95,34 +98,38 @@ export function Account() {
 							<Button variant="secondary" onClick={() => void exportData()}>
 								Export data
 							</Button>
-							<Button variant="secondary" onClick={() => (window.location.href = "/auth/sign-out")}>
-								Sign out
-							</Button>
+							{web && (
+								<Button variant="secondary" onClick={() => (window.location.href = "/auth/sign-out")}>
+									Sign out
+								</Button>
+							)}
 						</div>
 					</div>
 				</SettingsCard>
 			</SettingsSection>
 			<SettingsSection title="Appearance">
 				<SettingsCard>
-					<SettingsRow
-						first
-						title="Theme"
-						control={
-							<Select
-								label="Theme"
-								value={theme}
-								onValueChange={(next) => {
-									setTheme(next as ThemePreference);
-									setThemePreference(next as ThemePreference);
-								}}
-								options={[
-									{ value: "system", label: "System" },
-									{ value: "light", label: "Light" },
-									{ value: "dark", label: "Dark" },
-								]}
-							/>
-						}
-					/>
+					{web && (
+						<SettingsRow
+							first
+							title="Theme"
+							control={
+								<Select
+									label="Theme"
+									value={theme}
+									onValueChange={(next) => {
+										setTheme(next as ThemePreference);
+										setThemePreference(next as ThemePreference);
+									}}
+									options={[
+										{ value: "system", label: "System" },
+										{ value: "light", label: "Light" },
+										{ value: "dark", label: "Dark" },
+									]}
+								/>
+							}
+						/>
+					)}
 					<SettingsRow
 						title="Time zone"
 						control={
@@ -244,7 +251,7 @@ function DeleteAccount({ email, onClose }: { email: string; onClose: () => void 
 					<Button
 						variant="primary"
 						disabled={confirm !== email}
-						onClick={() => void store.api.deleteAccount({ confirm }).then(() => (window.location.href = "/"))}
+						onClick={() => void store.api.deleteAccount({ confirm }).then(() => navigate("/"))}
 					>
 						Delete everything
 					</Button>

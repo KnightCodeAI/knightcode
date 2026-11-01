@@ -99,16 +99,25 @@ export function formatRoute(route: Route): string {
 // Query parameters that describe the session rather than the screen (the seed, test switches) survive navigation.
 const STICKY = ["seed"];
 
+/** In memory, the current path and query; unset, routes live in the browser's address. */
+let memoryHref: string | undefined;
+
+/** Keeps routes in memory from now on: for a host that owns the window's address (the desktop app). */
+export function routeInMemory(initial = "/"): void {
+	memoryHref ??= initial;
+}
+
 /** Goes to `route` (or a path), keeping sticky query parameters. */
 export function navigate(to: Route | string, options: { replace?: boolean } = {}): void {
-	const target = new URL(typeof to === "string" ? to : formatRoute(to), location.origin);
-	const current = new URLSearchParams(location.search);
+	const target = new URL(typeof to === "string" ? to : formatRoute(to), "http://local");
+	const current = new URL(snapshot(), "http://local").searchParams;
 	for (const key of STICKY) {
 		const value = current.get(key);
 		if (value !== null && !target.searchParams.has(key)) target.searchParams.set(key, value);
 	}
 	const href = `${target.pathname}${target.search}`;
-	if (options.replace) history.replaceState(null, "", href);
+	if (memoryHref !== undefined) memoryHref = href;
+	else if (options.replace) history.replaceState(null, "", href);
 	else history.pushState(null, "", href);
 	window.dispatchEvent(new Event("kb:navigate"));
 }
@@ -122,7 +131,7 @@ function subscribe(onChange: () => void): () => void {
 	};
 }
 
-const snapshot = () => `${location.pathname}${location.search}`;
+const snapshot = () => memoryHref ?? `${location.pathname}${location.search}`;
 
 /** The current route; re-renders on navigation. */
 export function useRoute(): Route {

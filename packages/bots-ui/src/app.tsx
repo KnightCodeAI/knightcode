@@ -1,6 +1,6 @@
 // The KnightCode Bots app: one store and socket, the three-column shell, and the screen the URL names.
 import { type ApiClient, type CatchUp as CatchUpData, type WebSocketLike } from "@knightcode/bots-protocol";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BotSettings } from "./bot/BotSettings.tsx";
 import { CreateBot } from "./bot/CreateBot.tsx";
 import { ChatView } from "./chat/ChatView.tsx";
@@ -19,8 +19,9 @@ import { ToastProvider } from "./primitives/Toast.tsx";
 import { applyThemePreference } from "./theme.ts";
 import { CommandK, useCommandKShortcut } from "./shell/CommandK.tsx";
 import { InfoPane } from "./shell/InfoPane.tsx";
+import { PlatformContext } from "./platform.ts";
 import { MobileNav, useIsPhone } from "./shell/MobileNav.tsx";
-import { formatRoute, navigate, type Route, useQueryParam, useRoute } from "./shell/routes.ts";
+import { formatRoute, navigate, type Route, routeInMemory, useQueryParam, useRoute } from "./shell/routes.ts";
 import { Sidebar } from "./shell/Sidebar.tsx";
 import { ThreadSocket } from "./state/socket.ts";
 import { BotsStore, StoreContext, useBots, useResource } from "./state/store.ts";
@@ -31,32 +32,41 @@ export interface BotsAppProps {
 	platform: "web" | "desktop";
 	/** The separate origin MCP App panels load from; panels are not shown without one. */
 	sandboxOrigin?: string;
+	/** Shown at the start of the sidebar's header: the desktop app's product switcher. */
+	sidebarHeader?: ReactNode;
 }
 
 /** The whole UI. The host provides the API, a socket factory and which platform it runs on. */
-export function BotsApp({ api, connect, platform, sandboxOrigin }: BotsAppProps) {
+export function BotsApp({ api, connect, platform, sandboxOrigin, sidebarHeader }: BotsAppProps) {
+	// Before the first render reads a route.
+	useState(() => platform === "desktop" && routeInMemory());
 	const store = useMemo(
 		() =>
 			new BotsStore(api, new ThreadSocket(connect, async () => (await api.issueTicket({ scope: "socket" })).ticket)),
 		[api, connect],
 	);
 	useEffect(() => () => store.socket.close(), [store]);
-	useEffect(() => applyThemePreference(), []);
+	// The desktop app sets the theme on the page itself.
+	useEffect(() => {
+		if (platform === "web") applyThemePreference();
+	}, [platform]);
 	return (
-		<StoreContext.Provider value={store}>
-			<SandboxOriginContext.Provider value={sandboxOrigin}>
-				<ToastProvider>
-					<div className="kb-app" data-platform={platform} style={{ height: "100%" }}>
-						<Shell />
-					</div>
-				</ToastProvider>
-			</SandboxOriginContext.Provider>
-		</StoreContext.Provider>
+		<PlatformContext.Provider value={platform}>
+			<StoreContext.Provider value={store}>
+				<SandboxOriginContext.Provider value={sandboxOrigin}>
+					<ToastProvider>
+						<div className="kb-app" data-platform={platform} style={{ height: "100%" }}>
+							<Shell sidebarHeader={sidebarHeader} />
+						</div>
+					</ToastProvider>
+				</SandboxOriginContext.Provider>
+			</StoreContext.Provider>
+		</PlatformContext.Provider>
 	);
 }
 
 /** Dialog routes keep the last chat underneath them. */
-function Shell() {
+function Shell({ sidebarHeader }: { sidebarHeader?: ReactNode }) {
 	const route = useRoute();
 	const { data } = useBots();
 	const [paletteOpen, setPaletteOpen] = useState(false);
@@ -118,7 +128,7 @@ function Shell() {
 	return (
 		<>
 			<div className="kb-shell" data-ref="shell" data-nav-open={phone && navOpen ? "" : undefined}>
-				<Sidebar route={route} onSearch={openPalette} />
+				<Sidebar route={route} onSearch={openPalette} header={sidebarHeader} />
 				<main className="kb-chat" data-ref="chat">
 					{phone && <MobileNav open={navOpen} onOpenChange={setNavOpen} />}
 					{route.name === "group" ? (

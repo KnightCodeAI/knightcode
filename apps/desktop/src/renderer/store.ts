@@ -33,6 +33,7 @@ import {
 	DEFAULT_PREFERENCES,
 	type DesktopState,
 	type Preferences,
+	type Product,
 	SIDEBAR_WIDTH,
 	type TerminalInfo,
 	type UpdateState,
@@ -310,6 +311,11 @@ export function goBack(delta: -1 | 1): void {
 export function setSidebarOpen(open: boolean): void {
 	set((s) => ({ ...s, sidebarOpen: open }));
 	updateDesktop((d) => ({ ...d, sidebar: { ...d.sidebar, collapsed: !open } }));
+}
+
+/** Switch the window between KnightCode and KnightCode Bots; remembered across launches (desktop state, `product`). */
+export function setProduct(product: Product): void {
+	updateDesktop((d) => ({ ...d, product }));
 }
 
 /** A width the sidebar takes: whole pixels, within its minimum and maximum. */

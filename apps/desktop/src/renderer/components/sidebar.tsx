@@ -25,6 +25,7 @@ import {
 	removeProject,
 	selectProjects,
 	selectUnread,
+	setProduct,
 	setSidebarOpen,
 	setSidebarOption,
 	setSidebarWidth,
@@ -66,6 +67,8 @@ import {
 	MenuTrigger,
 } from "./menu.tsx";
 import { NavRow } from "./nav-row.tsx";
+import { ProductSwitcher } from "./product-switcher.tsx";
+import { useNeedsYou } from "../bots/backend.ts";
 import { HoverCard } from "./popover.tsx";
 import { Tooltip } from "./tooltip.tsx";
 import { DeleteThreadDialog, RenameThreadDialog, type ThreadActionItem, threadActions } from "./thread-actions.tsx";
@@ -513,6 +516,7 @@ export function SidebarFrame({ label, children }: { label: string; children: Rea
 
 export function Sidebar() {
 	const threads = useStore((s) => s.threads);
+	const needsYou = useNeedsYou();
 	const projects = useStore(selectProjects);
 	const pins = useStore((s) => s.desktop?.pinnedThreads ?? NO_PINS);
 	const folded = useStore((s) => s.desktop?.sidebar.collapsedSections ?? NO_SECTIONS);
@@ -565,7 +569,7 @@ export function Sidebar() {
 	return (
 		<SidebarFrame label="Threads">
 			<div className="flex h-[52px] shrink-0 items-center justify-between ps-4 pe-3">
-				<span className="text-[18px] leading-6 font-semibold text-nav">KnightCode</span>
+				<ProductSwitcher product="coding" onChange={setProduct} needsYou={needsYou} />
 				<IconButton
 					label="Search threads"
 					aria-pressed={searching}

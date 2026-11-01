@@ -646,18 +646,18 @@ git commit -m "feat(bots): add phone layouts and the installable web app"
 - Produces: `ProductSwitcher({ product, onChange, needsYou })`; the setting
   `desktop.product` remembered in desktop state.
 
-- [ ] **Step 1: Write the failing test** (in the style of
+- [x] **Step 1: Write the failing test** (in the style of
   `apps/desktop/test/e2e/app.e2e.ts`, reusing its isolated user-data
   directory so the run never opens the owner's real `%APPDATA%\KnightCode`
   profile or blocks the installed app): the sidebar header shows
   "KnightCode ▾"; choosing "KnightCode Bots" renders the bots sidebar with
   the fake bots; a needs-you item shows a badge on the switcher; switching
   back restores the coding sidebar with its threads unchanged.
-- [ ] **Step 2: Run it to verify it fails** (`bun run test:e2e -- bots-switcher` in `apps/desktop`)
-- [ ] **Step 3: Implement the switcher and the bots mount** (renderer only;
+- [x] **Step 2: Run it to verify it fails** (`bun run test:e2e -- bots-switcher` in `apps/desktop`)
+- [x] **Step 3: Implement the switcher and the bots mount** (renderer only;
   the coding harness and app server are untouched)
-- [ ] **Step 4: Run it to verify it passes**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run it to verify it passes**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/renderer/components/product-switcher.tsx apps/desktop/src/renderer/bots apps/desktop/src/renderer/components/sidebar.tsx apps/desktop/test/e2e/bots-switcher.e2e.ts

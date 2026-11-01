@@ -2300,3 +2300,15 @@ body {
 	outline-offset: 2px;
 	border-radius: 9999px;
 }
+
+/* Host content inside KnightCode Bots (the product switcher in its sidebar header) keeps the desktop's own text, as
+   the bots UI sets its own font on the app around it. */
+.kb-host {
+	color: var(--kc-text);
+	font-family: var(--kc-font-ui);
+	font-size: var(--kc-size-ui);
+	font-feature-settings: normal;
+	line-height: 1.5;
+	letter-spacing: normal;
+	user-select: none;
+}

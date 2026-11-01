@@ -1,6 +1,7 @@
 import { CircleAlert, CircleCheck, Info, Minus, Plus, X } from "./components/icons.tsx";
 import { Button, IconButton } from "./components/button.tsx";
-import { Component, type ReactNode, useEffect, useRef, useState } from "react";
+import { Component, lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
+import { ProductSwitcher } from "./components/product-switcher.tsx";
 import { customTokens, fontFaces } from "./appearance.ts";
 import { client } from "./client.ts";
 import { Home } from "./components/home.tsx";
@@ -27,6 +28,7 @@ import {
 	openNextNeedingAttention,
 	openRecent,
 	openSlot,
+	setProduct,
 	showNew,
 	useStore,
 } from "./store.ts";
@@ -266,10 +268,14 @@ function useMouseHistory(): void {
 	}, []);
 }
 
+/** KnightCode Bots, loaded the first time the window switches to it. */
+const BotsMount = lazy(() => import("./bots/mount.tsx"));
+
 export function App() {
 	const view = useStore((s) => s.view);
 	const sidebarOpen = useStore((s) => s.sidebarOpen);
 	const paletteOpen = useStore((s) => s.paletteOpen);
+	const product = useStore((s) => s.desktop?.product ?? "coding");
 	// Before anything below reads a binding (keys.ts): the user's rebound shortcuts.
 	const keybindings = useStore(selectPreferences).keybindings;
 	setBindingOverrides(keybindings);
@@ -314,23 +320,33 @@ export function App() {
 				{/* Sidebar and content sit in one card beside the rail: 12px corners at the left and top right, 4px at
 				    the bottom right, the sidebar's own panel and a hairline between it and the content (Codex's). */}
 				<div className="kc-app-card flex min-w-0 flex-1 overflow-hidden rounded-tl-[12px] rounded-tr-[12px] rounded-br-[4px] rounded-bl-[12px]">
-					{/* Stays mounted so it can slide shut (styles.css, .kc-sidebar-slot); inert while closed. */}
-					<div className="kc-sidebar-slot flex shrink-0" data-open={sidebarOpen || undefined} inert={!sidebarOpen}>
-						{view.kind === "settings" ? <SettingsNav page={view.page} /> : <Sidebar />}
-					</div>
-					<main className={`flex min-w-0 flex-1 bg-surface ${sidebarOpen ? "border-l border-line" : ""}`}>
-						<ViewBoundary
-							key={view.kind === "thread" ? view.id : view.kind === "settings" ? `settings:${view.page}` : view.kind}
-						>
-							{view.kind === "thread" ? (
-								<ThreadView key={view.id} id={view.id} />
-							) : view.kind === "settings" ? (
-								<Settings page={view.page} />
-							) : (
-								<Home key={view.cwd ?? ""} cwd={view.cwd} />
-							)}
-						</ViewBoundary>
-					</main>
+					{product === "bots" ? (
+						<Suspense fallback={null}>
+							<BotsMount switcher={<ProductSwitcher product="bots" onChange={setProduct} compact />} />
+						</Suspense>
+					) : (
+						<>
+							{/* Stays mounted so it can slide shut (styles.css, .kc-sidebar-slot); inert while closed. */}
+							<div className="kc-sidebar-slot flex shrink-0" data-open={sidebarOpen || undefined} inert={!sidebarOpen}>
+								{view.kind === "settings" ? <SettingsNav page={view.page} /> : <Sidebar />}
+							</div>
+							<main className={`flex min-w-0 flex-1 bg-surface ${sidebarOpen ? "border-l border-line" : ""}`}>
+								<ViewBoundary
+									key={
+										view.kind === "thread" ? view.id : view.kind === "settings" ? `settings:${view.page}` : view.kind
+									}
+								>
+									{view.kind === "thread" ? (
+										<ThreadView key={view.id} id={view.id} />
+									) : view.kind === "settings" ? (
+										<Settings page={view.page} />
+									) : (
+										<Home key={view.cwd ?? ""} cwd={view.cwd} />
+									)}
+								</ViewBoundary>
+							</main>
+						</>
+					)}
 				</div>
 			</div>
 			{paletteOpen ? <Palette /> : null}

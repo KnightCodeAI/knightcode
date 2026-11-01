@@ -94,7 +94,10 @@ export const DesktopState = Obj({
 	}),
 	// Optional so a file written before preferences existed still loads.
 	preferences: Type.Optional(Preferences),
+	/** The product the window shows (the sidebar's switcher): KnightCode, the default, or KnightCode Bots. */
+	product: Type.Optional(Type.Union([Type.Literal("coding"), Type.Literal("bots")])),
 });
+export type Product = NonNullable<DesktopState["product"]>;
 export type DesktopState = Static<typeof DesktopState>;
 
 /**

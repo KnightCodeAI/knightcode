@@ -21,7 +21,7 @@ import {
 	Undo2,
 	Users,
 } from "lucide-react";
-import { type KeyboardEvent, type PointerEvent, useEffect, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useState } from "react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
 import { IconButton } from "../primitives/IconButton.tsx";
 import { Menu, MenuItem, MenuSeparator } from "../primitives/Menu.tsx";
@@ -32,10 +32,12 @@ import { navigate, type Route } from "./routes.ts";
 export interface SidebarProps {
 	route: Route;
 	onSearch: () => void;
+	/** At the start of the header, before the buttons. */
+	header?: ReactNode;
 }
 
 /** The left column. Rows are links in a navigation landmark, not list items. */
-export function Sidebar({ route, onSearch }: SidebarProps) {
+export function Sidebar({ route, onSearch, header }: SidebarProps) {
 	const { data } = useBots();
 	const [showArchived, setShowArchived] = useState(false);
 	const activeBot = route.name === "bot" ? route.botId : undefined;
@@ -57,6 +59,7 @@ export function Sidebar({ route, onSearch }: SidebarProps) {
 	return (
 		<nav className="kb-sidebar" aria-label="Bots" data-ref="sidebar">
 			<div className="kb-sidebar__header" data-ref="sidebar-header">
+				{header && <div className="kb-sidebar__header-start kb-host">{header}</div>}
 				<IconButton
 					label="Search"
 					icon={<Search size={16} strokeWidth={1.75} />}

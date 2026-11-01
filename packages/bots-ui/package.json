@@ -9,6 +9,8 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./styles.css": "./src/styles.css",
+		"./components.css": "./src/components.css",
+		"./templates": "./src/bot/templates-data.ts",
 		"./package.json": "./package.json"
 	},
 	"scripts": {

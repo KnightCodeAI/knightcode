@@ -1,0 +1,102 @@
+/* Everything KnightCode Bots draws, for a host page with base styles of its own (the desktop app); styles.css adds
+   the web page's. */
+@import "@fontsource-variable/libre-franklin/wght.css";
+@import "./tokens/tokens.css";
+@import "./primitives/primitives.css";
+@import "./shell/shell.css";
+@import "./chat/chat.css";
+@import "./bot/bot.css";
+@import "./computer/computer.css";
+@import "./connectors/connectors.css";
+@import "./routines/routines.css";
+@import "./settings/settings.css";
+@import "./pages/pages.css";
+@import "./groups/groups.css";
+
+/* Read by screen readers, not shown. */
+.kb-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* Inside the app and its top-layer host, the browser's defaults come back wherever a host's reset changed them (the
+   desktop app's preflight), so the UI looks the same in a host as on the web. Zero specificity (the :not() sits inside
+   :where()), so every rule above wins. A host's own content (.kb-host: the desktop app's switcher) is left alone. */
+.kb-app,
+.kb-layer {
+	color: var(--kb-color-text);
+	font-family: var(--kb-font-sans);
+	font-size: var(--kb-font-size-root);
+	font-feature-settings: var(--kb-font-features);
+	line-height: normal;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	user-select: text;
+}
+:where(.kb-app, .kb-layer) :where(:is(*):not(.kb-host, .kb-host *)),
+:where(.kb-app, .kb-layer) :where(:is(*):not(.kb-host, .kb-host *))::before,
+:where(.kb-app, .kb-layer) :where(:is(*):not(.kb-host, .kb-host *))::after {
+	box-sizing: border-box;
+	margin: revert;
+	padding: revert;
+	border: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(h1, h2, h3, h4, h5, h6):not(.kb-host, .kb-host *)) {
+	font-size: revert;
+	font-weight: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(a):not(.kb-host, .kb-host *)) {
+	color: revert;
+	text-decoration: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(code, kbd, samp, pre):not(.kb-host, .kb-host *)) {
+	font-family: revert;
+	font-size: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(table):not(.kb-host, .kb-host *)) {
+	border-collapse: revert;
+	border-color: revert;
+	text-indent: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(ol, ul, menu):not(.kb-host, .kb-host *)) {
+	list-style: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(img, svg, video, canvas, audio, iframe, embed, object):not(.kb-host, .kb-host *)) {
+	display: revert;
+	vertical-align: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(img, video):not(.kb-host, .kb-host *)) {
+	max-width: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(button, input, select, optgroup, textarea):not(.kb-host, .kb-host *)) {
+	font: revert;
+	letter-spacing: revert;
+	color: revert;
+	border-radius: revert;
+	background-color: revert;
+	opacity: revert;
+	appearance: revert;
+	accent-color: revert;
+	font-feature-settings: inherit;
+}
+:where(.kb-app, .kb-layer) :where(:is(textarea):not(.kb-host, .kb-host *)) {
+	resize: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(*):not(.kb-host, .kb-host *))::placeholder {
+	color: revert;
+	opacity: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(*):not(.kb-host, .kb-host *))::selection {
+	background-color: revert;
+}
+:where(.kb-app, .kb-layer) :where(:is(*):not(.kb-host, .kb-host *)):focus-visible {
+	outline: 2px solid var(--kb-color-accent);
+	outline-offset: 2px;
+}
