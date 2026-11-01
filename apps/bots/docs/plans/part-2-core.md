@@ -130,7 +130,7 @@ git commit -m "feat(bots): add sign-in with GitHub, Google, email codes and pass
   - `openArchive(key, segments, manifest): AsyncIterable<Uint8Array>`
     rejecting a missing, extra, reordered or altered segment.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/crypto.test.ts
@@ -155,10 +155,10 @@ it("rejects reordered and truncated archives", async () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/crypto.test.ts`)
-- [ ] **Step 3: Implement with Web Crypto only** (no new dependency)
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/crypto.test.ts`)
+- [x] **Step 3: Implement with Web Crypto only** (no new dependency)
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/crypto apps/bots/test/crypto.test.ts
