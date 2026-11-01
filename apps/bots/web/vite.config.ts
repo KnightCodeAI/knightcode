@@ -30,9 +30,23 @@ function referenceSeed(): Plugin {
 	};
 }
 
+/** The fake backend's screen page at /__fake/screen, a stand-in for noVNC, in development only. */
+function fakeScreen(): Plugin {
+	return {
+		name: "knightcode-bots-fake-screen",
+		apply: "serve",
+		configureServer(server) {
+			server.middlewares.use("/__fake/screen", (_request, response) => {
+				response.setHeader("content-type", "text/html; charset=utf-8");
+				response.end(readFileSync(resolve(here, "fake-screen.html")));
+			});
+		},
+	};
+}
+
 export default defineConfig({
 	root: here,
-	plugins: [react(), referenceSeed()],
+	plugins: [react(), referenceSeed(), fakeScreen()],
 	build: { outDir: "dist", emptyOutDir: true },
 	server: { port: 5190, strictPort: true },
 });

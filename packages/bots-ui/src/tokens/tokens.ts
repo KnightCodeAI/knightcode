@@ -8,6 +8,8 @@ export const colors = {
 		page: "rgb(18, 18, 18)",
 		sidebar: "rgb(14, 14, 14)",
 		surface: "rgb(31, 31, 31)",
+		/** A bot's screen frame before the screen shows (measured as rendered). */
+		screen: "rgb(31, 31, 31)",
 		text: "rgb(245, 245, 245)",
 		textStrong: "rgb(255, 255, 255)",
 		textIcon: "rgba(245, 245, 245, 0.9)",
@@ -43,6 +45,8 @@ export const colors = {
 		page: "rgb(252, 252, 252)",
 		sidebar: "rgb(245, 245, 245)",
 		surface: "rgb(255, 255, 255)",
+		/** A bot's screen frame before the screen shows (measured as rendered). */
+		screen: "rgb(242, 242, 242)",
 		text: "rgb(28, 28, 28)",
 		textStrong: "rgb(0, 0, 0)",
 		textIcon: "rgba(28, 28, 28, 0.92)",

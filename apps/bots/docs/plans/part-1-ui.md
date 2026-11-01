@@ -350,7 +350,7 @@ git commit -m "feat(bots): add bot creation, templates, import and settings"
   test page).
 - Produces: `ScreenViewer({ capabilityUrl, mode: "view" | "control" })`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/computer.e2e.ts
@@ -371,10 +371,10 @@ for (const screen of ["computer", "computer-takeover", "teach"])
 	test(`${screen} matches the reference`, async ({ page }) => compareToReference(page, screen));
 ```
 
-- [ ] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui computer`)
-- [ ] **Step 3: Implement the computer pane components**
-- [ ] **Step 4: Run ui, then run reference for the three screens**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui computer`)
+- [x] **Step 3: Implement the computer pane components**
+- [x] **Step 4: Run ui, then run reference for the three screens**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src/computer apps/bots/web/e2e/computer.e2e.ts

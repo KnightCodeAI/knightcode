@@ -81,6 +81,7 @@
 	--kb-color-page: rgb(18, 18, 18);
 	--kb-color-sidebar: rgb(14, 14, 14);
 	--kb-color-surface: rgb(31, 31, 31);
+	--kb-color-screen: rgb(31, 31, 31);
 	--kb-color-text: rgb(245, 245, 245);
 	--kb-color-text-strong: rgb(255, 255, 255);
 	--kb-color-text-icon: rgba(245, 245, 245, 0.9);
@@ -138,6 +139,7 @@
 		--kb-color-page: rgb(252, 252, 252);
 		--kb-color-sidebar: rgb(245, 245, 245);
 		--kb-color-surface: rgb(255, 255, 255);
+		--kb-color-screen: rgb(242, 242, 242);
 		--kb-color-text: rgb(28, 28, 28);
 		--kb-color-text-strong: rgb(0, 0, 0);
 		--kb-color-text-icon: rgba(28, 28, 28, 0.92);
@@ -195,6 +197,7 @@
 	--kb-color-page: rgb(252, 252, 252);
 	--kb-color-sidebar: rgb(245, 245, 245);
 	--kb-color-surface: rgb(255, 255, 255);
+	--kb-color-screen: rgb(242, 242, 242);
 	--kb-color-text: rgb(28, 28, 28);
 	--kb-color-text-strong: rgb(0, 0, 0);
 	--kb-color-text-icon: rgba(28, 28, 28, 0.92);

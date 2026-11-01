@@ -6,18 +6,16 @@ test("create from a template, import a recipe, and export it again", async ({ pa
 	await page.getByRole("tab", { name: "Templates" }).click();
 	await expect(page.getByRole("listitem")).toHaveCount(44);
 	await page.getByRole("button", { name: "Import an agent" }).click();
-	await page
-		.getByRole("textbox", { name: "Paste" })
-		.fill(
-			JSON.stringify({
-				profile: { name: "X", description: "d" },
-				memory: [{ content: "likes tea" }],
-				skills: [{ name: "setup", description: "d", content: "c" }],
-				routines: [{ name: "daily", slug: "daily", description: "d", content: "p" }],
-				plugins: [],
-				gettingStarted: { skill: "setup" },
-			}),
-		);
+	await page.getByRole("textbox", { name: "Paste" }).fill(
+		JSON.stringify({
+			profile: { name: "X", description: "d" },
+			memory: [{ content: "likes tea" }],
+			skills: [{ name: "setup", description: "d", content: "c" }],
+			routines: [{ name: "daily", slug: "daily", description: "d", content: "p" }],
+			plugins: [],
+			gettingStarted: { skill: "setup" },
+		}),
+	);
 	await expect(page.getByRole("checkbox", { name: /likes tea/ })).not.toBeChecked();
 	await expect(page.getByRole("checkbox", { name: /daily/ })).not.toBeChecked();
 	await expect(page.getByRole("checkbox", { name: /Run setup/ })).not.toBeChecked();

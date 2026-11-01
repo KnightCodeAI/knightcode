@@ -7,6 +7,7 @@ import { IconButton } from "../primitives/IconButton.tsx";
 import { Select } from "../primitives/Select.tsx";
 import { Tabs } from "../primitives/Tabs.tsx";
 import { exportRecipe } from "../bot/ExportBot.tsx";
+import { ComputerPane } from "../computer/ComputerPane.tsx";
 import { MemoryViewer } from "../bot/MemoryViewer.tsx";
 import { BOTS, type BotList, useResource, useStore } from "../state/store.ts";
 import { navigate, type PaneView } from "./routes.ts";
@@ -14,8 +15,8 @@ import { navigate, type PaneView } from "./routes.ts";
 export interface InfoPaneProps {
 	bot: Bot | undefined;
 	view: PaneView | "closed";
-	/** Content for views later tasks own (computer, routine editor). */
-	slots?: Partial<Record<"computer" | "routine", ReactNode>>;
+	/** Content for views later tasks own (the routine editor). */
+	slots?: Partial<Record<"routine", ReactNode>>;
 }
 
 type Tab = "details" | "library" | "computer";
@@ -80,8 +81,7 @@ export function InfoPane({ bot, view, slots }: InfoPaneProps) {
 						{tab === "details" && view !== "routine-new" && <Details bot={bot} />}
 						{view === "memory" && <MemoryViewer bot={bot} />}
 						{view === "library" && <Library bot={bot} />}
-						{tab === "computer" &&
-							(slots?.computer ?? <p className="kb-pane__empty">The computer this Bot works on shows up here.</p>)}
+						{tab === "computer" && <ComputerPane bot={bot} />}
 					</div>
 				</div>
 			)}

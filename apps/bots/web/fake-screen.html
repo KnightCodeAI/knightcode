@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Screen</title>
+		<style>
+			html,
+			body {
+				height: 100%;
+				margin: 0;
+				background: #1d2026;
+				color: #e8e8e8;
+				font: 12px system-ui, sans-serif;
+				overflow: hidden;
+			}
+			.bar {
+				height: 22px;
+				display: flex;
+				align-items: center;
+				padding: 0 8px;
+				background: #111318;
+				color: #9aa0aa;
+			}
+			.window {
+				position: absolute;
+				inset: 34px 18px 18px;
+				border-radius: 6px;
+				background: #f5f5f5;
+				color: #222;
+				overflow: hidden;
+				box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+			}
+			.window header {
+				height: 22px;
+				background: #e2e2e2;
+				display: flex;
+				align-items: center;
+				padding: 0 8px;
+				gap: 6px;
+			}
+			.window header i {
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+				background: #c9c9c9;
+			}
+			.window main {
+				padding: 12px;
+				line-height: 1.6;
+			}
+			.terminal {
+				background: #0b0c0e;
+				color: #b9f6ca;
+				font-family: ui-monospace, monospace;
+			}
+			.terminal main {
+				white-space: pre-wrap;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="bar"><span id="mode"></span></div>
+		<div class="window" id="window">
+			<header><i></i><i></i><i></i><span id="title"></span></header>
+			<main id="content"></main>
+		</div>
+		<script>
+			// A stand-in for the noVNC page the real computer serves: shows view or control, and a terminal on #terminal.
+			const params = new URLSearchParams(location.search);
+			const control = params.get("mode") === "control";
+			const terminal = location.hash === "#terminal";
+			document.getElementById("mode").textContent = `${params.get("bot") ?? "bot"} · ${control ? "you have control" : "view only"}`;
+			const content = document.getElementById("content");
+			if (terminal) {
+				document.getElementById("window").classList.add("terminal");
+				document.getElementById("title").textContent = "Terminal";
+				content.textContent = "bot@computer:~$ ";
+				if (control)
+					addEventListener("keydown", (event) => {
+						if (event.key === "Enter") content.textContent += "\nbot@computer:~$ ";
+						else if (event.key === "Backspace") content.textContent = content.textContent.slice(0, -1);
+						else if (event.key.length === 1) content.textContent += event.key;
+					});
+			} else {
+				document.getElementById("title").textContent = "Browser";
+				content.textContent = "A page the bot is working on.";
+			}
+		</script>
+	</body>
+</html>
