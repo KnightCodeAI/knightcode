@@ -2125,6 +2125,19 @@ validation and copies the v2 kernel added around Delta.
   validator, chosen after measuring the alternatives: 2,222 of 2,223 core suite tests (TypeBox 2,200, cfworker 2,167,
   omptype 1,522), Chord checks at 0.95-1.3x TypeBox's compiled speed and the same with `new Function` blocked, 7.9 MB for 3,200 distinct schemas (cfworker 7.6, TypeBox 54.7), 8.5 KB gzip. Still open: switching Chord v2
   and @knightcode/ai to it (`Type` out of @knightcode/ai's main export), formats on by default in @knightcode/ai.
+- **The schema switch (owner, 2026-10-31):** TypeBox leaves Chord (v1 too: "remove typebox wherever we can"),
+  @knightcode/ai, @knightcode/agent and @knightcode/durable; extensions must not break ("absolutely 100%"), proven by a guard over our own
+  extensions, built-in tools and generated arguments (verdicts, coerced arguments, provider payloads and inferred
+  parameter types identical; owner: "just use ours", no npm corpus). **Coercion lives in @knightcode/schema** as an opt-in,
+  the superset of TypeBox's `Value.Convert` rules and @knightcode/ai's own (TypeBox's rule first where they conflict):
+  `compile(schema, { coerce: true })` adds `coerce(value)` (a copy, never mutating) and `parse(value)` (`{ ok, value }
+  | { ok, errors }`); @knightcode/ai uses it for every tool, whatever built the schema (so plain-JSON MCP tools gain the
+  TypeBox rules). **Error texts are @knightcode/schema's own** (no mapping to TypeBox's wording). Extensions keep `Type`,
+  `Static`, `TSchema` from the CLI's bundled TypeBox (the @knightcode/ai they see is compat plus those); an extension
+  author type-checking against the published @knightcode/ai no longer finds them there (accepted: "fine"). **`format` is an
+  annotation in Chord** ("no format check": no format module in Chord's or Durable's entries; @knightcode/ai still checks
+  formats on tool arguments). **Chord's envelope check costs +10 to +100 ns per message** from untrusted links
+  (@knightcode/schema reads fields by name from a list; no eval): accepted ("negligible"), no hand-written check.
 - **A plugin's npm dependencies are bundled; external only by opt-in (owner, 2026-10-29: "explicit opt in + (a)"):**
   a plugin's `dependencies` are installed into its own `node_modules` (`npm install --ignore-scripts`) and bundled into
   each facet that imports them (host packages, its `peerDependencies`, stay external and are passed in). On Node a
