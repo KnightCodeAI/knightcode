@@ -5,6 +5,7 @@ import {
 	createFakeBackend,
 	decodeFrame,
 	defaultSeed,
+	seedFrom,
 	encodeFrame,
 	type ServerFrame,
 } from "../src/index.ts";
@@ -138,5 +139,13 @@ describe("review fixes", () => {
 		socket.send(encodeFrame({ type: "auth", ticket: "t" }));
 		await fake.clock.runAll();
 		expect(frames[0]).toEqual({ type: "ready", accountId: fake.state.account.id });
+	});
+});
+
+describe("seeds", () => {
+	it("fills fields a partial seed leaves out from the default seed", () => {
+		const seed = seedFrom({ bots: [] });
+		expect(seed.bots).toEqual([]);
+		expect(seed.catalog.length).toBeGreaterThan(0);
 	});
 });

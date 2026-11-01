@@ -35,6 +35,25 @@ export type AvatarShape = (typeof AVATAR_SHAPES)[number];
 /** One of the named avatar shapes. */
 export const AvatarShapeSchema = Type.Enum(AVATAR_SHAPES);
 
-/** A bot's avatar: a named shape filled with a CSS colour. */
-export const AvatarSchema = Type.Object({ shape: AvatarShapeSchema, color: Type.String({ minLength: 1 }) });
+/** The eleven avatar colours, in picker order. Each theme renders them with its own shade ("black" is light on dark). */
+export const AVATAR_COLORS = [
+	"black",
+	"brown",
+	"red",
+	"orange",
+	"yellow",
+	"green",
+	"cyan",
+	"blue",
+	"violet",
+	"magenta",
+	"gray",
+] as const;
+
+export type AvatarColorName = (typeof AVATAR_COLORS)[number];
+
+export const AvatarColorSchema = Type.Enum(AVATAR_COLORS);
+
+/** A bot's avatar: a named shape in a named palette colour. */
+export const AvatarSchema = Type.Object({ shape: AvatarShapeSchema, color: AvatarColorSchema });
 export type Avatar = Static<typeof AvatarSchema>;

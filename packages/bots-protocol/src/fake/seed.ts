@@ -163,7 +163,7 @@ export function defaultSeed(): FakeSeed {
 			purpose: "Reviews pull requests and flags risky changes",
 			instructions:
 				"Review every new pull request in knightcode/app. Comment on bugs, missing tests and risky migrations. Approve only small, safe changes.",
-			avatar: { shape: "hex", color: "#4f7cff" },
+			avatar: { shape: "hex", color: "blue" },
 			appIds: ["github", "linear"],
 			pinned: true,
 			unread: 2,
@@ -176,7 +176,7 @@ export function defaultSeed(): FakeSeed {
 			purpose: "Triages email and drafts replies for approval",
 			instructions:
 				"Read new mail every morning. Archive newsletters, label invoices, and draft replies to customers. Never send without approval.",
-			avatar: { shape: "cloud", color: "#f2994a" },
+			avatar: { shape: "cloud", color: "orange" },
 			appIds: ["gmail", "google-calendar"],
 			needsYou: true,
 			unread: 1,
@@ -189,7 +189,7 @@ export function defaultSeed(): FakeSeed {
 			purpose: "Plans, writes and schedules social posts",
 			instructions:
 				"Keep a two-week posting calendar. Draft posts in our voice and schedule them through Buffer after I approve the week.",
-			avatar: { shape: "flower", color: "#e25c9b" },
+			avatar: { shape: "flower", color: "magenta" },
 			appIds: ["buffer", "notion"],
 			status: "sleeping",
 			lastActivityAt: hours(5),
@@ -200,7 +200,7 @@ export function defaultSeed(): FakeSeed {
 			purpose: "Coordinates your other bots and writes the daily briefing",
 			instructions:
 				"Each weekday at 8am, tell me what every bot did, what waits on me and what is still open. Hand work to the right bot.",
-			avatar: { shape: "shield", color: "#27ae80" },
+			avatar: { shape: "shield", color: "green" },
 			appIds: ["slack", "notion"],
 			email: "chief-of-staff.raghav@bots.knightcode.dev",
 			suggestions: true,
@@ -904,4 +904,9 @@ export function defaultSeed(): FakeSeed {
 			receipts: [{ id: "rc-1", at: days(1), amount: 15, fee: 0.74, credited: 12.96 }],
 		},
 	};
+}
+
+/** A seed from a partial one (a JSON file, say): the fields it leaves out come from the default seed. */
+export function seedFrom(fields: Partial<FakeSeed>): FakeSeed {
+	return { ...defaultSeed(), ...fields };
 }

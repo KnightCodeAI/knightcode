@@ -1,6 +1,8 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import {
+	AVATAR_COLORS,
+	AvatarSchema,
 	ClientFrameSchema,
 	decodeFrame,
 	parse,
@@ -117,5 +119,13 @@ describe("static types", () => {
 		// @ts-expect-error "nope" is not a run status
 		const bad: RunStatus = "nope";
 		expect(bad).toBe("nope");
+	});
+});
+
+describe("avatars", () => {
+	it("names eleven palette colours and rejects raw CSS colours", () => {
+		expect(AVATAR_COLORS).toHaveLength(11);
+		expect(parse(AvatarSchema, { shape: "blob", color: "blue" })).toEqual({ shape: "blob", color: "blue" });
+		expect(() => parse(AvatarSchema, { shape: "blob", color: "#4f7cff" })).toThrow(ProtocolError);
 	});
 });

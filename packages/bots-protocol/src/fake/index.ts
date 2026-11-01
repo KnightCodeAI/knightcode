@@ -1,6 +1,6 @@
 // An in-memory KnightCode Bots backend that serves every route and frame, for UI work and tests.
 import { matchRoute, queryToRequest, type RouteName, type RouteRequest, type RouteResponse } from "../api.ts";
-import { AVATAR_SHAPES, type AvatarShape } from "../avatars.ts";
+import { AVATAR_COLORS, AVATAR_SHAPES, type AvatarShape } from "../avatars.ts";
 import {
 	type Approval,
 	type Bot,
@@ -18,7 +18,7 @@ import { defaultSeed, type FakeSeed } from "./seed.ts";
 import { FakeHub, type ThreadKey } from "./socket.ts";
 import { type FakeClock, manualClock } from "./stream.ts";
 
-export { defaultSeed, type FakeSeed } from "./seed.ts";
+export { defaultSeed, type FakeSeed, seedFrom } from "./seed.ts";
 export { FAKE_EPOCH, type FakeClock, manualClock, realtimeClock, WORD_MS } from "./stream.ts";
 
 export interface FakeBackend {
@@ -147,7 +147,7 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 			purpose: "",
 			instructions: "",
 			instructionsVersion: 1,
-			avatar: { shape, color: "#6f6af8" },
+			avatar: { shape, color: "blue" },
 			approvals: "default",
 			computerAccess: true,
 			notify: "input",
@@ -389,7 +389,10 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 				name: recipe.profile.name,
 				model: chosenModel(request.model),
 				instructions: recipe.profile.description,
-				...(shape ? { avatar: { shape, color: recipe.profile.avatarColor ?? "#6f6af8" } } : {}),
+				// Recipes carry any CSS colour; only a palette name survives, otherwise the default blue.
+				...(shape
+					? { avatar: { shape, color: AVATAR_COLORS.find((c) => c === recipe.profile.avatarColor) ?? "blue" } }
+					: {}),
 			});
 			const ticked = <T>(list: T[], indexes: number[]) => list.filter((_, index) => indexes.includes(index));
 			// Another person's memory never reaches shared memory.
