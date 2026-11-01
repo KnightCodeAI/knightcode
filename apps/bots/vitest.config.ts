@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
+import { emulatorBindings } from "./test/emulators.ts";
 
 // Secrets are miniflare bindings so the suite runs on a clean checkout. web/dist does not
 // exist until the web app is built, so the assets binding points at a committed fixture.
@@ -19,6 +20,8 @@ export default defineConfig({
 					assetConfig: { html_handling: "none" },
 				},
 				bindings: {
+					// The emulated GitHub, Google and the rest, started here in Node; test/global-setup.ts stops them.
+					...(await emulatorBindings()),
 					SESSION_SECRET: "test-session-secret",
 					// 32 zero bytes, base64.
 					TEST_KEK: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
@@ -30,5 +33,6 @@ export default defineConfig({
 	test: {
 		include: ["test/**/*.test.ts"],
 		setupFiles: ["./test/apply-migrations.ts"],
+		globalSetup: ["./test/global-setup.ts"],
 	},
 });

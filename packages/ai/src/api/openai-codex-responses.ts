@@ -1022,7 +1022,7 @@ async function getWebSocketConstructor(env?: ProviderEnv): Promise<WebSocketCons
 					url.toString().replace(/^wss:/, "https:").replace(/^ws:/, "http:"),
 					env,
 				);
-				super(url, { ..._opts, ...(proxyUrl ? { proxy: proxyUrl.toString() } : {}) } as any);
+				super(url.toString(), { ..._opts, ...(proxyUrl ? { proxy: proxyUrl.toString() } : {}) } as any);
 			}
 		};
 		if (!env) {

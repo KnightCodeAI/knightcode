@@ -20,6 +20,18 @@ export interface Env {
 	KEK: SecretsStoreSecret;
 	/** Tests supply the key as a plain binding because the pool does not emulate Secrets Store. */
 	TEST_KEK?: string;
+	/** This site's origin; https://bots.knightcode.dev unless set (local development). */
+	APP_ORIGIN?: string;
+	/** OAuth apps for sign-in (secrets). */
+	GITHUB_CLIENT_ID: string;
+	GITHUB_CLIENT_SECRET: string;
+	GOOGLE_CLIENT_ID: string;
+	GOOGLE_CLIENT_SECRET: string;
+	/** Tests only: the emulated services' base URLs, which replace the providers' own hosts. */
+	EMULATE_GITHUB_URL?: string;
+	EMULATE_GOOGLE_URL?: string;
+	/** Outbound mail (Email Service), set up with the email channel in Task 3.5. */
+	EMAIL?: { send(message: { to: string; from: string; subject: string; text: string }): Promise<unknown> };
 }
 
 /** The AES-KW key-encryption key (256-bit, base64 secret) used to wrap per-record data keys. */

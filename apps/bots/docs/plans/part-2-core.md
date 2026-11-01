@@ -50,7 +50,7 @@ Object, pass the script as a `TEST_MODEL_SCRIPT` binding instead and have
     list of spec section 10).
   - `type Principal = { accountId: string; workspaceId: string; client: "web" | "desktop" | "cli" }`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/auth.test.ts
@@ -88,22 +88,22 @@ describe("sign-in", () => {
 `test/helpers.ts` that drive the emulator's consent page and create a test
 account.)
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `bunx vitest --run test/auth.test.ts` in `apps/bots`
 Expected: FAIL.
 
-- [ ] **Step 3: Build the test harness, then implement sign-in**
+- [x] **Step 3: Build the test harness, then implement sign-in**
 
 Global setup, fake model, emulate config, then the listed auth modules.
 Origin checks apply to every non-GET API request and WebSocket upgrade.
 
-- [ ] **Step 4: Run them to verify they pass**
+- [x] **Step 4: Run them to verify they pass**
 
 Run: `bunx vitest --run test/auth.test.ts`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/auth apps/bots/src/worker.ts apps/bots/migrations/0002_accounts.sql apps/bots/test apps/bots/emulate.config.ts apps/bots/vitest.config.ts bun.lock
