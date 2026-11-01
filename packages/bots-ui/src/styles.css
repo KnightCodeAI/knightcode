@@ -7,6 +7,8 @@
 @import "./bot/bot.css";
 @import "./computer/computer.css";
 @import "./connectors/connectors.css";
+@import "./routines/routines.css";
+@import "./settings/settings.css";
 
 *,
 *::before,

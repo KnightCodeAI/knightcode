@@ -5,6 +5,7 @@ import { BotSettings } from "./bot/BotSettings.tsx";
 import { CreateBot } from "./bot/CreateBot.tsx";
 import { ChatView } from "./chat/ChatView.tsx";
 import { Catalog } from "./connectors/Catalog.tsx";
+import { SettingsDialog } from "./settings/SettingsDialog.tsx";
 import { SkillsLibrary } from "./skills/Library.tsx";
 import { SandboxOriginContext } from "./chat/McpAppFrame.tsx";
 import { ToastProvider } from "./primitives/Toast.tsx";
@@ -77,12 +78,14 @@ function Shell() {
 				<main className="kb-chat" data-ref="chat">
 					{bot ? <ChatView bot={bot} paneOpen={pane !== "closed"} /> : <MainView route={route} loading={!data} />}
 				</main>
-				{bot && <InfoPane bot={bot} view={pane} />}
+				{bot && <InfoPane bot={bot} view={pane} routineId={route.name === "bot" ? route.routineId : undefined} />}
 			</div>
 			<CommandK open={paletteOpen} onOpenChange={setPaletteOpen} />
 			{route.name === "new" && <CreateBot tab={route.tab} onClose={backToChat} />}
 			{route.name === "connectors" && <Catalog appId={route.appId} onClose={backToChat} />}
 			{route.name === "skills" && <SkillsLibrary onClose={backToChat} />}
+			{route.name === "settings" && <SettingsDialog view={route.section} onClose={backToChat} />}
+			{route.name === "activity" && <SettingsDialog view="activity" onClose={backToChat} />}
 			{route.name === "bot" && route.pane === "settings" && editing && bot && (
 				<BotSettings bot={bot} onClose={() => navigate({ name: "bot", botId: bot.id, pane: "settings" })} />
 			)}
@@ -91,7 +94,13 @@ function Shell() {
 }
 
 function isOverlay(route: Route): boolean {
-	return route.name === "new" || route.name === "connectors" || route.name === "skills" || route.name === "settings";
+	return (
+		route.name === "new" ||
+		route.name === "connectors" ||
+		route.name === "skills" ||
+		route.name === "settings" ||
+		route.name === "activity"
+	);
 }
 
 function MainView({ route, loading }: { route: Route; loading: boolean }) {

@@ -442,7 +442,7 @@ git commit -m "feat(bots): add the connector catalog and skills library"
 - Produces: `TriggerPicker` covering all seven trigger kinds; the watch
   trigger shows estimated computer hours for file and command checks.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/routines.e2e.ts
@@ -461,10 +461,10 @@ for (const screen of ["routines", "routine-edit", "activity", "usage"])
 	test(`${screen} matches the reference`, async ({ page }) => compareToReference(page, screen));
 ```
 
-- [ ] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui routines`)
-- [ ] **Step 3: Implement the routine, activity and usage screens**
-- [ ] **Step 4: Run ui, then run reference for the four screens**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui routines`)
+- [x] **Step 3: Implement the routine, activity and usage screens**
+- [x] **Step 4: Run ui, then run reference for the four screens**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src/routines packages/bots-ui/src/activity packages/bots-ui/src/usage apps/bots/web/e2e/routines.e2e.ts

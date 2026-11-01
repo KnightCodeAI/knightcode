@@ -8,6 +8,8 @@ import { Select } from "../primitives/Select.tsx";
 import { Tabs } from "../primitives/Tabs.tsx";
 import { exportRecipe } from "../bot/ExportBot.tsx";
 import { ComputerPane } from "../computer/ComputerPane.tsx";
+import { RoutineEditor } from "../routines/RoutineEditor.tsx";
+import { RoutineList } from "../routines/RoutineList.tsx";
 import { MemoryViewer } from "../bot/MemoryViewer.tsx";
 import { BOTS, type BotList, useResource, useStore } from "../state/store.ts";
 import { navigate, type PaneView } from "./routes.ts";
@@ -15,8 +17,8 @@ import { navigate, type PaneView } from "./routes.ts";
 export interface InfoPaneProps {
 	bot: Bot | undefined;
 	view: PaneView | "closed";
-	/** Content for views later tasks own (the routine editor). */
-	slots?: Partial<Record<"routine", ReactNode>>;
+	/** The routine open in the editor, for /bots/<id>/routines/<routineId>. */
+	routineId?: string;
 }
 
 type Tab = "details" | "library" | "computer";
@@ -32,7 +34,7 @@ const TAB_OF: Record<PaneView, Tab> = {
 };
 
 /** The right column for a bot. Closed, it keeps its place in the grid at zero width so it can slide open. */
-export function InfoPane({ bot, view, slots }: InfoPaneProps) {
+export function InfoPane({ bot, view, routineId }: InfoPaneProps) {
 	const store = useStore();
 	const closed = view === "closed";
 	const tab = closed ? "details" : TAB_OF[view];
@@ -77,8 +79,12 @@ export function InfoPane({ bot, view, slots }: InfoPaneProps) {
 						/>
 					</div>
 					<div className="kb-pane__panel" role="tabpanel" data-ref="info-tabpanel">
-						{(view === "routine-new" || view === "routines") && slots?.routine}
-						{tab === "details" && view !== "routine-new" && <Details bot={bot} />}
+						{(view === "routine-new" || (view === "routines" && routineId)) && (
+							<RoutineEditor bot={bot} routineId={view === "routine-new" ? undefined : routineId} />
+						)}
+						{tab === "details" && view !== "routine-new" && !(view === "routines" && routineId) && (
+							<Details bot={bot} />
+						)}
 						{view === "memory" && <MemoryViewer bot={bot} />}
 						{view === "library" && <Library bot={bot} />}
 						{tab === "computer" && <ComputerPane bot={bot} />}
@@ -132,7 +138,6 @@ const THINKING_LABELS: Record<string, string> = { off: "Off", low: "Low", medium
 
 function Details({ bot }: { bot: Bot }) {
 	const store = useStore();
-	const { data: routines } = useResource(`routines:${bot.id}`, (api) => api.listRoutines({ botId: bot.id }));
 	const { data: models } = useResource("models", (api) => api.listModels({}));
 	const options: ModelOption[] = models?.models ?? [];
 	const current = options.find((m) => m.provider === bot.model.provider && m.modelId === bot.model.modelId);
@@ -140,26 +145,9 @@ function Details({ bot }: { bot: Bot }) {
 		const next = await store.api.updateBot({ botId: bot.id, ...patch });
 		store.set<BotList>(BOTS, (list) => list && { ...list, bots: list.bots.map((b) => (b.id === next.id ? next : b)) });
 	};
-	const list = routines?.routines ?? [];
 	return (
-		<>
-			{list.length === 0 ? (
-				<p className="kb-pane__empty" data-ref="empty-text">
-					Routines are recurring tasks this Bot runs on a schedule. Ask it in chat to set one up.
-				</p>
-			) : (
-				<section className="kb-group">
-					<div className="kb-group__title">Routines</div>
-					<ul className="kb-group__list">
-						{list.map((routine) => (
-							<li key={routine.id} className="kb-group__row">
-								<span>{routine.name}</span>
-								<span style={{ color: "var(--kb-color-text-secondary)" }}>{routine.active ? "On" : "Paused"}</span>
-							</li>
-						))}
-					</ul>
-				</section>
-			)}
+		<div className="kb-pane__stack" data-ref="empty-text">
+			<RoutineList bot={bot} />
 			<section className="kb-group" data-ref="settings-group">
 				<div className="kb-group__title">Model</div>
 				<ul className="kb-group__list">
@@ -206,7 +194,7 @@ function Details({ bot }: { bot: Bot }) {
 					</li>
 				</ul>
 			</section>
-		</>
+		</div>
 	);
 }
 
