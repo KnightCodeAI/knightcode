@@ -110,6 +110,11 @@ export async function measureReference(options: { cdpUrl: string; capture: strin
 						mask: (await Promise.all((screen.mask ?? []).map((target) => boxOf(page, target)))).filter((box) => box !== undefined),
 					};
 					writeFileSync(join(options.out, "measurements", `${name}.json`), `${JSON.stringify(measurement, null, "\t")}\n`);
+					// The same screen with its mask boxes painted, as Playwright paints masked elements on the other side.
+					await paintMasks(page, measurement.mask);
+					const masked = (await session.send("Page.captureScreenshot", { format: "png" })) as { data: string };
+					writeFileSync(join(options.out, "screens", `${name}.masked.png`), Buffer.from(masked.data, "base64"));
+					await paintMasks(page, []);
 					// The whole visible tree, for building parts no ref names, at the main viewport only (it is large).
 					if (width === capture.viewports[0]?.[0])
 						writeFileSync(join(options.out, "measurements", `${name}.tree.json`), JSON.stringify(await measureTree(page)));
@@ -160,6 +165,25 @@ async function settle(page: Page): Promise<void> {
 	await page.waitForTimeout(150);
 	await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))));
 	await page.waitForTimeout(100);
+}
+
+/** Playwright's default mask colour. */
+export const MASK_COLOR = "#FF00FF";
+
+/** Covers each box with a solid mask overlay, replacing any overlays from the previous call. */
+async function paintMasks(page: Page, boxes: Measurement["mask"]): Promise<void> {
+	await page.evaluate(
+		({ boxes, color }) => {
+			for (const old of document.querySelectorAll("[data-measure-mask]")) old.remove();
+			for (const box of boxes) {
+				const div = document.createElement("div");
+				div.setAttribute("data-measure-mask", "");
+				div.style.cssText = `position:fixed;left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px;background:${color};z-index:2147483647;pointer-events:none`;
+				document.body.append(div);
+			}
+		},
+		{ boxes, color: MASK_COLOR },
+	);
 }
 
 function locate(page: Page, target: RefTarget) {
@@ -238,8 +262,13 @@ async function measureTree(page: Page): Promise<TreeNode[]> {
 				for (const child of el.children) walk(child, depth);
 				return;
 			}
+			if (cs.display === "none") return;
 			const r = el.getBoundingClientRect();
-			if (cs.display === "none" || cs.visibility === "hidden" || r.width === 0 || r.height === 0) return;
+			// Zero-size wrappers (portal hosts, positioned shells) and hidden parents can hold visible children.
+			if (cs.visibility === "hidden" || r.width === 0 || r.height === 0) {
+				for (const child of el.children) walk(child, depth);
+				return;
+			}
 			const own = [...el.childNodes]
 				.filter((n) => n.nodeType === Node.TEXT_NODE)
 				.map((n) => n.textContent?.trim() ?? "")
