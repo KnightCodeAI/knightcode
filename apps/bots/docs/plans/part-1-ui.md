@@ -604,7 +604,7 @@ git commit -m "feat(bots): add settings, onboarding and billing screens"
   `apps/bots/web/src/sw.ts`, `packages/bots-ui/src/shell/MobileNav.tsx`
 - Test: `apps/bots/web/e2e/mobile.e2e.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/mobile.e2e.ts
@@ -620,11 +620,11 @@ test("phone layout has no horizontal scroll and is installable", async ({ page }
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui mobile`)
-- [ ] **Step 3: Implement phone layouts, the manifest and the service worker**
+- [x] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui mobile`)
+- [x] **Step 3: Implement phone layouts, the manifest and the service worker**
   (push subscription UI only; delivery comes in Task 3.11)
-- [ ] **Step 4: Run it to verify it passes** (`--update-snapshots` once)
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run it to verify it passes** (`--update-snapshots` once)
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/web/public/manifest.webmanifest apps/bots/web/src/sw.ts packages/bots-ui/src/shell/MobileNav.tsx apps/bots/web/e2e/mobile.e2e.ts

@@ -15,10 +15,12 @@ import { Transcript } from "./Transcript.tsx";
 export interface ChatViewProps {
 	bot: Bot;
 	paneOpen: boolean;
+	/** Phone layout: details is asked for by name, since the pane is closed by default there. */
+	phone?: boolean;
 }
 
 /** The middle column for one bot. */
-export function ChatView({ bot, paneOpen }: ChatViewProps) {
+export function ChatView({ bot, paneOpen, phone }: ChatViewProps) {
 	const target = useMemo(() => ({ botId: bot.id }), [bot.id]);
 	const view = useConversation(target);
 	return (
@@ -32,7 +34,16 @@ export function ChatView({ bot, paneOpen }: ChatViewProps) {
 							aria-label="View conversation details"
 							aria-expanded={paneOpen}
 							data-ref="header-identity"
-							onClick={() => navigate({ name: "bot", botId: bot.id, pane: paneOpen ? "closed" : "details" })}
+							onClick={() =>
+								paneOpen
+									? navigate({ name: "bot", botId: bot.id, pane: "closed" })
+									: // On a phone the default pane is closed, so details is asked for by name.
+										navigate(
+											phone
+												? `/bots/${encodeURIComponent(bot.id)}?pane=details`
+												: { name: "bot", botId: bot.id, pane: "details" },
+										)
+							}
 						>
 							<span className="kb-identity__avatar" data-ref="header-avatar" data-avatar-box="">
 								<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={24} />

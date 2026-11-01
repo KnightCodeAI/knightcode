@@ -167,8 +167,10 @@ export const ROUTES = [
 	route("getOnboarding", "GET", "/api/onboarding", None, OnboardingSchema),
 	route("getCatchUp", "GET", "/api/catch-up", None, Obj({ catchUp: Type.Union([CatchUpSchema, Type.Null()]) })),
 	route("search", "GET", "/api/search", Obj({ q: Type.String() }), Obj({ hits: Type.Array(SearchHitSchema) })),
+	// Web Push: the server's VAPID public key, then this device's subscription; unsubscribing names the device's endpoint.
+	route("getPushKey", "GET", "/api/push/key", None, Obj({ publicKey: Type.String() })),
 	route("subscribePush", "POST", "/api/push", Obj({ subscription: Type.Unknown() }), Ok),
-	route("unsubscribePush", "DELETE", "/api/push", None, Ok),
+	route("unsubscribePush", "DELETE", "/api/push", Obj({ endpoint: Type.String() }), Ok),
 
 	// Model providers and models
 	route("listProviders", "GET", "/api/providers", None, Obj({ providers: Type.Array(ProviderConnectionSchema) })),

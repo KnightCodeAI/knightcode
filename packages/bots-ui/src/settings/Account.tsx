@@ -13,6 +13,7 @@ import { getThemePreference, setThemePreference, type ThemePreference } from "..
 import { PlanCard } from "../usage/Usage.tsx";
 import { formatDay } from "../chat/layout.ts";
 import { ConnectProviders } from "./ConnectProviders.tsx";
+import { DevicePush } from "./DevicePush.tsx";
 import { SettingsCard, SettingsRow, SettingsSection } from "./parts.tsx";
 
 const ZONES = [
@@ -197,6 +198,7 @@ export function Account() {
 					/>
 				</SettingsCard>
 			</SettingsSection>
+			<DevicePush />
 			<SettingsSection title="Your data">
 				<SettingsCard>
 					<SettingsRow

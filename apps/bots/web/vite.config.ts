@@ -46,9 +46,32 @@ function fakeScreen(): Plugin {
 	};
 }
 
+/** The service worker at /sw.js: compiled from src/sw.ts on request in development, built beside the app. */
+function serviceWorker(): Plugin {
+	return {
+		name: "knightcode-bots-service-worker",
+		configureServer(server) {
+			server.middlewares.use("/sw.js", async (_request, response) => {
+				const result = await server.transformRequest("/src/sw.ts");
+				response.setHeader("content-type", "text/javascript");
+				// A classic worker script: drop the empty export that keeps the source a module (the build drops it too).
+				response.end((result?.code ?? "").replace(/^export \{\};?$/m, ""));
+			});
+		},
+	};
+}
+
 export default defineConfig({
 	root: here,
-	plugins: [react(), referenceSeed(), fakeScreen()],
-	build: { outDir: "dist", emptyOutDir: true },
+	plugins: [react(), referenceSeed(), fakeScreen(), serviceWorker()],
+	build: {
+		outDir: "dist",
+		emptyOutDir: true,
+		rollupOptions: {
+			input: { main: resolve(here, "index.html"), sw: resolve(here, "src/sw.ts") },
+			// The worker keeps a fixed name at the root, so its scope is the whole app.
+			output: { entryFileNames: (chunk) => (chunk.name === "sw" ? "sw.js" : "assets/[name]-[hash].js") },
+		},
+	},
 	server: { port: 5190, strictPort: true },
 });

@@ -15,6 +15,8 @@ if (import.meta.env.DEV && location.pathname === "/__gallery") {
 		</StrictMode>,
 	);
 } else {
+	// Web Push needs a service worker; it caches nothing, so a failed registration changes nothing else.
+	navigator.serviceWorker?.register("/sw.js").catch(() => undefined);
 	const client = await createClient();
 	root.render(
 		<StrictMode>

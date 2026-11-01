@@ -19,7 +19,8 @@ import { ToastProvider } from "./primitives/Toast.tsx";
 import { applyThemePreference } from "./theme.ts";
 import { CommandK, useCommandKShortcut } from "./shell/CommandK.tsx";
 import { InfoPane } from "./shell/InfoPane.tsx";
-import { navigate, type Route, useQueryParam, useRoute } from "./shell/routes.ts";
+import { MobileNav, useIsPhone } from "./shell/MobileNav.tsx";
+import { formatRoute, navigate, type Route, useQueryParam, useRoute } from "./shell/routes.ts";
 import { Sidebar } from "./shell/Sidebar.tsx";
 import { ThreadSocket } from "./state/socket.ts";
 import { BotsStore, StoreContext, useBots, useResource } from "./state/store.ts";
@@ -100,6 +101,14 @@ function Shell() {
 				: bot
 					? "details"
 					: "closed";
+	// On a phone the chat comes first: the details pane opens only when asked for (?pane=details or a tab).
+	const phone = useIsPhone();
+	const paneParam = useQueryParam("pane");
+	const shownPane =
+		phone && !(route.name === "bot" && (route.pane !== "details" || paneParam === "details")) ? "closed" : pane;
+	const [navOpen, setNavOpen] = useState(false);
+	const path = formatRoute(route);
+	useEffect(() => setNavOpen(false), [path]);
 	const edit = useQueryParam("edit");
 	const avatar = useQueryParam("avatar");
 	const editing = edit !== null || avatar !== null;
@@ -108,9 +117,10 @@ function Shell() {
 
 	return (
 		<>
-			<div className="kb-shell" data-ref="shell">
+			<div className="kb-shell" data-ref="shell" data-nav-open={phone && navOpen ? "" : undefined}>
 				<Sidebar route={route} onSearch={openPalette} />
 				<main className="kb-chat" data-ref="chat">
+					{phone && <MobileNav open={navOpen} onOpenChange={setNavOpen} />}
 					{route.name === "group" ? (
 						group ? (
 							<GroupChat group={group} />
@@ -120,12 +130,12 @@ function Shell() {
 					) : view ? (
 						<MainContent view={view} catchUp={catchUp} onboarding={onboarding} onDone={() => toChat()} />
 					) : bot && route.name !== "home" ? (
-						<ChatView bot={bot} paneOpen={pane !== "closed"} />
+						<ChatView bot={bot} paneOpen={shownPane !== "closed"} phone={phone} />
 					) : (
 						<MainView route={route} loading={!data} />
 					)}
 				</main>
-				{bot && <InfoPane bot={bot} view={pane} routineId={route.name === "bot" ? route.routineId : undefined} />}
+				{bot && <InfoPane bot={bot} view={shownPane} routineId={route.name === "bot" ? route.routineId : undefined} />}
 			</div>
 			<CommandK open={paletteOpen} onOpenChange={setPaletteOpen} />
 			{route.name === "new" && <CreateBot tab={route.tab} onClose={backToChat} />}

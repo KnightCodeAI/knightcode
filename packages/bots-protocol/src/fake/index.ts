@@ -263,6 +263,10 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 					hits.push({ kind: "skill", id: s.id, title: s.name, snippet: s.description });
 			return { hits };
 		},
+		// A throwaway public key: the fake never sends a push.
+		getPushKey: () => ({
+			publicKey: "BCcCyt1dE9dYZ5vxCiAFE9CZtZHUCyyee0do-9pNsoPa4ZmdpJCiNvHP3ktP323tej7-mj4K-UPGysK7LgP6-zM",
+		}),
 		subscribePush: () => ({ ok: true }),
 		unsubscribePush: () => ({ ok: true }),
 
