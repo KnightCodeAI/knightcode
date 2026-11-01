@@ -180,16 +180,16 @@ git commit -m "feat(bots): add envelope encryption and sealed archives"
   constructed from a `Transport`. Framing, cancellation, session handles and
   unknown-outcome errors are unchanged.
 
-- [ ] **Step 1: Write the failing test**: the existing env conformance suite
+- [x] **Step 1: Write the failing test**: the existing env conformance suite
   (`createEnvConformance` from `@knightcode/durable/testing`) passes over
   both a child-process transport and an in-memory WebSocket pair talking to
   the daemon; an interrupted write over the WebSocket transport reports an
   unknown outcome, exactly as the child-process one does.
-- [ ] **Step 2: Run it to verify it fails** (`bunx vitest --run test/transport.test.ts` in `packages/env`)
-- [ ] **Step 3: Extract `Transport` and add the WebSocket transport**
-- [ ] **Step 4: Run the whole env suite** (`bunx vitest --run` in `packages/env`)
+- [x] **Step 2: Run it to verify it fails** (`bunx vitest --run test/transport.test.ts` in `packages/env`)
+- [x] **Step 3: Extract `Transport` and add the WebSocket transport**
+- [x] **Step 4: Run the whole env suite** (`bunx vitest --run` in `packages/env`)
   Expected: all existing tests and the new one pass, on Windows too.
-- [ ] **Step 5: Commit** (this commit touches only `packages/env`)
+- [x] **Step 5: Commit** (this commit touches only `packages/env`)
 
 ```bash
 git add packages/env/src packages/env/test/transport.test.ts
