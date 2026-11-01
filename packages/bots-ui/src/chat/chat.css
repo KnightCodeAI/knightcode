@@ -388,7 +388,8 @@
 .kb-composer__leading,
 .kb-composer__trailing {
 	position: absolute;
-	top: 7px;
+	/* 7 px from the composer's outer edge, as measured: the 1 px border plus 6. */
+	top: 6px;
 	display: flex;
 	gap: var(--kb-space-8);
 }
@@ -580,6 +581,9 @@
 	display: flex;
 	flex: none;
 	gap: var(--kb-space-2);
+	/* The message's own text metrics, as measured; its buttons use the small size in the secondary colour. */
+	font-size: var(--kb-font-size-lg);
+	line-height: var(--kb-line-height-md);
 	opacity: 0;
 	transition: opacity var(--kb-duration-hover) var(--kb-ease-hover);
 }
@@ -603,6 +607,11 @@
 	transition:
 		color var(--kb-duration-hover) var(--kb-ease-hover),
 		background-color var(--kb-duration-hover) var(--kb-ease-hover);
+}
+.kb-hover-actions .kb-hover-actions__button {
+	color: var(--kb-color-text-secondary);
+	font-size: var(--kb-font-size-sm);
+	line-height: var(--kb-line-height-sm);
 }
 .kb-hover-actions__button:hover,
 .kb-hover-actions__button[data-state="open"] {
@@ -972,4 +981,9 @@
 	.kb-helper-icon--running svg {
 		animation: none;
 	}
+}
+
+/* Teach a task's record mark in the composer menu. */
+.kb-record-icon {
+	color: var(--kb-color-danger);
 }

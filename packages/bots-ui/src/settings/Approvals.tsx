@@ -40,11 +40,11 @@ export function Approvals() {
 				<SettingsCard>
 					<SettingsRow
 						first
-						title="Auto review"
+						title="Auto-Review"
 						hint="A reviewer model passes actions that fit your request, else asks."
 						control={
 							<Toggle
-								label="Auto review"
+								label="Auto-Review"
 								dataRef="toggle"
 								checked={data.mode === "auto"}
 								onCheckedChange={(on) => save({ mode: on ? "auto" : "ask" })}
@@ -155,7 +155,7 @@ function RuleList({
 					aria-label={`Add rule to ${title}`}
 					onClick={() => setAdding(true)}
 				>
-					<Plus size={12} /> Add rule
+					<Plus size={12} /> Add Rule
 				</Button>
 			}
 		>

@@ -1,4 +1,5 @@
-// A bot's routines at the top of its details: each opens its editor; New routine adds one. Empty, it says how to start.
+// A bot's routines at the top of its details: each opens its editor; New routine adds one. Empty, it says to ask in
+// chat (the search palette's New routine also opens the editor).
 import type { Bot } from "@knightcode/bots-protocol";
 import { Plus } from "lucide-react";
 import { navigate } from "../shell/routes.ts";
@@ -14,18 +15,7 @@ export function RoutineList({ bot }: { bot: Bot }) {
 	if (routines.length === 0)
 		return (
 			<p className="kb-pane__empty">
-				Routines are recurring tasks this Bot runs on a schedule. Ask it in chat to set one up, or{" "}
-				<a
-					className="kb-link-button"
-					href={routinePath(bot.id)}
-					onClick={(event) => {
-						event.preventDefault();
-						navigate(routinePath(bot.id));
-					}}
-				>
-					add one
-				</a>
-				.
+				Routines are recurring tasks this Bot runs on a schedule. Ask it in chat to set one up.
 			</p>
 		);
 	return (

@@ -1,4 +1,5 @@
 // Dropdown menus: a trigger, then items, separators and groups on a floating surface.
+import { ChevronRight } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import type { ReactElement, ReactNode } from "react";
 import { cx } from "./cx.ts";
@@ -37,7 +38,7 @@ export function Menu({
 					className={cx("kb-floating", "kb-menu", className)}
 					align={align}
 					side={side}
-					sideOffset={6}
+					sideOffset={4}
 					collisionPadding={8}
 				>
 					{children}
@@ -64,6 +65,27 @@ export function MenuItem({ children, icon, hint, onSelect, disabled }: MenuItemP
 			<span className="kb-menu__item-label">{children}</span>
 			{hint && <span className="kb-menu__item-hint">{hint}</span>}
 		</DropdownMenu.Item>
+	);
+}
+
+/** An item that opens a submenu beside it (Support ›). */
+export function MenuSub({ children, icon, label }: { children: ReactNode; icon?: ReactNode; label: ReactNode }) {
+	const layer = useLayer();
+	return (
+		<DropdownMenu.Sub>
+			<DropdownMenu.SubTrigger className="kb-menu__item">
+				{icon && <span className="kb-menu__item-icon">{icon}</span>}
+				<span className="kb-menu__item-label">{label}</span>
+				<span className="kb-menu__item-hint" aria-hidden>
+					<ChevronRight size={14} />
+				</span>
+			</DropdownMenu.SubTrigger>
+			<DropdownMenu.Portal container={layer}>
+				<DropdownMenu.SubContent className="kb-floating kb-menu" sideOffset={8} alignOffset={-6} collisionPadding={8}>
+					{children}
+				</DropdownMenu.SubContent>
+			</DropdownMenu.Portal>
+		</DropdownMenu.Sub>
 	);
 }
 

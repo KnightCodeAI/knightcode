@@ -159,7 +159,16 @@ function AppRow({ entry }: { entry: CatalogEntry }) {
 		<Row
 			icon={<AppTile entry={entry} />}
 			title={entry.name}
-			detail={state === "connected" ? "Connected" : state === "reconnect" ? "Needs sign-in" : entry.maker}
+			detail={
+				state === "connected"
+					? "Connected"
+					: state === "reconnect"
+						? "Needs sign-in"
+						: // The maker only adds something when it is not the app's own name.
+							entry.maker !== entry.name
+							? entry.maker
+							: undefined
+			}
 			href={href}
 			action={
 				<button

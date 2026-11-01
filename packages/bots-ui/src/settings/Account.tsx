@@ -100,7 +100,7 @@ export function Account() {
 							</Button>
 							{web && (
 								<Button variant="secondary" onClick={() => (window.location.href = "/auth/sign-out")}>
-									Sign out
+									Sign Out
 								</Button>
 							)}
 						</div>

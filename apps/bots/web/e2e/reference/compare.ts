@@ -46,6 +46,12 @@ interface ScreenRoute {
 	 * top and height are compared, and they must be anchored like the reference, at its left or its right edge.
 	 */
 	textSized?: string[];
+	/** Actions once the screen has settled and the mouse is parked: hovers and menus, which a later move would undo. */
+	interact?: (page: Page) => Promise<void>;
+	/** Measured refs found by a selector rather than a `data-ref` (the third message, while hovered). */
+	refs?: Record<string, string>;
+	/** Measured refs that matched the wrong element when the reference was captured. */
+	ignore?: string[];
 }
 
 const typeInComposer = (text: string) => async (page: Page) => {
@@ -103,12 +109,67 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	"settings-channels": { path: "/settings/channels", referenceMask: true, scope: SETTINGS_LAYER },
 	"settings-billing": { path: "/settings/billing", referenceMask: true, scope: SETTINGS_LAYER },
 	onboarding: { path: "/bots/finley?pane=closed&onboarding=1", referenceMask: true },
+	// Interaction states: menus, hovers and the avatar picker, from the screen the reference resets to.
 	"x-account-menu": {
 		path: "/bots/finley",
-		steps: (page) => page.getByRole("button", { name: "Open account menu" }).click(),
+		interact: (page) => page.getByRole("button", { name: "Open account menu" }).click(),
+		// The reference's "menu-separator" selector matched its sidebar's resize handle (role=separator).
+		refs: {
+			menu: '[role="menu"]',
+			"menu-item": '[role="menuitem"] >> nth=1',
+			"menu-separator": '[data-ref="resize-handle"]',
+		},
 	},
-	"x-search": { path: "/bots/finley", steps: (page) => page.getByRole("button", { name: "Search" }).click() },
-	"x-row-hover": { path: "/bots/finley", steps: (page) => page.locator('[data-ref="sidebar-row"]').first().hover() },
+	"x-menu-item-hover": {
+		path: "/bots/finley",
+		interact: async (page) => {
+			await page.getByRole("button", { name: "Open account menu" }).click();
+			await page.getByRole("menuitem").nth(1).hover();
+		},
+		refs: { "menu-item-hover": '[role="menuitem"] >> nth=1' },
+	},
+	"x-search": {
+		path: "/bots/finley",
+		interact: (page) => page.getByRole("button", { name: "Search" }).click(),
+		// Capture misfires: "search-dialog" matched a select in the details pane and "search-input" a hidden 1 px input,
+		// so this state is judged by its pixels.
+		ignore: ["search-dialog", "search-input"],
+	},
+	"x-composer-menu": {
+		path: "/bots/finley",
+		interact: (page) => page.getByRole("button", { name: "Composer actions" }).click(),
+		refs: { menu: '[role="menu"]', "menu-item": '[role="menuitem"] >> nth=0' },
+	},
+	"x-message-hover": {
+		path: "/bots/finley?pane=closed",
+		interact: (page) => page.locator('[data-ref="message"]').nth(2).hover(),
+		// The reference's "message-action" matched its second button (Reply): its first is labelled without "React".
+		refs: {
+			"message-hover": '[data-ref="message"] >> nth=2',
+			"message-actions": '.kb-entry:hover [data-ref="message-actions"]',
+			"message-action": '.kb-entry:hover [data-ref="message-actions"] button >> nth=1',
+		},
+	},
+	"x-row-hover": {
+		path: "/bots/finley",
+		interact: (page) => page.locator('[data-ref="sidebar-row"]').first().hover(),
+		refs: { "sidebar-row-hover": '[data-ref="sidebar-row"]' },
+	},
+	"x-button-hover": {
+		path: "/bots/finley",
+		interact: (page) => page.getByRole("button", { name: "Connect apps" }).hover(),
+		refs: { "connect-apps-hover": '[data-ref="connect-apps"]' },
+	},
+	"x-icon-button-hover": {
+		path: "/bots/finley",
+		interact: async (page) => {
+			await page.getByRole("button", { name: "New Bot" }).hover();
+			// The tooltip opens after its delay.
+			await page.waitForTimeout(700);
+		},
+		refs: { "icon-button-hover": '[data-ref="sidebar-new"]', tooltip: '[data-ref="tooltip"]:visible' },
+	},
+	"x-avatar-picker": { path: "/bots/finley", interact: (page) => page.getByRole("button", { name: "New Bot" }).click() },
 };
 
 const STYLE_KEYS = [
@@ -137,9 +198,10 @@ export async function compareToReference(page: Page, screen: string): Promise<vo
 				const file = resolve(REFERENCE_DIR, "measurements", `${name}.json`);
 				if (!existsSync(file)) return;
 				const measurement = JSON.parse(readFileSync(file, "utf8")) as Measurement;
-				await open(page, route, theme, width, height);
+				await openScreen(page, screen, theme, width, height);
 				const mismatches: string[] = [];
-				for (const element of measurement.elements) mismatches.push(...(await compareElement(page, element, route)));
+				for (const element of measurement.elements)
+					if (!route.ignore?.includes(element.ref)) mismatches.push(...(await compareElement(page, element, route)));
 				expect.soft(mismatches, `${name}: elements that differ from the reference`).toEqual([]);
 				// Already in Playwright's sanitized form (see maskedName in measure-reference.ts), so it is used as is.
 				const css = readFileSync(HIDE_TEXT, "utf8");
@@ -154,6 +216,18 @@ export async function compareToReference(page: Page, screen: string): Promise<vo
 			});
 }
 
+/** Puts `page` in the state the reference shows for `screen` (for looking at it beside the capture). */
+export async function openScreen(page: Page, screen: string, theme: Theme, width: number, height: number): Promise<void> {
+	const route = SCREENS[screen];
+	if (!route) throw new Error(`no KnightCode route for reference screen "${screen}"`);
+	await open(page, route, theme, width, height);
+	if (route.interact) {
+		await route.interact(page);
+		// Hover and open transitions run 150 to 300 ms.
+		await page.waitForTimeout(400);
+	}
+}
+
 async function open(page: Page, route: ScreenRoute, theme: Theme, width: number, height: number): Promise<void> {
 	await page.setViewportSize({ width, height });
 	await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
@@ -166,8 +240,26 @@ async function open(page: Page, route: ScreenRoute, theme: Theme, width: number,
 		const transcript = document.querySelector('[data-ref="transcript"]');
 		return !transcript || transcript.querySelector("[data-entry]") !== null;
 	});
-	await page.waitForTimeout(100);
-	await page.evaluate(() => document.querySelector('[data-ref="transcript"]')?.scrollTo(0, 0));
+	// Boxes are measured only once text is in its final font: the UI's faces are loaded explicitly (a status check can
+	// pass before a busy page has asked for them), then layout gets two frames.
+	await page.evaluate(async () => {
+		await Promise.all([400, 500, 600].map((weight) => document.fonts.load(`${weight} 13px "Libre Franklin Variable"`)));
+		await document.fonts.ready;
+		await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+	});
+	await page.waitForFunction(() => [...document.images].every((image) => image.complete));
+	// A view update that lands before the scroll event re-pins the transcript to the bottom, so the top is asserted
+	// until it holds (a slow machine delivers the last update late).
+	for (let attempt = 0; attempt < 10; attempt++) {
+		const atTop = await page.evaluate(async () => {
+			const transcript = document.querySelector('[data-ref="transcript"]');
+			if (!transcript) return true;
+			transcript.scrollTo(0, 0);
+			await new Promise((resolve) => setTimeout(resolve, 150));
+			return transcript.scrollTop === 0;
+		});
+		if (atTop) break;
+	}
 	await page.mouse.move(width - 1, height - 1);
 	await page.waitForTimeout(250);
 }
@@ -176,10 +268,10 @@ async function open(page: Page, route: ScreenRoute, theme: Theme, width: number,
 async function compareElement(
 	page: Page,
 	element: MeasuredElement,
-	{ scope, textSized }: ScreenRoute,
+	{ scope, textSized, refs }: ScreenRoute,
 ): Promise<string[]> {
 	// An element may carry several refs, space-separated, when two reference screens name it differently.
-	const ref = `[data-ref~="${element.ref}"]`;
+	const ref = refs?.[element.ref] ?? `[data-ref~="${element.ref}"]`;
 	const ours = (scope ? page.locator(scope).locator(ref) : page.locator(ref)).first();
 	if ((await ours.count()) === 0) return [`${element.ref}: missing data-ref`];
 	const actual = await measure(ours);

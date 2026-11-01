@@ -108,12 +108,20 @@
 	box-shadow: var(--kb-shadow-menu-ring);
 	pointer-events: none;
 }
+/* A menu's shadow is drawn by the positioning wrapper around it, as measured (the menu itself has none). */
+[data-radix-popper-content-wrapper]:has(> .kb-menu) {
+	border-radius: var(--kb-radius-menu);
+	box-shadow: var(--kb-shadow-menu);
+}
+.kb-floating.kb-menu {
+	box-shadow: none;
+}
 .kb-menu {
 	position: relative;
 	display: flex;
 	flex-direction: column;
 	gap: var(--kb-space-2);
-	min-width: 180px;
+	min-width: 200px;
 	padding: var(--kb-space-6);
 	overflow: hidden auto;
 	font-size: var(--kb-font-size-md);
@@ -182,7 +190,6 @@
 	padding: var(--kb-space-4) var(--kb-space-6);
 	border-radius: var(--kb-radius-xs);
 	background-color: var(--kb-color-surface);
-	box-shadow: var(--kb-shadow-popover);
 	color: var(--kb-color-text);
 	font-size: var(--kb-font-size-xs);
 	line-height: var(--kb-line-height-xs);

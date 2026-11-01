@@ -167,6 +167,7 @@ export function Thread({
 				mentions={mentions}
 				skills={skills}
 				context={context}
+				onTeach={botId ? () => navigate(`/bots/${encodeURIComponent(botId)}/computer?teach=1`) : undefined}
 			/>
 		</>
 	);

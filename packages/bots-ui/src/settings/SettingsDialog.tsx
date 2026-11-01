@@ -28,7 +28,7 @@ export type SettingsView = SettingsSection | "activity";
 
 type NavId = Exclude<SettingsView, "billing">;
 
-/** The sections, in nav order; billing opens the Usage & billing page. */
+/** The sections, in nav order; billing opens the Usage & Billing page. */
 export const SETTINGS_NAV: {
 	id: NavId;
 	label: string;
@@ -36,13 +36,13 @@ export const SETTINGS_NAV: {
 	page: () => ReactNode;
 	action?: () => ReactNode;
 }[] = [
-	{ id: "account", label: "Account", icon: <UserRound size={15} />, page: () => <Account /> },
+	{ id: "account", label: "General", icon: <UserRound size={15} />, page: () => <Account /> },
 	{ id: "computer", label: "Computer", icon: <Monitor size={15} />, page: () => <ComputerSettings /> },
 	{ id: "approvals", label: "Approvals", icon: <ShieldCheck size={15} />, page: () => <Approvals /> },
 	{ id: "vault", label: "Vault", icon: <KeyRound size={15} />, page: () => <Vault />, action: () => <NewVaultItem /> },
 	{
 		id: "usage",
-		label: "Usage & billing",
+		label: "Usage & Billing",
 		icon: <BarChart3 size={15} />,
 		page: () => (
 			<>

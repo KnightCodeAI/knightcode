@@ -1,15 +1,13 @@
 // The sidebar: search and new bot, every bot and group by section, and the account footer.
 import type { Bot, Group, Section } from "@knightcode/bots-protocol";
 import {
-	Activity,
 	Archive,
-	BarChart3,
 	BookOpen,
+	ChevronRight,
 	Copy,
-	Settings2,
 	FileText,
+	Gauge,
 	Inbox,
-	LifeBuoy,
 	LogOut,
 	MoreHorizontal,
 	Pin,
@@ -17,6 +15,8 @@ import {
 	Plus,
 	Search,
 	Settings,
+	Settings2,
+	Smartphone,
 	SquarePen,
 	Undo2,
 	Users,
@@ -24,7 +24,8 @@ import {
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useState } from "react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
 import { IconButton } from "../primitives/IconButton.tsx";
-import { Menu, MenuItem, MenuSeparator } from "../primitives/Menu.tsx";
+import { Menu, MenuItem, MenuSeparator, MenuSub } from "../primitives/Menu.tsx";
+import { MobileApp } from "./MobileApp.tsx";
 import { useToast } from "../primitives/Toast.tsx";
 import { BOTS, type BotList, useBots, useResource, useStore } from "../state/store.ts";
 import { navigate, type Route } from "./routes.ts";
@@ -285,9 +286,17 @@ function GroupRow({ group, active }: { group: Group; active: boolean }) {
 function Footer({ onShowArchived }: { onShowArchived: () => void }) {
 	const { data: account } = useResource("account", (api) => api.getAccount({}));
 	const { data: catalog } = useResource("catalog", (api) => api.listCatalog({}));
-	const connected = (catalog?.entries ?? []).filter((entry) => entry.connection?.status === "connected").slice(0, 3);
-	const shown = connected.length > 0 ? connected : (catalog?.entries ?? []).slice(0, 3);
+	// Always three logos, as measured: the connected apps first, then the catalog's first ones.
+	const entries = catalog?.entries ?? [];
+	const isConnected = (entry: (typeof entries)[number]) => entry.connection?.status === "connected";
+	const shown = [...entries.filter(isConnected), ...entries.filter((entry) => !isConnected(entry))].slice(0, 3);
 	const initial = (account?.name || account?.email || "?").slice(0, 1).toUpperCase();
+	const { data: billing } = useResource("billing", (api) => api.getBilling({}));
+	const used = billing?.computerHours.used ?? 0;
+	const included = billing?.computerHours.included ?? 0;
+	const percent = included ? Math.min(100, Math.round((used / included) * 100)) : 0;
+	const planLabel = billing?.plan === "trial" ? "Trial" : billing?.plan === "active" ? "Bots plan" : "No plan";
+	const [mobile, setMobile] = useState(false);
 	return (
 		<div className="kb-sidebar__footer" data-ref="sidebar-footer">
 			<div>
@@ -309,6 +318,7 @@ function Footer({ onShowArchived }: { onShowArchived: () => void }) {
 				<Menu
 					label="Account"
 					side="top"
+					className="kb-account-menu"
 					trigger={
 						<button
 							type="button"
@@ -320,35 +330,35 @@ function Footer({ onShowArchived }: { onShowArchived: () => void }) {
 						</button>
 					}
 				>
-					<MenuItem icon={<Inbox size={14} />} onSelect={() => navigate({ name: "inbox" })}>
-						Inbox
+					<MenuItem
+						icon={<Gauge size={14} />}
+						hint={
+							<>
+								{percent}% used <ChevronRight size={14} />
+							</>
+						}
+						onSelect={() => navigate({ name: "settings", section: "usage" })}
+					>
+						{planLabel}
 					</MenuItem>
-					<MenuItem icon={<FileText size={14} />} onSelect={() => navigate({ name: "pages" })}>
-						Pages
+					<MenuItem icon={<Smartphone size={14} />} onSelect={() => setMobile(true)}>
+						Get Bots for mobile
 					</MenuItem>
-					<MenuItem icon={<BookOpen size={14} />} onSelect={() => navigate({ name: "skills" })}>
-						Skills
-					</MenuItem>
-					<MenuItem icon={<Activity size={14} />} onSelect={() => navigate({ name: "activity" })}>
-						Activity
-					</MenuItem>
-					<MenuItem icon={<BarChart3 size={14} />} onSelect={() => navigate({ name: "settings", section: "usage" })}>
-						Usage
-					</MenuItem>
-					<MenuItem icon={<Archive size={14} />} onSelect={onShowArchived}>
-						Archived bots
-					</MenuItem>
-					<MenuSeparator />
+					<MenuSub icon={<BookOpen size={14} />} label="Support">
+						<MenuItem onSelect={() => window.open("https://knightcode.dev/docs", "_blank", "noopener")}>
+							Help center
+						</MenuItem>
+						<MenuItem onSelect={() => window.open("https://knightcode.dev/changelog", "_blank", "noopener")}>
+							What's new
+						</MenuItem>
+					</MenuSub>
 					<MenuItem icon={<Settings size={14} />} onSelect={() => navigate({ name: "settings", section: "account" })}>
 						Settings
 					</MenuItem>
-					<MenuItem
-						icon={<LifeBuoy size={14} />}
-						onSelect={() => window.open("https://knightcode.dev/docs", "_blank", "noopener")}
-					>
-						Support
-					</MenuItem>
 					<MenuSeparator />
+					<MenuItem icon={<Archive size={14} />} onSelect={onShowArchived}>
+						Archived bots
+					</MenuItem>
 					<MenuItem icon={<LogOut size={14} />} onSelect={() => navigate("/logout")}>
 						Log out
 					</MenuItem>
@@ -369,6 +379,7 @@ function Footer({ onShowArchived }: { onShowArchived: () => void }) {
 						))}
 					</span>
 				</button>
+				{mobile && <MobileApp onClose={() => setMobile(false)} />}
 			</div>
 		</div>
 	);

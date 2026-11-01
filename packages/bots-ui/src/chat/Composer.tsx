@@ -30,12 +30,14 @@ export interface ComposerProps {
 	skills: Suggestion[];
 	/** Set from outside (Reply, Quote): merged into the draft. */
 	context?: { replyTo?: { id: string; text: string }; quote?: string; nonce: number };
+	/** Opens Teach a task on the bot's computer; a group chat has none. */
+	onTeach?: () => void;
 }
 
 type Trigger = { char: "@" | "/"; start: number; query: string };
 
 /** The composer at the foot of a chat. */
-export function Composer({ placeholder, running, onSend, onStop, mentions, skills, context }: ComposerProps) {
+export function Composer({ placeholder, running, onSend, onStop, mentions, skills, context, onTeach }: ComposerProps) {
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<File[]>([]);
 	const [replyTo, setReplyTo] = useState<Draft["replyTo"]>();
@@ -244,9 +246,11 @@ export function Composer({ placeholder, running, onSend, onStop, mentions, skill
 						<MenuItem icon={<Paperclip size={14} />} onSelect={() => fileInput.current?.click()}>
 							Attach files
 						</MenuItem>
-						<MenuItem icon={<Slash size={14} />} onSelect={() => insertAtCaret("/")}>
-							Run a skill
-						</MenuItem>
+						{onTeach && (
+							<MenuItem icon={<RecordMark />} onSelect={onTeach}>
+								Teach a task
+							</MenuItem>
+						)}
 					</Menu>
 					<input
 						ref={fileInput}
@@ -324,5 +328,15 @@ function Chip({
 				<X size={12} />
 			</button>
 		</span>
+	);
+}
+
+/** Teach a task's mark: a record button, a solid dot in a ring. */
+function RecordMark() {
+	return (
+		<svg width={14} height={14} viewBox="0 0 14 14" className="kb-record-icon" aria-hidden>
+			<circle cx={7} cy={7} r={5.75} fill="none" stroke="currentColor" strokeWidth={1.5} />
+			<circle cx={7} cy={7} r={3.5} fill="currentColor" />
+		</svg>
 	);
 }

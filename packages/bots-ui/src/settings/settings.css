@@ -474,6 +474,7 @@
 	height: 68px;
 }
 .kb-set-header-button.kb-button {
+	background-color: var(--kb-color-inverse);
 	height: 30px;
 	padding: 6px 12px;
 	font-size: var(--kb-font-size-sm);
@@ -577,7 +578,11 @@
 	gap: var(--kb-space-6);
 	height: 32px;
 	margin-left: auto;
-	padding: 0 9px 0 10px;
+	/* The border's pixel comes out of the padding, so the field stays where it was measured. */
+	padding: 0 8px 0 9px;
+	border: 1px solid var(--kb-color-border);
+	border-radius: var(--kb-radius-full);
+	background-color: var(--kb-color-fill);
 	color: var(--kb-color-text-tertiary);
 }
 .kb-vault__search input {

@@ -1,12 +1,13 @@
 // The vault: API credentials, website logins and command variables. Values are write-only: never shown, never returned
 // by the API, never given to the model. Items can be renamed only by replacing them.
 import type { VaultItem } from "@knightcode/bots-protocol";
-import { Plus, Search, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, KeyRound, LogIn, Search, Terminal, Trash2 } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { formatDay } from "../chat/layout.ts";
 import { Button } from "../primitives/Button.tsx";
 import { Dialog } from "../primitives/Dialog.tsx";
 import { Input } from "../primitives/Input.tsx";
+import { Menu, MenuItem } from "../primitives/Menu.tsx";
 import { Select } from "../primitives/Select.tsx";
 import { navigate, useQueryParam } from "../shell/routes.ts";
 import { useResource, useStore } from "../state/store.ts";
@@ -20,19 +21,32 @@ const KINDS: { value: VaultItem["kind"] | "all"; label: string }[] = [
 	{ value: "env", label: "Variables" },
 ];
 
-/** The header button; it opens the editor through ?new=1. */
+/** The header button: a menu of the kinds an item can be; each opens the editor through ?new=<kind>. */
 export function NewVaultItem() {
 	return (
-		<Button
-			variant="primary"
-			size="sm"
-			className="kb-set-header-button"
-			onClick={() => navigate("/settings/vault?new=1")}
+		<Menu
+			label="New vault item"
+			align="end"
+			trigger={
+				<Button variant="primary" size="sm" className="kb-set-header-button">
+					New item <ChevronDown size={16} />
+				</Button>
+			}
 		>
-			New item <Plus size={16} />
-		</Button>
+			{NEW_KINDS.map((k) => (
+				<MenuItem key={k.value} icon={k.icon} onSelect={() => navigate(`/settings/vault?new=${k.value}`)}>
+					{k.label}
+				</MenuItem>
+			))}
+		</Menu>
 	);
 }
+
+const NEW_KINDS: { value: VaultItem["kind"]; label: string; icon: ReactNode }[] = [
+	{ value: "api", label: "API key", icon: <KeyRound size={14} /> },
+	{ value: "login", label: "Login", icon: <LogIn size={14} /> },
+	{ value: "env", label: "Variable", icon: <Terminal size={14} /> },
+];
 
 /** The vault page. */
 export function Vault() {
@@ -40,7 +54,7 @@ export function Vault() {
 	const { data } = useResource("vault", (api) => api.listVault({}));
 	const [kind, setKind] = useState<VaultItem["kind"] | "all">("all");
 	const [query, setQuery] = useState("");
-	const creating = useQueryParam("new") !== null;
+	const creating = useQueryParam("new");
 	const items = data?.items ?? [];
 	const needle = query.trim().toLowerCase();
 	const shown = items.filter(
@@ -75,7 +89,7 @@ export function Vault() {
 					<input
 						type="search"
 						aria-label="Search the vault"
-						placeholder="Search"
+						placeholder="Search Vault"
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
 						data-ref="search"
@@ -116,15 +130,20 @@ export function Vault() {
 				<p className="kb-set-section__hint">Add one with New item and the Variable kind.</p>
 			</SettingsSection>
 			<OnePassword />
-			{creating && <VaultEditor onClose={() => navigate("/settings/vault")} />}
+			{creating !== null && (
+				<VaultEditor
+					initialKind={NEW_KINDS.some((k) => k.value === creating) ? (creating as VaultItem["kind"]) : "api"}
+					onClose={() => navigate("/settings/vault")}
+				/>
+			)}
 		</>
 	);
 }
 
 /** New item: the value goes in once and is never read back. */
-function VaultEditor({ onClose }: { onClose: () => void }) {
+function VaultEditor({ initialKind, onClose }: { initialKind: VaultItem["kind"]; onClose: () => void }) {
 	const store = useStore();
-	const [kind, setKind] = useState<VaultItem["kind"]>("api");
+	const [kind, setKind] = useState<VaultItem["kind"]>(initialKind);
 	const [name, setName] = useState("");
 	const [origin, setOrigin] = useState("");
 	const [injection, setInjection] = useState<NonNullable<VaultItem["injection"]>>("bearer");

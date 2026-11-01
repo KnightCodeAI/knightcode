@@ -687,3 +687,21 @@
 	min-width: 0;
 	margin-right: auto;
 }
+
+/* The account menu: as wide as measured. */
+.kb-account-menu {
+	width: 228px;
+}
+/* "Get Bots for mobile". */
+.kb-mobile-app p {
+	margin: 0;
+}
+.kb-mobile-app__address {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: var(--kb-space-8) var(--kb-space-12);
+	border-radius: var(--kb-radius-md);
+	background-color: var(--kb-color-fill);
+	font-family: var(--kb-font-mono);
+}

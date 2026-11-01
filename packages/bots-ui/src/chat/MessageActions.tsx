@@ -36,7 +36,12 @@ export function MessageActions({
 		return text && bubble ? text : undefined;
 	};
 	return (
-		<div className="kb-hover-actions" role="toolbar" aria-label={`Message actions for ${speaker} message`}>
+		<div
+			className="kb-hover-actions"
+			role="toolbar"
+			aria-label={`Message actions for ${speaker} message`}
+			data-ref="message-actions"
+		>
 			<Popover
 				label="Reactions"
 				side="top"

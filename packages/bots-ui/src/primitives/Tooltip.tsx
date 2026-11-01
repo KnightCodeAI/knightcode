@@ -17,7 +17,13 @@ export function Tooltip({ content, children, side = "bottom" }: TooltipProps) {
 			<TooltipPrimitive.Root>
 				<TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
 				<TooltipPrimitive.Portal container={layer}>
-					<TooltipPrimitive.Content className="kb-tooltip" side={side} sideOffset={8} collisionPadding={8}>
+					<TooltipPrimitive.Content
+						className="kb-tooltip"
+						side={side}
+						sideOffset={8}
+						collisionPadding={8}
+						data-ref="tooltip"
+					>
 						{content}
 					</TooltipPrimitive.Content>
 				</TooltipPrimitive.Portal>
