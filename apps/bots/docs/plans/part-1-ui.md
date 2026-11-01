@@ -40,12 +40,12 @@ Shared pattern for every screen task below:
   `settings-vault`, `settings-payments`, `settings-channels`,
   `settings-billing`, `onboarding`.
 
-- [ ] **Step 1: Read the reference notes**
+- [x] **Step 1: Read the reference notes**
 
 Read `C:\Users\Raghav\kc-worktrees\kc-bots-reference\reference.md`.
 Expected: you know the app, how to launch it, and the measure-only rule.
 
-- [ ] **Step 2: Write `measure-reference.ts`**
+- [x] **Step 2: Write `measure-reference.ts`**
 
 `measureReference({ cdpUrl: string; capture: string; out: string }): Promise<void>`:
 connect with Playwright `chromium.connectOverCDP`, run each screen's
@@ -54,7 +54,7 @@ app), then write a PNG and a measurements file per screen for each listed
 viewport (1440x900 and 1280x800). It reads computed styles and boxes from
 the live DOM only and never reads the app's files.
 
-- [ ] **Step 3: Capture every screen**
+- [x] **Step 3: Capture every screen**
 
 Quit any running instance first (the app is single-instance, so a second
 launch only focuses the first and ignores the flag). Launch the reference
@@ -64,14 +64,14 @@ above, then run the script.
 Expected: one PNG and one JSON per screen and viewport in the reference
 folder; light and dark captures where the app has both.
 
-- [ ] **Step 4: Derive tokens and the reference seed**
+- [x] **Step 4: Derive tokens and the reference seed**
 
 Write `tokens.ts` from the measured values, and `seed.json` with the same
 bot names, avatars, messages and items visible in the captures.
 Expected: every colour, size and duration in the measurements maps to a
 token.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/scripts/measure-reference.ts packages/bots-ui/src/tokens/tokens.ts

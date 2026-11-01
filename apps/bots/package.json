@@ -5,13 +5,14 @@
 	"type": "module",
 	"scripts": {
 		"dev:worker": "wrangler dev",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
 		"test": "vitest --run",
 		"verify": "bun scripts/verify.ts"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "0.22.0",
 		"@cloudflare/workers-types": "5.20260907.1",
+		"@playwright/test": "1.64.1",
 		"vitest": "4.1.12",
 		"wrangler": "4.124.0"
 	}
