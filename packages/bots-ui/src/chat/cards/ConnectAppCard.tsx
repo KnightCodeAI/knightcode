@@ -9,28 +9,38 @@ type ConnectAppData = Extract<Card, { type: "connect-app" }>;
 export function ConnectAppCard({ card, onConnect }: { card: ConnectAppData; onConnect: () => void }) {
 	return (
 		<div className="kb-msg-card" role="group" aria-label={`Connect ${card.name}`} data-ref="connector-card">
-			<section className="kb-msg-card__surface">
+			<section className="kb-msg-card__surface" data-ref="card">
 				<div className="kb-connect-card">
-					<span className="kb-tool-icon" aria-hidden>
-						{card.name.slice(0, 1)}
+					<span className="kb-connect-card__icon" data-ref="card-icon">
+						<span className="kb-tool-icon" aria-hidden>
+							{card.name.slice(0, 1)}
+						</span>
 					</span>
 					<div className="kb-connect-card__text">
-						<p className="kb-connect-card__name">
-							{card.name}
+						<div className="kb-connect-card__title">
+							<p className="kb-connect-card__name" data-ref="card-title">
+								{card.name}
+							</p>
 							{card.verified && (
 								<span className="kb-connect-card__verified" role="img" aria-label="Official">
 									<BadgeCheck size={16} fill="currentColor" color="var(--kb-color-surface)" strokeWidth={2} />
 								</span>
 							)}
-						</p>
-						<div className="kb-connect-card__description">{card.description}</div>
+						</div>
+						<div className="kb-connect-card__description" data-ref="card-subtitle">
+							{card.description}
+						</div>
 					</div>
-					<Button variant="primary" onClick={onConnect} data-ref="connector-card-button">
+					<Button variant="primary" onClick={onConnect} data-ref="connector-card-button card-button">
 						Connect
 					</Button>
 				</div>
 			</section>
-			{card.footnote && <p className="kb-msg-card__footnote">{card.footnote}</p>}
+			{card.footnote && (
+				<p className="kb-msg-card__footnote" data-ref="card-footnote">
+					{card.footnote}
+				</p>
+			)}
 		</div>
 	);
 }

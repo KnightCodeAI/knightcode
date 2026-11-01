@@ -221,7 +221,7 @@ git commit -m "feat(bots): add the app shell and navigation"
   from the sandbox origin passed in config (never the app origin) and
   forwards actions to the API, not to a local bridge.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/chat.e2e.ts
@@ -252,20 +252,20 @@ for (const screen of ["chat", "chat-streaming", "composer-mention", "card-questi
 	test(`${screen} matches the reference`, async ({ page }) => compareToReference(page, screen));
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `bunx playwright test --project ui chat`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the chat components** ("Messaged <bot>" and
+- [x] **Step 3: Implement the chat components** ("Messaged <bot>" and
   "Message from <bot>" rows open a read-only exchange; "Show tools used" is
   off by default; Mermaid and charts render from the reply)
 
-- [ ] **Step 4: Run ui, then run reference for the six chat screens**
+- [x] **Step 4: Run ui, then run reference for the six chat screens**
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src/chat apps/bots/web/e2e/chat.e2e.ts

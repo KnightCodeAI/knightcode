@@ -2,6 +2,7 @@
 import { type ApiClient, type WebSocketLike } from "@knightcode/bots-protocol";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatView } from "./chat/ChatView.tsx";
+import { SandboxOriginContext } from "./chat/McpAppFrame.tsx";
 import { ToastProvider } from "./primitives/Toast.tsx";
 import { CommandK, useCommandKShortcut } from "./shell/CommandK.tsx";
 import { InfoPane } from "./shell/InfoPane.tsx";
@@ -14,10 +15,12 @@ export interface BotsAppProps {
 	api: ApiClient;
 	connect: () => WebSocketLike;
 	platform: "web" | "desktop";
+	/** The separate origin MCP App panels load from; panels are not shown without one. */
+	sandboxOrigin?: string;
 }
 
 /** The whole UI. The host provides the API, a socket factory and which platform it runs on. */
-export function BotsApp({ api, connect, platform }: BotsAppProps) {
+export function BotsApp({ api, connect, platform, sandboxOrigin }: BotsAppProps) {
 	const store = useMemo(
 		() =>
 			new BotsStore(api, new ThreadSocket(connect, async () => (await api.issueTicket({ scope: "socket" })).ticket)),
@@ -26,11 +29,13 @@ export function BotsApp({ api, connect, platform }: BotsAppProps) {
 	useEffect(() => () => store.socket.close(), [store]);
 	return (
 		<StoreContext.Provider value={store}>
-			<ToastProvider>
-				<div className="kb-app" data-platform={platform} style={{ height: "100%" }}>
-					<Shell />
-				</div>
-			</ToastProvider>
+			<SandboxOriginContext.Provider value={sandboxOrigin}>
+				<ToastProvider>
+					<div className="kb-app" data-platform={platform} style={{ height: "100%" }}>
+						<Shell />
+					</div>
+				</ToastProvider>
+			</SandboxOriginContext.Provider>
 		</StoreContext.Provider>
 	);
 }

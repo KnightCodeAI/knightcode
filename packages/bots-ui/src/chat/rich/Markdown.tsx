@@ -2,6 +2,8 @@
 // source is shown as text.
 import { type Token, type Tokens, lexer } from "marked";
 import { type ReactNode, useMemo } from "react";
+import { Chart, parseChartSpec } from "./Chart.tsx";
+import { Mermaid } from "./Mermaid.tsx";
 
 export interface MarkdownProps {
 	text: string;
@@ -11,7 +13,11 @@ export interface MarkdownProps {
 /** Renders `text` as prose. */
 export function Markdown({ text, className }: MarkdownProps) {
 	const tokens = useMemo(() => lexer(text, { gfm: true, breaks: false }), [text]);
-	return <div className={className}>{blocks(tokens)}</div>;
+	return (
+		<div className={className} data-ref="message-prose">
+			{blocks(tokens)}
+		</div>
+	);
 }
 
 function blocks(tokens: Token[]): ReactNode[] {
@@ -21,7 +27,11 @@ function blocks(tokens: Token[]): ReactNode[] {
 function block(token: Token, key: number): ReactNode {
 	switch (token.type) {
 		case "paragraph":
-			return <p key={key}>{inline((token as Tokens.Paragraph).tokens)}</p>;
+			return (
+				<p key={key} data-ref="message-paragraph">
+					{inline((token as Tokens.Paragraph).tokens)}
+				</p>
+			);
 		case "heading": {
 			const heading = token as Tokens.Heading;
 			const Tag = `h${Math.min(6, Math.max(1, heading.depth))}` as "h1";
@@ -30,7 +40,7 @@ function block(token: Token, key: number): ReactNode {
 		case "list": {
 			const list = token as Tokens.List;
 			const items = list.items.map((item, i) => (
-				<li key={i}>
+				<li key={i} data-ref="message-list-item">
 					{item.task && <input type="checkbox" checked={Boolean(item.checked)} disabled readOnly />}
 					{item.tokens.length === 1 && item.tokens[0]?.type === "text"
 						? inline((item.tokens[0] as Tokens.Text).tokens ?? [item.tokens[0]])
@@ -38,21 +48,29 @@ function block(token: Token, key: number): ReactNode {
 				</li>
 			));
 			return list.ordered ? (
-				<ol key={key} start={typeof list.start === "number" ? list.start : undefined}>
+				<ol key={key} data-ref="message-list" start={typeof list.start === "number" ? list.start : undefined}>
 					{items}
 				</ol>
 			) : (
-				<ul key={key}>{items}</ul>
+				<ul key={key} data-ref="message-list">
+					{items}
+				</ul>
 			);
 		}
 		case "blockquote":
 			return <blockquote key={key}>{blocks((token as Tokens.Blockquote).tokens)}</blockquote>;
-		case "code":
+		case "code": {
+			const code = token as Tokens.Code;
+			const lang = code.lang?.trim().toLowerCase();
+			if (lang === "mermaid") return <Mermaid key={key} source={code.text} />;
+			const spec = lang === "chart" ? parseChartSpec(code.text) : undefined;
+			if (spec) return <Chart key={key} spec={spec} />;
 			return (
 				<pre key={key}>
-					<code>{(token as Tokens.Code).text}</code>
+					<code>{code.text}</code>
 				</pre>
 			);
+		}
 		case "table": {
 			const table = token as Tokens.Table;
 			return (

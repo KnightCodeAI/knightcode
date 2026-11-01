@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Markdown, safeHref } from "../src/chat/rich/Markdown.tsx";
 
-const html = (text: string) => renderToStaticMarkup(createElement(Markdown, { text }));
+// data-ref attributes are measurement hooks, not content.
+const html = (text: string) =>
+	renderToStaticMarkup(createElement(Markdown, { text })).replace(/ data-ref="[^"]*"/g, "");
 
 describe("Markdown", () => {
 	it("renders paragraphs and lists", () => {

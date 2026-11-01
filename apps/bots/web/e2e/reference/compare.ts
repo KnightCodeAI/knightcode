@@ -29,6 +29,8 @@ interface ScreenRoute {
 	steps?: (page: Page) => Promise<void>;
 	/** KnightCode regions to leave out of the pixel comparison, matching the reference's masked regions. */
 	mask?: string[];
+	/** Look refs up inside this element: the reference measured a stand-in card that shares its chrome. */
+	scope?: string;
 }
 
 const typeInComposer = (text: string) => async (page: Page) => {
@@ -42,6 +44,8 @@ const TRANSCRIPT = '[data-ref="transcript"]';
 const PANE = '[data-ref="info-pane"]';
 const TABPANEL = '[data-ref="info-tabpanel"]';
 const SETTINGS_BODY = '[data-ref="settings-body"]';
+/** Approval and takeover cards share the connect card's chrome, which is what the reference shows. */
+const CONNECT_CARD = '[data-card="connect-app"]';
 
 /** Screen id -> KnightCode route. Bot `finley` is the reference seed's bot. */
 export const SCREENS: Record<string, ScreenRoute> = {
@@ -50,8 +54,8 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	"chat-streaming": { path: "/bots/finley?pane=closed", steps: typeInComposer("Review PR 12"), mask: [TRANSCRIPT] },
 	"composer-mention": { path: "/bots/finley", steps: typeInComposer("@"), mask: [TRANSCRIPT, PANE] },
 	"card-question": { path: "/bots/finley?pane=closed" },
-	"card-approval": { path: "/bots/finley?pane=closed", mask: [TRANSCRIPT] },
-	"card-takeover": { path: "/bots/finley?pane=closed", mask: [TRANSCRIPT] },
+	"card-approval": { path: "/bots/finley?pane=closed", mask: [TRANSCRIPT], scope: CONNECT_CARD },
+	"card-takeover": { path: "/bots/finley?pane=closed", mask: [TRANSCRIPT], scope: CONNECT_CARD },
 	"bot-create": { path: "/new" },
 	templates: { path: "/new?tab=templates", mask: ['[data-ref="dialog-body"]'] },
 	"bot-settings": { path: "/bots/finley/settings" },
@@ -103,14 +107,15 @@ export async function compareToReference(page: Page, screen: string): Promise<vo
 				const measurement = JSON.parse(readFileSync(file, "utf8")) as Measurement;
 				await open(page, route, theme, width, height);
 				const mismatches: string[] = [];
-				for (const element of measurement.elements) mismatches.push(...(await compareElement(page, element)));
+				for (const element of measurement.elements) mismatches.push(...(await compareElement(page, element, route.scope)));
 				expect.soft(mismatches, `${name}: elements that differ from the reference`).toEqual([]);
 				// Already in Playwright's sanitized form (see maskedName in measure-reference.ts), so it is used as is.
+				await paintMasks(page, [AVATARS, ...(route.mask ?? [])]);
 				await expect.soft(page).toHaveScreenshot(`${screen}-${theme}-${width}x${height}-masked.png`, {
-					mask: [AVATARS, ...(route.mask ?? [])].map((selector) => page.locator(selector)),
 					stylePath: HIDE_TEXT,
 					maxDiffPixelRatio: 0.005,
 				});
+				await paintMasks(page, []);
 			});
 }
 
@@ -132,9 +137,31 @@ async function open(page: Page, route: ScreenRoute, theme: Theme, width: number,
 	await page.waitForTimeout(250);
 }
 
+/**
+ * Covers every element matching `selectors` with a solid box, exactly as the reference capture did: fixed boxes at the
+ * top z-index, which top-layer content (popovers, open dialogs) still paints above. Playwright's own `mask` would
+ * also cover the top layer. An empty list removes the boxes.
+ */
+async function paintMasks(page: Page, selectors: string[]): Promise<void> {
+	await page.evaluate((selectors) => {
+		for (const old of document.querySelectorAll("[data-compare-mask]")) old.remove();
+		for (const selector of selectors)
+			for (const element of document.querySelectorAll(selector)) {
+				const box = element.getBoundingClientRect();
+				if (box.width === 0 || box.height === 0) continue;
+				const div = document.createElement("div");
+				div.setAttribute("data-compare-mask", "");
+				div.style.cssText = `position:fixed;left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px;background:#FF00FF;z-index:2147483647;pointer-events:none`;
+				document.body.append(div);
+			}
+	}, selectors);
+}
+
 /** What differs between our `data-ref` element and the measured one, as readable lines. */
-async function compareElement(page: Page, element: MeasuredElement): Promise<string[]> {
-	const ours = page.locator(`[data-ref="${element.ref}"]`).first();
+async function compareElement(page: Page, element: MeasuredElement, scope?: string): Promise<string[]> {
+	// An element may carry several refs, space-separated, when two reference screens name it differently.
+	const ref = `[data-ref~="${element.ref}"]`;
+	const ours = (scope ? page.locator(scope).locator(ref) : page.locator(ref)).first();
 	if ((await ours.count()) === 0) return [`${element.ref}: missing data-ref`];
 	const actual = await measure(ours);
 	const out: string[] = [];

@@ -14,11 +14,8 @@ export function QuestionCard({ card, onAnswer }: { card: QuestionCardData; onAns
 		<div className="kb-msg-card" role="group" aria-label={card.question} data-ref="card">
 			<section className="kb-msg-card__surface">
 				<div className="kb-msg-card__head">
-					<p
-						className={`kb-msg-card__question${answered ? " kb-msg-card__question--answered" : ""}`}
-						data-ref="card-question"
-					>
-						{card.question}
+					<p className="kb-msg-card__question" data-ref="card-question">
+						<span className={answered ? "kb-msg-card__question--answered" : undefined}>{card.question}</span>
 					</p>
 				</div>
 				<div className="kb-answers" role="group" aria-label="Your answer" data-ref="card-answer">
@@ -36,8 +33,10 @@ export function QuestionCard({ card, onAnswer }: { card: QuestionCardData; onAns
 								<span className="kb-keycap" data-ref="card-key">
 									{letter}
 								</span>
-								<span className="kb-answer__text" data-ref="card-choice">
-									{choice}
+								<span className="kb-answer__text">
+									<span className="kb-answer__label" data-ref="card-choice">
+										{choice}
+									</span>
 								</span>
 							</button>
 						);

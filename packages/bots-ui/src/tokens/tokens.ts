@@ -35,7 +35,7 @@ export const colors = {
 		scrim: "rgba(0, 0, 0, 0.698)",
 		/** The hairline beside the desktop window controls. */
 		windowDivider: "rgba(245, 245, 245, 0.16)",
-		/** Ink on small status marks (the main bot dot). */
+		/** Ink on small accent marks (the main bot dot, an answered key cap). */
 		markInk: "rgb(245, 245, 245)",
 		onAccent: "rgb(255, 255, 255)",
 	},
@@ -70,7 +70,7 @@ export const colors = {
 		scrim: "rgba(0, 0, 0, 0.5)",
 		/** The hairline beside the desktop window controls. */
 		windowDivider: "rgba(28, 28, 28, 0.16)",
-		/** Ink on small status marks (the main bot dot). */
+		/** Ink on small accent marks (the main bot dot, an answered key cap). */
 		markInk: "rgb(255, 255, 255)",
 		onAccent: "rgb(255, 255, 255)",
 	},

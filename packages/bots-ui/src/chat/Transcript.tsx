@@ -1,19 +1,19 @@
 // A thread's transcript: day stamps and rows, scrolled to the latest entry as it grows.
 import type { Bot, ConversationView } from "@knightcode/bots-protocol";
 import { useLayoutEffect, useMemo, useRef } from "react";
-import type { CardActions } from "./cards/CardView.tsx";
 import { formatDay, layoutEntries } from "./layout.ts";
-import { Message } from "./Message.tsx";
+import { type ChatActions, Message } from "./Message.tsx";
 
 export interface TranscriptProps {
 	view: ConversationView | undefined;
 	bots: ReadonlyMap<string, Bot>;
+	botId?: string;
 	botName?: string;
-	actions: CardActions;
+	actions: ChatActions;
 }
 
 /** The scrolling transcript. Stays pinned to the bottom unless the reader scrolled up. */
-export function Transcript({ view, bots, botName, actions }: TranscriptProps) {
+export function Transcript({ view, bots, botId, botName, actions }: TranscriptProps) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const pinned = useRef(true);
 	const rows = useMemo(() => layoutEntries(view?.entries ?? []), [view?.entries]);
@@ -49,6 +49,7 @@ export function Transcript({ view, bots, botName, actions }: TranscriptProps) {
 							entry={row.entry}
 							place={row.place}
 							bots={bots}
+							botId={botId}
 							botName={botName}
 							actions={actions}
 						/>
