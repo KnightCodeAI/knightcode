@@ -113,8 +113,8 @@ export async function measureReference(options: { cdpUrl: string; capture: strin
 					// The same screen with its mask boxes painted, as Playwright paints masked elements on the other side.
 					await paintMasks(page, measurement.mask);
 					const masked = (await session.send("Page.captureScreenshot", { format: "png" })) as { data: string };
-					writeFileSync(join(options.out, "screens", `${name}.masked.png`), Buffer.from(masked.data, "base64"));
-					await paintMasks(page, []);
+					writeFileSync(join(options.out, "screens", maskedName(screen.id, theme, width, height)), Buffer.from(masked.data, "base64"));
+					await paintMasks(page, null);
 					// The whole visible tree, for building parts no ref names, at the main viewport only (it is large).
 					if (width === capture.viewports[0]?.[0])
 						writeFileSync(join(options.out, "measurements", `${name}.tree.json`), JSON.stringify(await measureTree(page)));
@@ -167,14 +167,30 @@ async function settle(page: Page): Promise<void> {
 	await page.waitForTimeout(100);
 }
 
+/**
+ * The masked capture's file name. Playwright sanitizes snapshot names (dots become dashes), so the name is written
+ * in its sanitized form and comparisons ask for exactly this name.
+ */
+export function maskedName(screen: string, theme: Theme, width: number, height: number): string {
+	return `${screen}-${theme}-${width}x${height}-masked.png`;
+}
+
+/** The stylesheet that hides text and icon glyphs in masked captures; the comparison injects the same file. */
+const HIDE_TEXT_CSS = readFileSync(new URL("../web/e2e/reference/hide-text.css", import.meta.url), "utf8");
+
 /** Playwright's default mask colour. */
 export const MASK_COLOR = "#FF00FF";
 
-/** Covers each box with a solid mask overlay, replacing any overlays from the previous call. */
-async function paintMasks(page: Page, boxes: Measurement["mask"]): Promise<void> {
+/** Hides text and covers each box with a solid mask overlay; `null` removes both. */
+async function paintMasks(page: Page, boxes: Measurement["mask"] | null): Promise<void> {
 	await page.evaluate(
-		({ boxes, color }) => {
+		({ boxes, color, css }) => {
 			for (const old of document.querySelectorAll("[data-measure-mask]")) old.remove();
+			if (!boxes) return;
+			const style = document.createElement("style");
+			style.setAttribute("data-measure-mask", "");
+			style.textContent = css;
+			document.head.append(style);
 			for (const box of boxes) {
 				const div = document.createElement("div");
 				div.setAttribute("data-measure-mask", "");
@@ -182,7 +198,7 @@ async function paintMasks(page: Page, boxes: Measurement["mask"]): Promise<void>
 				document.body.append(div);
 			}
 		},
-		{ boxes, color: MASK_COLOR },
+		{ boxes, color: MASK_COLOR, css: HIDE_TEXT_CSS },
 	);
 }
 

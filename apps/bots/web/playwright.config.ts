@@ -11,6 +11,9 @@ export default defineConfig({
 	testMatch: "**/*.e2e.ts",
 	fullyParallel: true,
 	forbidOnly: Boolean(process.env.CI),
+	// Never write a missing snapshot: in the reference project that would put our own screen where the reference
+	// capture belongs. New baselines are made explicitly with --update-snapshots.
+	updateSnapshots: "none",
 	reporter: process.env.CI ? "github" : "list",
 	use: {
 		baseURL: `http://localhost:${PORT}`,

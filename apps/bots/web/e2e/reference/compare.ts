@@ -3,6 +3,7 @@
 // pixels differ, masked regions excluded). Skips when the reference folder is absent.
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { REFERENCE_DIR } from "../../vite.config.ts";
 
@@ -35,7 +36,8 @@ const typeInComposer = (text: string) => async (page: Page) => {
 	await page.keyboard.type(text);
 };
 
-const AVATARS = "[data-avatar]";
+const AVATARS = "[data-avatar-box]";
+const HIDE_TEXT = fileURLToPath(new URL("./hide-text.css", import.meta.url));
 const TRANSCRIPT = '[data-ref="transcript"]';
 const PANE = '[data-ref="info-pane"]';
 const TABPANEL = '[data-ref="info-tabpanel"]';
@@ -64,7 +66,7 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	"routine-edit": { path: "/bots/finley/routines/new", mask: [TABPANEL] },
 	activity: { path: "/activity", mask: [SETTINGS_BODY] },
 	usage: { path: "/settings/usage" },
-	pages: { path: "/bots/finley/pages" },
+	pages: { path: "/bots/finley/library" },
 	page: { path: "/pages/weekly", mask: [TRANSCRIPT, TABPANEL] },
 	inbox: { path: "/inbox", mask: [TRANSCRIPT, PANE] },
 	"catch-up": { path: "/?away=5h", mask: [TRANSCRIPT, PANE] },
@@ -100,9 +102,13 @@ export async function compareToReference(page: Page, screen: string): Promise<vo
 				if (!existsSync(file)) return;
 				const measurement = JSON.parse(readFileSync(file, "utf8")) as Measurement;
 				await open(page, route, theme, width, height);
-				for (const element of measurement.elements) await compareElement(page, element);
-				await expect.soft(page).toHaveScreenshot(`${name}.masked.png`, {
+				const mismatches: string[] = [];
+				for (const element of measurement.elements) mismatches.push(...(await compareElement(page, element)));
+				expect.soft(mismatches, `${name}: elements that differ from the reference`).toEqual([]);
+				// Already in Playwright's sanitized form (see maskedName in measure-reference.ts), so it is used as is.
+				await expect.soft(page).toHaveScreenshot(`${screen}-${theme}-${width}x${height}-masked.png`, {
 					mask: [AVATARS, ...(route.mask ?? [])].map((selector) => page.locator(selector)),
+					stylePath: HIDE_TEXT,
 					maxDiffPixelRatio: 0.005,
 				});
 			});
@@ -115,22 +121,33 @@ async function open(page: Page, route: ScreenRoute, theme: Theme, width: number,
 	await page.goto(`${route.path}${separator}seed=reference`);
 	await page.evaluate(() => document.fonts.ready);
 	await route.steps?.(page);
+	// The reference captures start with the transcript scrolled to the top, once its entries have arrived.
+	await page.waitForFunction(() => {
+		const transcript = document.querySelector('[data-ref="transcript"]');
+		return !transcript || transcript.querySelector("[data-entry]") !== null;
+	});
+	await page.waitForTimeout(100);
+	await page.evaluate(() => document.querySelector('[data-ref="transcript"]')?.scrollTo(0, 0));
 	await page.mouse.move(width - 1, height - 1);
 	await page.waitForTimeout(250);
 }
 
-async function compareElement(page: Page, element: MeasuredElement): Promise<void> {
+/** What differs between our `data-ref` element and the measured one, as readable lines. */
+async function compareElement(page: Page, element: MeasuredElement): Promise<string[]> {
 	const ours = page.locator(`[data-ref="${element.ref}"]`).first();
-	if ((await ours.count()) === 0) {
-		expect.soft(false, `missing data-ref="${element.ref}"`).toBe(true);
-		return;
-	}
+	if ((await ours.count()) === 0) return [`${element.ref}: missing data-ref`];
 	const actual = await measure(ours);
+	const out: string[] = [];
 	for (const side of ["x", "y", "width", "height"] as const)
-		expect.soft(Math.abs(actual.box[side] - element.box[side]), `${element.ref} ${side}: ours ${actual.box[side]}, reference ${element.box[side]}`).toBeLessThanOrEqual(1);
-	for (const key of STYLE_KEYS)
-		expect.soft(normalize(actual.styles[key] ?? ""), `${element.ref} ${key}`).toBe(normalize(element.styles[key] ?? ""));
+		if (Math.abs(actual.box[side] - element.box[side]) > 1) out.push(`${element.ref} ${side}: ours ${round(actual.box[side])}, reference ${round(element.box[side])}`);
+	for (const key of STYLE_KEYS) {
+		const [mine, theirs] = [normalize(actual.styles[key] ?? ""), normalize(element.styles[key] ?? "")];
+		if (mine !== theirs) out.push(`${element.ref} ${key}: ours ${mine}, reference ${theirs}`);
+	}
+	return out;
 }
+
+const round = (n: number) => Math.round(n * 10) / 10;
 
 async function measure(locator: Locator): Promise<{ box: MeasuredElement["box"]; styles: Record<string, string> }> {
 	return locator.evaluate((el) => {

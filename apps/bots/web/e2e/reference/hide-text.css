@@ -1,0 +1,18 @@
+/* Hides text and icon glyphs for pixel comparisons with the reference captures, which hide them the same way.
+   Text is checked through measured element boxes instead: the open font's glyphs cannot match pixel for pixel. */
+*,
+*::before,
+*::after {
+	color: transparent !important;
+	-webkit-text-fill-color: transparent !important;
+	text-shadow: none !important;
+	caret-color: transparent !important;
+	text-decoration-color: transparent !important;
+}
+::placeholder {
+	color: transparent !important;
+	-webkit-text-fill-color: transparent !important;
+}
+svg [stroke]:not([stroke="none"]) {
+	stroke: transparent !important;
+}
