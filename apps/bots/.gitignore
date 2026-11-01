@@ -2,3 +2,5 @@
 .wrangler/
 web/dist/
 .emulate*
+web/test-results/
+web/playwright-report/

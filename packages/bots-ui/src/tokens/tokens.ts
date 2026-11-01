@@ -31,6 +31,8 @@ export const colors = {
 		borderStrong: "rgba(245, 245, 245, 0.22)",
 		borderDisabled: "rgba(195, 195, 195, 0.3)",
 		accent: "rgb(17, 109, 210)",
+		danger: "rgb(255, 100, 99)",
+		scrim: "rgba(0, 0, 0, 0.698)",
 		onAccent: "rgb(255, 255, 255)",
 	},
 	light: {
@@ -60,6 +62,8 @@ export const colors = {
 		borderStrong: "rgba(28, 28, 28, 0.24)",
 		borderDisabled: "rgba(118, 118, 118, 0.3)",
 		accent: "rgb(22, 128, 243)",
+		danger: "rgb(207, 43, 53)",
+		scrim: "rgba(0, 0, 0, 0.5)",
 		onAccent: "rgb(255, 255, 255)",
 	},
 } as const satisfies Record<Theme, Record<string, string>>;
@@ -208,6 +212,8 @@ export const shadows = {
 		bubble:
 			"rgba(255, 255, 255, 0.03) 0px 0.5px 0px 0px inset, rgba(255, 255, 255, 0.03) 0px -0.5px 0px 0px inset, rgba(245, 245, 245, 0.04) 0px 0px 0px 0.5px inset",
 		swatchRing: "rgb(31, 31, 31) 0px 0px 0px 3px, rgba(245, 245, 245, 0.22) 0px 0px 0px 4px",
+		menu: "rgba(245, 245, 245, 0) 0px 10px 20px -3px, rgba(245, 245, 245, 0) 0px 4px 6px -4px, rgba(245, 245, 245, 0) 0px 0px 0px 1px",
+		menuRing: "rgba(245, 245, 245, 0.1) 0px 0px 0px 0.5px inset, rgb(31, 31, 31) 0px 0px 0px 0.5px inset",
 		popover:
 			"rgba(245, 245, 245, 0) 0px 4px 12px -1px, rgba(245, 245, 245, 0) 0px 2px 4px -2px, rgba(245, 245, 245, 0) 0px 0px 0px 1px",
 	},
@@ -222,6 +228,8 @@ export const shadows = {
 		bubble:
 			"rgba(255, 255, 255, 0.16) 0px 0.5px 0px 0px inset, rgba(255, 255, 255, 0.16) 0px -0.5px 0px 0px inset, rgba(28, 28, 28, 0.06) 0px 0px 0px 0.5px inset",
 		swatchRing: "rgb(255, 255, 255) 0px 0px 0px 3px, rgba(28, 28, 28, 0.24) 0px 0px 0px 4px",
+		menu: "rgba(28, 28, 28, 0.1) 0px 10px 20px -3px, rgba(28, 28, 28, 0.1) 0px 4px 6px -4px, rgba(28, 28, 28, 0.004) 0px 0px 0px 1px",
+		menuRing: "rgba(28, 28, 28, 0.12) 0px 0px 0px 0.5px inset, rgb(255, 255, 255) 0px 0px 0px 0.5px inset",
 		popover:
 			"rgba(28, 28, 28, 0.08) 0px 4px 12px -1px, rgba(28, 28, 28, 0.06) 0px 2px 4px -2px, rgba(28, 28, 28, 0.004) 0px 0px 0px 1px",
 	},

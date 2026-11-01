@@ -101,7 +101,7 @@ git commit -m "feat(bots): add UI measurement tooling and design tokens"
   `e2e/reference/compare.ts` implementing the shared pattern; the web app
   booting `BotsApp` with the fake backend when `VITE_FAKE=1`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // packages/bots-ui/test/avatar.test.ts
@@ -124,12 +124,12 @@ test("primitives gallery renders", async ({ page }) => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `bunx vitest --run` in `packages/bots-ui`; `bunx playwright test --project ui gallery` in `apps/bots/web`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement the foundation in the listed files**
+- [x] **Step 3: Implement the foundation in the listed files**
 
 A gallery route (`/__gallery`, dev only) shows every primitive and avatar.
 `packages/bots-ui` uses JSX and DOM types, which the root `tsc` (module
@@ -138,13 +138,13 @@ NodeNext, no DOM) cannot check: give it its own `tsconfig.json` (as
 `tsconfig.json` `exclude` in this commit, and give the package a
 `typecheck` script.
 
-- [ ] **Step 4: Run them to verify they pass**
+- [x] **Step 4: Run them to verify they pass**
 
 Run: the two commands above (`--update-snapshots` once for the new
 baseline)
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui apps/bots/web bun.lock

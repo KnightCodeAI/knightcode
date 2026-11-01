@@ -1,0 +1,51 @@
+/* Everything a KnightCode Bots surface needs: the font, the tokens, base rules and the primitives. */
+@import "@fontsource-variable/libre-franklin/wght.css";
+@import "./tokens/tokens.css";
+@import "./primitives/primitives.css";
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+	background-color: var(--kb-color-page);
+	color: var(--kb-color-text);
+	font-family: var(--kb-font-sans);
+	font-size: var(--kb-font-size-root);
+	font-feature-settings: var(--kb-font-features);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+	height: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+	font-feature-settings: inherit;
+}
+
+:focus-visible {
+	outline: 2px solid var(--kb-color-accent);
+	outline-offset: 2px;
+}
+
+.kb-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+	border: 0;
+}

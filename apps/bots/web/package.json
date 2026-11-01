@@ -1,0 +1,26 @@
+{
+	"name": "knightcode-bots-web",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"dev:fake": "vite --mode fake",
+		"build": "vite build",
+		"typecheck": "tsc --noEmit",
+		"e2e": "playwright test"
+	},
+	"dependencies": {
+		"@knightcode/bots-protocol": "workspace:*",
+		"@knightcode/bots-ui": "workspace:*",
+		"react": "19.2.4",
+		"react-dom": "19.2.4"
+	},
+	"devDependencies": {
+		"@playwright/test": "1.64.1",
+		"@types/react": "19.2.7",
+		"@types/react-dom": "19.2.4",
+		"@vitejs/plugin-react": "5.1.1",
+		"vite": "7.3.7"
+	}
+}
