@@ -77,7 +77,7 @@ export function Dialog({
 							variant="ghost"
 							size={closeSize}
 							tooltip={false}
-							data-ref="dialog-close"
+							data-ref="dialog-close panel-close"
 						/>
 					</DialogPrimitive.Close>
 					<LayerProvider value={layer}>

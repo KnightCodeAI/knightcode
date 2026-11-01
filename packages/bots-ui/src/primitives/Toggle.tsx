@@ -7,10 +7,12 @@ export interface ToggleProps {
 	/** The accessible name. */
 	label: string;
 	disabled?: boolean;
+	/** For screenshot comparisons. */
+	dataRef?: string;
 }
 
 /** A 32 x 20 switch whose thumb slides on the measured timing. */
-export function Toggle({ checked, onCheckedChange, label, disabled }: ToggleProps) {
+export function Toggle({ checked, onCheckedChange, label, disabled, dataRef }: ToggleProps) {
 	return (
 		<Switch.Root
 			className="kb-switch"
@@ -18,6 +20,7 @@ export function Toggle({ checked, onCheckedChange, label, disabled }: ToggleProp
 			onCheckedChange={onCheckedChange}
 			aria-label={label}
 			disabled={disabled}
+			data-ref={dataRef}
 		>
 			<Switch.Thumb className="kb-switch__thumb" />
 		</Switch.Root>

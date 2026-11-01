@@ -59,6 +59,8 @@ const TRANSCRIPT = '[data-ref="transcript"]';
 const PANE = '[data-ref="info-pane"]';
 const TABPANEL = '[data-ref="info-tabpanel"]';
 const SETTINGS_BODY = '[data-ref="settings-body"]';
+/** The open settings dialog's top-layer host: its refs, not the details pane's behind it. */
+const SETTINGS_LAYER = ".kb-layer:popover-open";
 /** Approval and takeover cards share the connect card's chrome, which is what the reference shows. */
 const CONNECT_CARD = '[data-card="connect-app"]';
 
@@ -94,13 +96,13 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	inbox: { path: "/inbox", referenceMask: true },
 	"catch-up": { path: "/?away=5h", referenceMask: true },
 	group: { path: "/groups/launch", seed: "group", referenceMask: true },
-	"settings-account": { path: "/settings/account" },
-	"settings-approvals": { path: "/settings/approvals" },
-	"settings-vault": { path: "/settings/vault" },
-	"settings-payments": { path: "/settings/payments", mask: [SETTINGS_BODY, '[data-ref="settings-nav"]'] },
-	"settings-channels": { path: "/settings/channels", mask: [SETTINGS_BODY, '[data-ref="settings-nav"]'] },
-	"settings-billing": { path: "/settings/billing" },
-	onboarding: { path: "/bots/finley?pane=closed&onboarding=1", mask: [TRANSCRIPT] },
+	"settings-account": { path: "/settings/account", referenceMask: true, scope: SETTINGS_LAYER, textSized: ["settings-control", "kit-button", "settings-copy"] },
+	"settings-approvals": { path: "/settings/approvals", referenceMask: true, scope: SETTINGS_LAYER, textSized: ["add-rule"] },
+	"settings-vault": { path: "/settings/vault", referenceMask: true, scope: SETTINGS_LAYER, textSized: ["type-tabs", "type-tab", "type-tab-active"] },
+	"settings-payments": { path: "/settings/payments", referenceMask: true, scope: SETTINGS_LAYER },
+	"settings-channels": { path: "/settings/channels", referenceMask: true, scope: SETTINGS_LAYER },
+	"settings-billing": { path: "/settings/billing", referenceMask: true, scope: SETTINGS_LAYER },
+	onboarding: { path: "/bots/finley?pane=closed&onboarding=1", referenceMask: true },
 	"x-account-menu": {
 		path: "/bots/finley",
 		steps: (page) => page.getByRole("button", { name: "Open account menu" }).click(),

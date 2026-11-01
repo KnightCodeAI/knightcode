@@ -26,3 +26,35 @@ function subscribe(onChange: () => void): () => void {
 		observer.disconnect();
 	};
 }
+
+/** What the user chose: follow the system, or always light or dark. Kept in this browser. */
+export type ThemePreference = "system" | "light" | "dark";
+
+const THEME_KEY = "kb.theme";
+
+/** The stored preference; "system" when none. */
+export function getThemePreference(): ThemePreference {
+	try {
+		const value = localStorage.getItem(THEME_KEY);
+		return value === "light" || value === "dark" ? value : "system";
+	} catch {
+		return "system";
+	}
+}
+
+/** Stores the preference and applies it to the root. */
+export function setThemePreference(preference: ThemePreference): void {
+	try {
+		if (preference === "system") localStorage.removeItem(THEME_KEY);
+		else localStorage.setItem(THEME_KEY, preference);
+	} catch {
+		// Storage may be unavailable; the choice still applies until reload.
+	}
+	applyThemePreference(preference);
+}
+
+/** Puts the preference on the root's data-theme (none for "system"). */
+export function applyThemePreference(preference = getThemePreference()): void {
+	if (preference === "system") delete document.documentElement.dataset.theme;
+	else document.documentElement.dataset.theme = preference;
+}

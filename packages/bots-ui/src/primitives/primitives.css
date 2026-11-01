@@ -285,6 +285,8 @@
 /* Switch */
 .kb-switch {
 	position: relative;
+	font-size: 0;
+	line-height: 0;
 	flex: none;
 	width: 32px;
 	height: 20px;

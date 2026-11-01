@@ -561,7 +561,7 @@ git commit -m "feat(bots): add group chats and managed bots"
   `ConnectProviders.tsx`, `packages/bots-ui/src/onboarding/Checklist.tsx`
 - Test: `apps/bots/web/e2e/settings.e2e.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/settings.e2e.ts
@@ -587,10 +587,10 @@ for (const screen of ["settings-account", "settings-approvals", "settings-vault"
 	test(`${screen} matches the reference`, async ({ page }) => compareToReference(page, screen));
 ```
 
-- [ ] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui settings`)
-- [ ] **Step 3: Implement the settings and onboarding screens**
-- [ ] **Step 4: Run ui, then run reference for the seven screens**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui settings`)
+- [x] **Step 3: Implement the settings and onboarding screens**
+- [x] **Step 4: Run ui, then run reference for the seven screens**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src/settings packages/bots-ui/src/onboarding apps/bots/web/e2e/settings.e2e.ts

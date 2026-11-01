@@ -9,12 +9,14 @@ import { GroupChat } from "./groups/GroupChat.tsx";
 import { GroupSettings } from "./groups/GroupSettings.tsx";
 import { awayFor, CatchUp, isAway, markActive } from "./inbox/CatchUp.tsx";
 import { Inbox } from "./inbox/Inbox.tsx";
+import { Checklist, type OnboardingItem, onboardingSkipped, openItems } from "./onboarding/Checklist.tsx";
 import { PagesLibrary } from "./pages/Library.tsx";
 import { PageView } from "./pages/PageView.tsx";
 import { SettingsDialog } from "./settings/SettingsDialog.tsx";
 import { SkillsLibrary } from "./skills/Library.tsx";
 import { SandboxOriginContext } from "./chat/McpAppFrame.tsx";
 import { ToastProvider } from "./primitives/Toast.tsx";
+import { applyThemePreference } from "./theme.ts";
 import { CommandK, useCommandKShortcut } from "./shell/CommandK.tsx";
 import { InfoPane } from "./shell/InfoPane.tsx";
 import { navigate, type Route, useQueryParam, useRoute } from "./shell/routes.ts";
@@ -38,6 +40,7 @@ export function BotsApp({ api, connect, platform, sandboxOrigin }: BotsAppProps)
 		[api, connect],
 	);
 	useEffect(() => () => store.socket.close(), [store]);
+	useEffect(() => applyThemePreference(), []);
 	return (
 		<StoreContext.Provider value={store}>
 			<SandboxOriginContext.Provider value={sandboxOrigin}>
@@ -63,10 +66,15 @@ function Shell() {
 
 	const firstBot = data?.bots.find((b) => !b.archived);
 	const catchUp = useCatchUp(route.name === "home");
+	const onboarding = useOnboarding(route.name === "home" && catchUp === null);
+	const toChat = useCallback(
+		(replace = false) =>
+			firstBot && navigate({ name: "bot", botId: lastBot.current ?? firstBot.id, pane: "details" }, { replace }),
+		[firstBot],
+	);
 	useEffect(() => {
-		if (route.name === "home" && firstBot && catchUp === null)
-			navigate({ name: "bot", botId: lastBot.current ?? firstBot.id, pane: "details" }, { replace: true });
-	}, [route.name, firstBot, catchUp]);
+		if (route.name === "home" && catchUp === null && onboarding === null) toChat(true);
+	}, [route.name, catchUp, onboarding, toChat]);
 	useEffect(() => {
 		const active = () => markActive();
 		active();
@@ -78,7 +86,7 @@ function Shell() {
 		};
 	}, []);
 
-	const view = mainView(route, catchUp);
+	const view = mainView(route, catchUp, onboarding);
 	// Dialogs and main views keep a bot's details pane beside them, as the pane is open by default.
 	const botId =
 		route.name === "bot" ? route.botId : isOverlay(route) || view ? (lastBot.current ?? firstBot?.id) : undefined;
@@ -110,13 +118,7 @@ function Shell() {
 							<MainView route={route} loading={!data} />
 						)
 					) : view ? (
-						<MainContent
-							view={view}
-							catchUp={catchUp}
-							onCatchUpDone={() =>
-								firstBot && navigate({ name: "bot", botId: lastBot.current ?? firstBot.id, pane: "details" })
-							}
-						/>
+						<MainContent view={view} catchUp={catchUp} onboarding={onboarding} onDone={() => toChat()} />
 					) : bot && route.name !== "home" ? (
 						<ChatView bot={bot} paneOpen={pane !== "closed"} />
 					) : (
@@ -144,30 +146,56 @@ function Shell() {
 	);
 }
 
-type MainViewKind = { kind: "inbox" } | { kind: "pages" } | { kind: "page"; pageId: string } | { kind: "catch-up" };
+type MainViewKind =
+	| { kind: "inbox" }
+	| { kind: "pages" }
+	| { kind: "page"; pageId: string }
+	| { kind: "catch-up" }
+	| { kind: "onboarding" };
 
 /** The views that take the chat column: the inbox, pages, and the catch-up on return. */
-function mainView(route: Route, catchUp: CatchUpData | null | undefined): MainViewKind | undefined {
+function mainView(
+	route: Route,
+	catchUp: CatchUpData | null | undefined,
+	onboarding: OnboardingItem[] | null | undefined,
+): MainViewKind | undefined {
 	if (route.name === "inbox") return { kind: "inbox" };
 	if (route.name === "pages") return { kind: "pages" };
 	if (route.name === "page") return { kind: "page", pageId: route.pageId };
 	if (route.name === "home" && catchUp) return { kind: "catch-up" };
+	if (route.name === "home" && onboarding) return { kind: "onboarding" };
 	return undefined;
 }
 
 function MainContent({
 	view,
 	catchUp,
-	onCatchUpDone,
+	onboarding,
+	onDone,
 }: {
 	view: MainViewKind;
 	catchUp: CatchUpData | null | undefined;
-	onCatchUpDone: () => void;
+	onboarding: OnboardingItem[] | null | undefined;
+	onDone: () => void;
 }) {
 	if (view.kind === "inbox") return <Inbox />;
 	if (view.kind === "pages") return <PagesLibrary />;
 	if (view.kind === "page") return <PageView pageId={view.pageId} />;
-	return catchUp ? <CatchUp catchUp={catchUp} onDone={onCatchUpDone} /> : null;
+	if (view.kind === "onboarding") return onboarding ? <Checklist items={onboarding} onSkip={onDone} /> : null;
+	return catchUp ? <CatchUp catchUp={catchUp} onDone={onDone} /> : null;
+}
+
+/** On the home screen, the onboarding items still to do (unless skipped; ?onboarding=1 shows them anyway); null when none. */
+function useOnboarding(home: boolean): OnboardingItem[] | null | undefined {
+	const forced = useQueryParam("onboarding") !== null;
+	const [skipped] = useState(onboardingSkipped);
+	const wanted = home && (forced || !skipped);
+	const { data } = useResource(wanted ? "onboarding" : null, (api) => api.getOnboarding({}));
+	if (!home) return undefined;
+	if (!wanted) return null;
+	if (data === undefined) return undefined;
+	const open = openItems(data.items);
+	return open.length > 0 ? open : null;
 }
 
 /** On the home screen after a long absence, the catch-up if something happened; null when there is none to show. */

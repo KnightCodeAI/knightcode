@@ -18,6 +18,54 @@ const LIMITS = [
 
 const DAY = 86_400_000;
 
+/** Scrolls to the billing part of this page (top-ups, receipts). */
+export function showBilling(): void {
+	document.getElementById("kb-billing")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/** The plan and what it covers, with the user's bots as its art. Also heads the Account page. */
+export function PlanCard() {
+	const { data: billing } = useResource("billing", (api) => api.getBilling({}));
+	const { data: bots } = useBots();
+	const plan = billing?.plan ?? "none";
+	const subscribed = plan === "active" || plan === "trial";
+	return (
+		<section className="kb-plan-card">
+			<div className="kb-plan-card__copy">
+				<div className="kb-plan-card__text">
+					<p className="kb-plan-card__title">
+						{subscribed ? "Your bots have their own computer" : "Give your bots their own computer"}
+					</p>
+					<p className="kb-plan-card__description">
+						{subscribed
+							? "Your plan includes the computer, storage and every connector. Model costs stay with your own providers."
+							: "One plan covers the computer your bots share, storage and every connector. Model costs stay with your own providers."}
+					</p>
+				</div>
+				<Button
+					variant="primary"
+					size="sm"
+					className="kb-plan-card__button"
+					data-ref="kit-button"
+					onClick={() => {
+						navigate({ name: "settings", section: "billing" });
+						requestAnimationFrame(showBilling);
+					}}
+				>
+					{subscribed ? "Manage plan" : "Get started"}
+				</Button>
+			</div>
+			<div className="kb-plan-card__art" aria-hidden>
+				{(bots?.bots ?? []).slice(0, 4).map((bot) => (
+					<span key={bot.id} className="kb-plan-card__avatar" data-avatar-box="">
+						<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={32} />
+					</span>
+				))}
+			</div>
+		</section>
+	);
+}
+
 /** The usage page. */
 export function Usage() {
 	const store = useStore();
@@ -42,35 +90,7 @@ export function Usage() {
 					: "No plan yet.";
 	return (
 		<>
-			<section className="kb-plan-card">
-				<div className="kb-plan-card__copy">
-					<div className="kb-plan-card__text">
-						<p className="kb-plan-card__title">
-							{subscribed ? "Your bots have their own computer" : "Give your bots their own computer"}
-						</p>
-						<p className="kb-plan-card__description">
-							{subscribed
-								? "Your plan includes the computer, storage and every connector. Model costs stay with your own providers."
-								: "One plan covers the computer your bots share, storage and every connector. Model costs stay with your own providers."}
-						</p>
-					</div>
-					<Button
-						variant="primary"
-						size="sm"
-						className="kb-plan-card__button"
-						onClick={() => navigate({ name: "settings", section: "billing" })}
-					>
-						{subscribed ? "Manage plan" : "Get started"}
-					</Button>
-				</div>
-				<div className="kb-plan-card__art" aria-hidden>
-					{(bots?.bots ?? []).slice(0, 4).map((bot) => (
-						<span key={bot.id} className="kb-plan-card__avatar" data-avatar-box="">
-							<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={32} />
-						</span>
-					))}
-				</div>
-			</section>
+			<PlanCard />
 			<div className="kb-usage-section" data-ref="usage-section">
 				<section className="kb-usage-block">
 					<div className="kb-usage-meter-card">
@@ -127,7 +147,7 @@ export function Usage() {
 				<section className="kb-usage-block">
 					<h3 className="kb-usage-block__title">Manage plan</h3>
 					<div className="kb-usage-card kb-usage-card--plan">
-						<div className="kb-usage-row kb-usage-row--plain">
+						<div className="kb-usage-row kb-usage-row--plain" data-ref="settings-row">
 							<div className="kb-usage-row__copy">
 								<span>Current plan: {PLAN_LABELS[plan]}</span>
 								<span className="kb-usage-row__hint">
@@ -136,9 +156,9 @@ export function Usage() {
 							</div>
 						</div>
 						<div className="kb-usage-row kb-usage-row--plain">
-							<span>Billing, credits and receipts</span>
-							<Button variant="subtle" size="sm" onClick={() => navigate({ name: "settings", section: "billing" })}>
-								Open billing
+							<span>Credits, top-ups and receipts</span>
+							<Button variant="subtle" size="sm" onClick={showBilling}>
+								Top up
 							</Button>
 						</div>
 					</div>
