@@ -165,6 +165,7 @@ export function defaultSeed(): FakeSeed {
 				"Review every new pull request in knightcode/app. Comment on bugs, missing tests and risky migrations. Approve only small, safe changes.",
 			avatar: { shape: "hex", color: "blue" },
 			appIds: ["github", "linear"],
+			main: true,
 			pinned: true,
 			unread: 2,
 			status: "working",

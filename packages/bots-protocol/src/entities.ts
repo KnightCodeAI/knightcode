@@ -163,6 +163,8 @@ export const BotSchema = Type.Object({
 	needsYou: Type.Boolean(),
 	/** The bot that manages this one, when a manager created it or was assigned it. */
 	managedBy: Opt(Id),
+	/** The account's main bot (its first), marked in the sidebar. */
+	main: Opt(Type.Boolean()),
 	email: Opt(Type.String()),
 	lastActivityAt: Opt(Time),
 	createdAt: Time,
@@ -704,6 +706,15 @@ export const CardSchema = Type.Union([
 		state: Lit(["open", "saved", "dismissed"] as const),
 	}),
 	Type.Object({ type: Type.Literal("run-setup"), skill: Type.String() }),
+	/** An offer to connect an app, with a one-line promise under it. */
+	Type.Object({
+		type: Type.Literal("connect-app"),
+		appId: Id,
+		name: Type.String(),
+		description: Type.String(),
+		verified: Opt(Type.Boolean()),
+		footnote: Opt(Type.String()),
+	}),
 	/** An interactive panel from an MCP server, served from the sandbox origin. */
 	Type.Object({ type: Type.Literal("app-panel"), appId: Id, title: Type.String(), appUrl: Type.String() }),
 ]);
