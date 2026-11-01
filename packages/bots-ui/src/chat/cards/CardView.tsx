@@ -5,7 +5,8 @@ import { ApprovalCard, type ApprovalDecision } from "./ApprovalCard.tsx";
 import { ConnectAppCard } from "./ConnectAppCard.tsx";
 import { HelperCard } from "./HelperCard.tsx";
 import { QuestionCard } from "./QuestionCard.tsx";
-import { RunSetupCard, SecretRequestCard, SettingsChangeCard, SkillDraftCard } from "./SmallCards.tsx";
+import { DraftSkillCard } from "../../skills/DraftSkillCard.tsx";
+import { RunSetupCard, SecretRequestCard, SettingsChangeCard } from "./SmallCards.tsx";
 import { SuggestionCard } from "./SuggestionCard.tsx";
 import { TakeoverCard } from "./TakeoverCard.tsx";
 
@@ -19,6 +20,8 @@ export interface CardActions {
 	undoSettings: (entryId: string) => void;
 	saveSkillDraft: (entryId: string, draft: SkillDraft) => void;
 	discardSkillDraft: (entryId: string) => void;
+	testSkillDraft: (draft: SkillDraft) => void;
+	addDraftToRoutine: (draft: SkillDraft) => void;
 	answerSecret: (entryId: string, value: string | undefined) => void;
 	runSetup: (skill: string) => void;
 	appAction: (entryId: string, action: unknown) => void;
@@ -49,10 +52,12 @@ export function CardView({ entry, actions }: { entry: CardEntry; actions: CardAc
 			return <HelperCard card={card} />;
 		case "skill-draft":
 			return (
-				<SkillDraftCard
+				<DraftSkillCard
 					card={card}
 					onSave={(draft) => actions.saveSkillDraft(entry.id, draft)}
 					onDiscard={() => actions.discardSkillDraft(entry.id)}
+					onTest={actions.testSkillDraft}
+					onAddToRoutine={actions.addDraftToRoutine}
 				/>
 			);
 		case "settings-change":

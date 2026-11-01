@@ -395,7 +395,7 @@ git commit -m "feat(bots): add the computer pane"
 - Produces: no source or marketplace label is rendered anywhere in these
   components (the entry has no field for one).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // apps/bots/web/e2e/connectors.e2e.ts
@@ -418,10 +418,10 @@ The catalog page is checked for labels before opening Gmail, because the
 Gmail connect screen carries the spec's one-line processor notice
 (`data-testid="processor-notice"`), the only place a processor is named.
 
-- [ ] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui connectors`)
-- [ ] **Step 3: Implement the connector and skill screens**
-- [ ] **Step 4: Run ui, then run reference for the three screens**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui connectors`)
+- [x] **Step 3: Implement the connector and skill screens**
+- [x] **Step 4: Run ui, then run reference for the three screens**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/bots-ui/src/connectors packages/bots-ui/src/skills apps/bots/web/e2e/connectors.e2e.ts

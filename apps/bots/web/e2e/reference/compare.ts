@@ -39,7 +39,10 @@ interface ScreenRoute {
 	 * so both sides cover exactly the same pixels.
 	 */
 	referenceMask?: boolean;
-	/** Refs whose width follows text that differs by design (a different setting's value): only their right edge is compared. */
+	/**
+	 * Refs whose width follows text that differs by design (another setting's value, another category's name): their
+	 * top and height are compared, and they must be anchored like the reference, at its left or its right edge.
+	 */
 	textSized?: string[];
 }
 
@@ -73,9 +76,13 @@ export const SCREENS: Record<string, ScreenRoute> = {
 	computer: { path: "/bots/finley/computer" },
 	"computer-takeover": { path: "/bots/finley/computer?control=1", referenceMask: true },
 	teach: { path: "/bots/finley/computer?teach=1", referenceMask: true },
-	catalog: { path: "/connectors" },
-	connector: { path: "/connectors/gmail", mask: ['[data-ref="dialog-body"]'] },
-	skills: { path: "/skills" },
+	catalog: {
+		path: "/connectors",
+		referenceMask: true,
+		textSized: ["chip", "section-title", "app-connect", "search", "view-all"],
+	},
+	connector: { path: "/connectors/gmail", referenceMask: true, textSized: ["app-connect"] },
+	skills: { path: "/skills", referenceMask: true, textSized: ["search"] },
 	routines: { path: "/bots/finley/routines" },
 	"routine-edit": { path: "/bots/finley/routines/new", mask: [TABPANEL] },
 	activity: { path: "/activity", mask: [SETTINGS_BODY] },
@@ -173,14 +180,16 @@ async function compareElement(
 	if ((await ours.count()) === 0) return [`${element.ref}: missing data-ref`];
 	const actual = await measure(ours);
 	const out: string[] = [];
-	const edges = (box: MeasuredElement["box"]) => ({ ...box, right: box.x + box.width });
-	const [mine, theirs] = [edges(actual.box), edges(element.box)];
-	const sides = textSized?.includes(element.ref)
-		? (["y", "height", "right"] as const)
-		: (["x", "y", "width", "height"] as const);
-	for (const side of sides)
-		if (Math.abs(mine[side] - theirs[side]) > 1)
+	const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+	const [mine, theirs] = [actual.box, element.box];
+	const textual = textSized?.includes(element.ref);
+	for (const side of textual ? (["y", "height"] as const) : (["x", "y", "width", "height"] as const))
+		if (!near(mine[side], theirs[side]))
 			out.push(`${element.ref} ${side}: ours ${round(mine[side])}, reference ${round(theirs[side])}`);
+	if (textual && !near(mine.x, theirs.x) && !near(mine.x + mine.width, theirs.x + theirs.width))
+		out.push(
+			`${element.ref} anchor: ours ${round(mine.x)}..${round(mine.x + mine.width)}, reference ${round(theirs.x)}..${round(theirs.x + theirs.width)}`,
+		);
 	for (const key of STYLE_KEYS) {
 		const [mine, theirs] = [normalize(actual.styles[key] ?? ""), normalize(element.styles[key] ?? "")];
 		if (mine !== theirs) out.push(`${element.ref} ${key}: ours ${mine}, reference ${theirs}`);

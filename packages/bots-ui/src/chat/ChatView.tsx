@@ -103,6 +103,9 @@ export function Thread({
 		discardSkillDraft: (entryId) => botId && void store.api.discardSkillDraft({ botId, entryId }),
 		answerSecret: (entryId, value) => botId && void store.api.answerSecretRequest({ botId, entryId, value }),
 		runSetup: (skill) => store.socket.submit(target, `/${skill}`),
+		testSkillDraft: (draft) => store.socket.submit(target, `Run these steps once, as a test:\n\n${draft.content}`),
+		addDraftToRoutine: (draft) =>
+			botId && navigate(`/bots/${encodeURIComponent(botId)}/routines/new?skill=${encodeURIComponent(draft.name)}`),
 		appAction: (entryId, action) =>
 			botId &&
 			void store.api

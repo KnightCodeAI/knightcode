@@ -6,6 +6,7 @@
 @import "./chat/chat.css";
 @import "./bot/bot.css";
 @import "./computer/computer.css";
+@import "./connectors/connectors.css";
 
 *,
 *::before,

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BotSettings } from "./bot/BotSettings.tsx";
 import { CreateBot } from "./bot/CreateBot.tsx";
 import { ChatView } from "./chat/ChatView.tsx";
+import { Catalog } from "./connectors/Catalog.tsx";
+import { SkillsLibrary } from "./skills/Library.tsx";
 import { SandboxOriginContext } from "./chat/McpAppFrame.tsx";
 import { ToastProvider } from "./primitives/Toast.tsx";
 import { CommandK, useCommandKShortcut } from "./shell/CommandK.tsx";
@@ -79,6 +81,8 @@ function Shell() {
 			</div>
 			<CommandK open={paletteOpen} onOpenChange={setPaletteOpen} />
 			{route.name === "new" && <CreateBot tab={route.tab} onClose={backToChat} />}
+			{route.name === "connectors" && <Catalog appId={route.appId} onClose={backToChat} />}
+			{route.name === "skills" && <SkillsLibrary onClose={backToChat} />}
 			{route.name === "bot" && route.pane === "settings" && editing && bot && (
 				<BotSettings bot={bot} onClose={() => navigate({ name: "bot", botId: bot.id, pane: "settings" })} />
 			)}

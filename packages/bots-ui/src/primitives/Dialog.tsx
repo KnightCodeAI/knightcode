@@ -19,8 +19,10 @@ export interface DialogProps {
 	className?: string;
 	/** For screenshot comparisons and tests. */
 	dataRef?: string;
-	/** Where focus goes on open; by default the first focusable element. */
+	/** Where focus goes on open; by default the dialog itself. */
 	onOpenAutoFocus?: (event: Event) => void;
+	/** The close button's size; 32 by default, 28 on the large browsing dialogs. */
+	closeSize?: 28 | 32;
 }
 
 /** A modal dialog. Escape and the scrim close it. */
@@ -36,6 +38,7 @@ export function Dialog({
 	className,
 	dataRef,
 	onOpenAutoFocus,
+	closeSize = 32,
 }: DialogProps) {
 	const style: CSSProperties = { width, height };
 	const layer = useTopLayer(open);
@@ -72,7 +75,7 @@ export function Dialog({
 							label="Close dialog"
 							icon={<X size={14} strokeWidth={1.75} />}
 							variant="ghost"
-							size={32}
+							size={closeSize}
 							tooltip={false}
 							data-ref="dialog-close"
 						/>
