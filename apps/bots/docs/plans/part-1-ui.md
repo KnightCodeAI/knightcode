@@ -669,24 +669,24 @@ git commit -m "feat(desktop): add the KnightCode Bots product switcher"
 **Files:**
 - Modify: whatever screens still fail the reference project
 
-- [ ] **Step 1: Run every reference comparison**
+- [x] **Step 1: Run every reference comparison**
 
 Run: `bunx playwright test --project reference` in `apps/bots/web`
 Expected: every screen id from Task 1.1 passes, in light and dark.
 
-- [ ] **Step 2: Compare avatars and animations by eye**
+- [x] **Step 2: Compare avatars and animations by eye**
 
 Open each `screens/*.png` next to the matching screen in the dev server;
 note any visible difference in the reference folder's `signoff.md` and fix
 it. Expected: `signoff.md` lists no open difference.
 
-- [ ] **Step 3: Run the full UI suite**
+- [x] **Step 3: Run the full UI suite**
 
 Run: `bunx playwright test --project ui` and `bunx vitest --run` in
 `packages/bots-ui`
 Expected: all passed.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add packages/bots-ui apps/bots/web

@@ -526,74 +526,158 @@
 }
 
 /* Command palette */
+/* The search palette, as measured: 560 x 455 at most, centred in the window. */
 .kb-palette {
-	top: 96px;
+	display: flex;
+	flex-direction: column;
 	width: 560px;
-	transform: translate(-50%, 0);
+	height: 455px;
+	max-height: calc(100vh - 32px);
+	border-radius: 18px;
+	font-size: var(--kb-font-size-sm);
 	animation: kb-palette-in var(--kb-duration-enter) var(--kb-ease-out);
 }
 @keyframes kb-palette-in {
 	from {
 		opacity: 0;
-		transform: translate(-50%, 0) scale(0.98);
+		transform: translate(-50%, -50%) scale(0.98);
 	}
 }
-.kb-palette__input {
-	width: 100%;
-	height: 48px;
-	padding: 0 var(--kb-space-16);
-	border: 0;
+.kb-palette__head {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: var(--kb-space-10);
+	padding: 14px var(--kb-space-10) 14px var(--kb-space-16);
 	border-bottom: 1px solid var(--kb-color-border);
+}
+.kb-palette__icon {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 20px;
+	color: var(--kb-color-text-placeholder);
+}
+.kb-palette__input {
+	flex: 1;
+	min-width: 0;
+	height: 22px;
+	padding: 0;
+	border: 0;
 	background: transparent;
 	color: var(--kb-color-text);
 	font: inherit;
 	font-size: var(--kb-font-size-md);
-	line-height: var(--kb-line-height-md);
-	letter-spacing: var(--kb-tracking-base);
+	line-height: 22px;
+	letter-spacing: -0.15px;
+	outline: none;
+}
+.kb-palette__input:focus-visible {
 	outline: none;
 }
 .kb-palette__input::placeholder {
 	color: var(--kb-color-text-placeholder);
 }
 .kb-palette__results {
-	max-height: 360px;
-	margin: 0;
-	padding: var(--kb-space-6);
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: var(--kb-space-2);
+	min-height: 0;
+	padding: var(--kb-space-8);
 	overflow-y: auto;
-	list-style: none;
 }
 .kb-palette__result {
 	display: flex;
+	flex: none;
 	align-items: center;
 	gap: var(--kb-space-10);
-	min-height: 36px;
-	padding: var(--kb-space-6) var(--kb-space-8);
-	border-radius: var(--kb-radius-md);
+	min-height: 49px;
+	padding: var(--kb-space-6) var(--kb-space-10) var(--kb-space-6) var(--kb-space-8);
+	border: 0;
+	border-radius: 10px;
+	background: transparent;
+	color: var(--kb-color-text);
+	font: inherit;
+	font-size: var(--kb-font-size-sm);
+	line-height: var(--kb-line-height-sm);
+	letter-spacing: var(--kb-tracking-tab);
+	text-align: left;
 	cursor: pointer;
 }
 .kb-palette__result[aria-selected="true"] {
-	background-color: var(--kb-color-fill-hover);
+	background-color: var(--kb-color-fill-active);
+}
+.kb-palette__lead {
+	display: inline-flex;
+	flex: none;
+	width: 24px;
+	height: 24px;
+}
+.kb-palette__tile {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: var(--kb-space-8);
+	background-color: var(--kb-color-fill);
+	color: var(--kb-color-text-secondary);
+}
+.kb-palette__tile svg {
+	width: 12px;
+	height: 12px;
 }
 .kb-palette__result-text {
 	display: flex;
+	flex: 1;
 	flex-direction: column;
+	gap: 1px;
 	min-width: 0;
-	font-size: var(--kb-font-size-md);
-	line-height: var(--kb-line-height-md);
+	letter-spacing: -0.08px;
 }
-.kb-palette__result-snippet {
+.kb-palette__result-title,
+.kb-palette__result-detail {
 	overflow: hidden;
-	color: var(--kb-color-text-secondary);
-	font-size: var(--kb-font-size-sm);
-	line-height: var(--kb-line-height-sm);
 	white-space: nowrap;
 	text-overflow: ellipsis;
+}
+.kb-palette__result-detail {
+	color: var(--kb-color-text-secondary);
 }
 .kb-palette__empty {
 	padding: var(--kb-space-16);
 	color: var(--kb-color-text-secondary);
 	font-size: var(--kb-font-size-sm);
 	text-align: center;
+}
+/* Keyboard shortcuts */
+.kb-shortcuts {
+	margin: 0;
+}
+.kb-shortcuts__row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--kb-space-16);
+	padding: var(--kb-space-6) 0;
+}
+.kb-shortcuts__row dt {
+	display: flex;
+	gap: var(--kb-space-4);
+}
+.kb-shortcuts__row dd {
+	margin: 0;
+	color: var(--kb-color-text-secondary);
+}
+.kb-shortcuts kbd {
+	padding: 1px var(--kb-space-6);
+	border: 1px solid var(--kb-color-border);
+	border-radius: var(--kb-radius-sm);
+	font: inherit;
+	font-size: var(--kb-font-size-xs);
 }
 
 @media (prefers-reduced-motion: reduce) {

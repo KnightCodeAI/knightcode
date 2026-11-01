@@ -29,6 +29,8 @@ export const colors = {
 		sheen: "rgba(255, 255, 255, 0.03)",
 		border: "rgba(245, 245, 245, 0.1)",
 		borderSubtle: "rgba(245, 245, 245, 0.06)",
+		/** The ring around the chosen colour in the avatar picker (measured: stronger in light). */
+		swatchRing: "rgba(245, 245, 245, 0.22)",
 		borderFaint: "rgba(245, 245, 245, 0.04)",
 		borderStrong: "rgba(245, 245, 245, 0.22)",
 		borderDisabled: "rgba(195, 195, 195, 0.3)",
@@ -66,6 +68,8 @@ export const colors = {
 		sheen: "rgba(255, 255, 255, 0.16)",
 		border: "rgba(28, 28, 28, 0.12)",
 		borderSubtle: "rgba(28, 28, 28, 0.08)",
+		/** The ring around the chosen colour in the avatar picker (measured: stronger in light). */
+		swatchRing: "rgba(28, 28, 28, 0.24)",
 		borderFaint: "rgba(28, 28, 28, 0.06)",
 		borderStrong: "rgba(28, 28, 28, 0.24)",
 		borderDisabled: "rgba(118, 118, 118, 0.3)",

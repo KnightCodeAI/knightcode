@@ -100,6 +100,7 @@
 	--kb-color-sheen: rgba(255, 255, 255, 0.03);
 	--kb-color-border: rgba(245, 245, 245, 0.1);
 	--kb-color-border-subtle: rgba(245, 245, 245, 0.06);
+	--kb-color-swatch-ring: rgba(245, 245, 245, 0.22);
 	--kb-color-border-faint: rgba(245, 245, 245, 0.04);
 	--kb-color-border-strong: rgba(245, 245, 245, 0.22);
 	--kb-color-border-disabled: rgba(195, 195, 195, 0.3);
@@ -158,6 +159,7 @@
 		--kb-color-sheen: rgba(255, 255, 255, 0.16);
 		--kb-color-border: rgba(28, 28, 28, 0.12);
 		--kb-color-border-subtle: rgba(28, 28, 28, 0.08);
+		--kb-color-swatch-ring: rgba(28, 28, 28, 0.24);
 		--kb-color-border-faint: rgba(28, 28, 28, 0.06);
 		--kb-color-border-strong: rgba(28, 28, 28, 0.24);
 		--kb-color-border-disabled: rgba(118, 118, 118, 0.3);
@@ -216,6 +218,7 @@
 	--kb-color-sheen: rgba(255, 255, 255, 0.16);
 	--kb-color-border: rgba(28, 28, 28, 0.12);
 	--kb-color-border-subtle: rgba(28, 28, 28, 0.08);
+	--kb-color-swatch-ring: rgba(28, 28, 28, 0.24);
 	--kb-color-border-faint: rgba(28, 28, 28, 0.06);
 	--kb-color-border-strong: rgba(28, 28, 28, 0.24);
 	--kb-color-border-disabled: rgba(118, 118, 118, 0.3);

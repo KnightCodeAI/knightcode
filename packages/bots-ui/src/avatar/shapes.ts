@@ -8,9 +8,32 @@ export interface ShapeOutline {
 	path?: string;
 }
 
+/**
+ * The shapes the avatar picker offers, in its order, as measured. The other named shapes stay valid (templates and
+ * imports use them) but are not offered.
+ */
+export const PICKER_SHAPES: AvatarShape[] = [
+	"blob",
+	"cloud",
+	"square",
+	"sparkle",
+	"clover",
+	"heart",
+	"flower",
+	"teardrop",
+	"tablet",
+	"wedge",
+	"house",
+	"star",
+	"hex",
+	// The reference's fourth slot on this row holds a seasonal avatar; ours holds a shape of its own.
+	"pebble",
+];
+
 /** Every named shape, drawn. */
 export const SHAPE_OUTLINES: Record<AvatarShape, ShapeOutline> = {
-	blob: { type: "blob" },
+	// Round, as measured (the stock blob is lumpier; pebble keeps that look).
+	blob: { type: "circle" },
 	pebble: { type: "pebble" },
 	bean: {
 		type: "blob",
@@ -21,7 +44,8 @@ export const SHAPE_OUTLINES: Record<AvatarShape, ShapeOutline> = {
 		type: "square",
 		path: "M50 12 C82 12 88 18 88 50 C88 82 82 88 50 88 C18 88 12 82 12 50 C12 18 18 12 50 12 Z",
 	},
-	tablet: { type: "square", path: "M36 10 H64 Q78 10 78 24 V76 Q78 90 64 90 H36 Q22 90 22 76 V24 Q22 10 36 10 Z" },
+	// Wide, as measured: a rounded slab lying on its side.
+	tablet: { type: "square", path: "M32 24 H68 Q90 24 90 46 V54 Q90 76 68 76 H32 Q10 76 10 54 V46 Q10 24 32 24 Z" },
 	capsule: { type: "pill" },
 	cylinder: { type: "pill", path: "M18 26 C18 12 82 12 82 26 V74 C82 88 18 88 18 74 Z" },
 	hex: { type: "hexagon" },
@@ -52,7 +76,18 @@ export const SHAPE_OUTLINES: Record<AvatarShape, ShapeOutline> = {
 			8,
 		),
 	},
-	wedge: { type: "triangle" },
+	// A plump, well-rounded triangle, as measured.
+	wedge: {
+		type: "square",
+		path: roundedPolygon(
+			[
+				[50, 6],
+				[96, 90],
+				[4, 90],
+			],
+			22,
+		),
+	},
 	shield: {
 		type: "circle",
 		path: "M50 10 Q53 10 56 11 L80 19 Q86 21 86 27 V48 C86 70 70 84 54 91 Q50 93 46 91 C30 84 14 70 14 48 V27 Q14 21 20 19 L44 11 Q47 10 50 10 Z",
@@ -66,7 +101,8 @@ export const SHAPE_OUTLINES: Record<AvatarShape, ShapeOutline> = {
 	teardrop: { type: "drop" },
 	leaf: { type: "drop", path: "M50 8 C78 28 86 60 50 92 C14 60 22 28 50 8 Z" },
 	square: { type: "square" },
-	sparkle: { type: "star", path: "M50 6 C54 36 64 46 94 50 C64 54 54 64 50 94 C46 64 36 54 6 50 C36 46 46 36 50 6 Z" },
+	// Four plump points with soft sides, as measured.
+	sparkle: { type: "circle", path: roundedPolygon(starPoints(4, 48, 26), 12) },
 	clover: { type: "clover" },
 	flower: { type: "flower" },
 	heart: {
@@ -86,8 +122,18 @@ export const SHAPE_OUTLINES: Record<AvatarShape, ShapeOutline> = {
 			8,
 		),
 	},
-	star: { type: "star" },
+	// Six rounded points, as measured.
+	star: { type: "circle", path: roundedPolygon(starPoints(6, 48, 29), 9) },
 };
+
+/** The corners of a star with `points` tips: tips at `outer`, notches at `inner`, the first tip straight up. */
+function starPoints(points: number, outer: number, inner: number): [number, number][] {
+	return Array.from({ length: points * 2 }, (_, i) => {
+		const r = i % 2 === 0 ? outer : inner;
+		const angle = (Math.PI * i) / points - Math.PI / 2;
+		return [50 + r * Math.cos(angle), 50 + r * Math.sin(angle)] as [number, number];
+	});
+}
 
 /** A closed SVG path through `points` with every corner rounded by `radius` (clamped to half of each side). */
 export function roundedPolygon(points: readonly (readonly [number, number])[], radius: number): string {

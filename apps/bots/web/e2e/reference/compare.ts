@@ -47,11 +47,27 @@ interface ScreenRoute {
 	 */
 	textSized?: string[];
 	/** Actions once the screen has settled and the mouse is parked: hovers and menus, which a later move would undo. */
-	interact?: (page: Page) => Promise<void>;
+	interact?: (page: Page, measurement?: Measurement) => Promise<void>;
 	/** Measured refs found by a selector rather than a `data-ref` (the third message, while hovered). */
 	refs?: Record<string, string>;
 	/** Measured refs that matched the wrong element when the reference was captured. */
 	ignore?: string[];
+	/** False when another screen already compares this state's pixels with its avatars masked (see x-avatar-picker). */
+	pixels?: boolean;
+}
+
+/** The picker's measured refs, found by the buttons' names: shape-<name>, color-<name>-button and its swatch. */
+function pickerRefs(): Record<string, string> {
+	const shapes = ["blob", "cloud", "square", "sparkle", "clover", "heart", "flower", "teardrop", "tablet", "wedge", "house", "star", "hex"];
+	const colors = ["black", "brown", "red", "orange", "yellow", "green", "cyan", "blue", "violet", "magenta", "gray"];
+	const refs: Record<string, string> = { "avatar-preview": ".kb-create__preview" };
+	for (const shape of shapes) refs[`shape-${shape}`] = `button[aria-label="${shape} character shape"]`;
+	for (const color of colors) {
+		const button = `button[aria-label="${color[0]!.toUpperCase()}${color.slice(1)} character color"]`;
+		refs[`color-${color}-button`] = button;
+		refs[`color-${color}`] = `${button} > *`;
+	}
+	return refs;
 }
 
 const typeInComposer = (text: string) => async (page: Page) => {
@@ -169,7 +185,23 @@ export const SCREENS: Record<string, ScreenRoute> = {
 		},
 		refs: { "icon-button-hover": '[data-ref="sidebar-new"]', tooltip: '[data-ref="tooltip"]:visible' },
 	},
-	"x-avatar-picker": { path: "/bots/finley", interact: (page) => page.getByRole("button", { name: "New Bot" }).click() },
+	// The create dialog as bot-create shows it, whose capture masks the avatars and compares the pixels; this capture
+	// keeps the avatars to look at by eye, so here only the shape and colour buttons' boxes are compared.
+	"x-avatar-picker": {
+		path: "/bots/finley",
+		interact: async (page, measurement) => {
+			await page.getByRole("button", { name: "New Bot" }).click();
+			// The dialog picks a colour at random, and each reference capture got its own: choose the one whose swatch
+			// wears the selection ring in this capture.
+			const chosen = measurement?.elements.find(
+				(element) => /^color-[a-z]+$/.test(element.ref) && element.styles.boxShadow !== "none",
+			);
+			const color = chosen?.ref.slice("color-".length) ?? "red";
+			await page.getByRole("radio", { name: `${color[0]!.toUpperCase()}${color.slice(1)} character color` }).click();
+		},
+		refs: pickerRefs(),
+		pixels: false,
+	},
 };
 
 const STYLE_KEYS = [
@@ -198,11 +230,12 @@ export async function compareToReference(page: Page, screen: string): Promise<vo
 				const file = resolve(REFERENCE_DIR, "measurements", `${name}.json`);
 				if (!existsSync(file)) return;
 				const measurement = JSON.parse(readFileSync(file, "utf8")) as Measurement;
-				await openScreen(page, screen, theme, width, height);
+				await openScreen(page, screen, theme, width, height, measurement);
 				const mismatches: string[] = [];
 				for (const element of measurement.elements)
 					if (!route.ignore?.includes(element.ref)) mismatches.push(...(await compareElement(page, element, route)));
 				expect.soft(mismatches, `${name}: elements that differ from the reference`).toEqual([]);
+				if (route.pixels === false) return;
 				// Already in Playwright's sanitized form (see maskedName in measure-reference.ts), so it is used as is.
 				const css = readFileSync(HIDE_TEXT, "utf8");
 				const targets = [AVATARS, ...(route.referenceMask ? [] : (route.mask ?? []))].map((selector) => ({ selector }));
@@ -217,12 +250,19 @@ export async function compareToReference(page: Page, screen: string): Promise<vo
 }
 
 /** Puts `page` in the state the reference shows for `screen` (for looking at it beside the capture). */
-export async function openScreen(page: Page, screen: string, theme: Theme, width: number, height: number): Promise<void> {
+export async function openScreen(
+	page: Page,
+	screen: string,
+	theme: Theme,
+	width: number,
+	height: number,
+	measurement?: Measurement,
+): Promise<void> {
 	const route = SCREENS[screen];
 	if (!route) throw new Error(`no KnightCode route for reference screen "${screen}"`);
 	await open(page, route, theme, width, height);
 	if (route.interact) {
-		await route.interact(page);
+		await route.interact(page, measurement);
 		// Hover and open transitions run 150 to 300 ms.
 		await page.waitForTimeout(400);
 	}

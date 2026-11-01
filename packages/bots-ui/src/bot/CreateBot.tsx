@@ -1,8 +1,9 @@
 // "Create New Bot": name and avatar, or start from a template, or import an agent from another app. The three views
 // share one dialog of fixed size; the tabs sit at the foot so the create form keeps its measured layout.
-import { ApiError, AVATAR_COLORS, AVATAR_SHAPES, type Avatar, type Template } from "@knightcode/bots-protocol";
+import { ApiError, AVATAR_COLORS, type Avatar, type Template } from "@knightcode/bots-protocol";
 import { useRef, useState } from "react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { PICKER_SHAPES } from "../avatar/shapes.ts";
 import { Button } from "../primitives/Button.tsx";
 import { Dialog } from "../primitives/Dialog.tsx";
 import { Input } from "../primitives/Input.tsx";
@@ -20,7 +21,7 @@ const pick = <T,>(list: readonly T[]): T => list[Math.floor(Math.random() * list
 export function CreateBot({ tab, onClose }: { tab: CreateTab; onClose: () => void }) {
 	const store = useStore();
 	const [name, setName] = useState("");
-	const [avatar, setAvatar] = useState<Avatar>(() => ({ shape: pick(AVATAR_SHAPES), color: pick(AVATAR_COLORS) }));
+	const [avatar, setAvatar] = useState<Avatar>(() => ({ shape: pick(PICKER_SHAPES), color: pick(AVATAR_COLORS) }));
 	const [template, setTemplate] = useState<Template>();
 	const [error, setError] = useState<string>();
 	const [busy, setBusy] = useState(false);
@@ -96,7 +97,7 @@ export function CreateBot({ tab, onClose }: { tab: CreateTab; onClose: () => voi
 				<div className="kb-dialog__body kb-create__body">
 					<div className="kb-create__form">
 						<span className="kb-create__preview" data-avatar-box="">
-							<BotAvatarView shape={avatar.shape} color={avatar.color} size={96} />
+							<BotAvatarView shape={avatar.shape} color={avatar.color} size={122} />
 						</span>
 						<Input
 							ref={nameField}
@@ -132,12 +133,12 @@ export function CreateBot({ tab, onClose }: { tab: CreateTab; onClose: () => voi
 	);
 }
 
-/** Shape and colour pickers: five shapes to a row (three rows show; the rest scroll), eleven colours. */
+/** Shape and colour pickers: the thirteen offered shapes in rows of five, eleven colours. */
 export function AvatarPicker({ value, onChange }: { value: Avatar; onChange: (avatar: Avatar) => void }) {
 	return (
 		<div className="kb-avatar-picker">
 			<div className="kb-avatar-picker__shapes" role="radiogroup" aria-label="Character shape" data-ref="shape-group">
-				{AVATAR_SHAPES.map((shape, i) => (
+				{PICKER_SHAPES.map((shape, i) => (
 					<button
 						key={shape}
 						type="button"
@@ -150,7 +151,7 @@ export function AvatarPicker({ value, onChange }: { value: Avatar; onChange: (av
 					>
 						<span className="kb-avatar-picker__highlight" aria-hidden />
 						<span className="kb-avatar-picker__mark" data-avatar-box="">
-							<BotAvatarView shape={shape} color={value.color} size={36} />
+							<BotAvatarView shape={shape} color={value.color} size={40} />
 						</span>
 					</button>
 				))}
