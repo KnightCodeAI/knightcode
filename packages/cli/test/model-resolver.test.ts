@@ -726,6 +726,24 @@ describe("default model selection", () => {
 		}
 	});
 
+	test("findInitialModel selects GPT-6.1 Sol for AgentRouter instead of catalog order", async () => {
+		const registry = {
+			getAvailableSnapshot: () => getBuiltinModels("agentrouter"),
+		} as unknown as Parameters<typeof findInitialModel>[0]["modelRuntime"];
+
+		const result = await findInitialModel({
+			scopedModels: [],
+			isContinuing: false,
+			modelRuntime: registry,
+		});
+
+		expect(result.model).toMatchObject({
+			provider: "agentrouter",
+			id: "gpt-6.1-sol",
+			api: "openai-responses",
+		});
+	});
+
 	test("ai-gateway default tracks current model", () => {
 		expect(defaultModelPerProvider["vercel-ai-gateway"]).toBe("zai/glm-5.1");
 	});

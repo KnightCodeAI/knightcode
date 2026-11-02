@@ -170,7 +170,7 @@ If the base URL rejects the key at `/models/user` or does not have that endpoint
 
 ### AgentRouter
 
-Authenticate with `/login agentrouter` or `AGENTROUTER_API_KEY`.
+Authenticate with `/login agentrouter` or `AGENTROUTER_API_KEY`. The default model is `gpt-6.1-sol`.
 
 KnightCode sends `gpt-5.6-sol`, `gpt-6-astra`, and `gpt-6.1-sol` through the OpenAI Responses API because AgentRouter rejects Chat Completions for these models. Other models keep their configured Chat Completions or Anthropic Messages API.
 
