@@ -3,6 +3,7 @@
 // control and open viewer, and sleeps after 10 minutes with none of them (one idle timer for the whole computer). It
 // reserves computer time in 5-minute blocks; a block it cannot reserve stops the computer, and chat keeps working.
 // Every save goes through the save coordinator; the workspace is sealed by the user object with the user's data key.
+import type { ComputerState as ProtocolComputerState } from "@knightcode/bots-protocol";
 import { isDeleted } from "../account/deletion.ts";
 import type { Transport } from "@knightcode/env";
 import { DurableObject } from "cloudflare:workers";
@@ -544,6 +545,53 @@ export class ComputerObject extends DurableObject<Env> {
 			}
 			await this.#arm();
 		}
+	}
+
+	// ─── The client's view ────────────────────────────────────────────────────
+
+	/** The computer as the client shows it. */
+	async clientState(): Promise<ProtocolComputerState> {
+		const state = this.#state;
+		const step = this.#get("step");
+		const job = this.#get("maintenance_job");
+		const controllers = JSON.parse(this.#get("controllers") ?? "{}") as Record<string, "bot" | "user">;
+		const bots = new Set([...this.#leases().map((lease) => lease.bot_id), ...Object.keys(controllers)]);
+		const billing = await this.#user().billing();
+		const saved = this.#coordinator.latestCompleted();
+		return {
+			status: state === "running" ? "awake" : state === "maintenance" ? "maintenance" : this.#get("stopped_reason") === "stopped" ? "off" : "sleeping",
+			...(saved ? { generation: saved.generation, ...(saved.completedAt ? { lastSavedAt: saved.completedAt } : {}) } : {}),
+			screens: [...bots].map((botId) => ({ botId, controller: controllers[botId] ?? "bot" })),
+			...(job ? { job: { action: (JSON.parse(job) as MaintenanceJob).kind as ProtocolComputerState["job"] extends infer J ? J extends { action: infer A } ? A : never : never, progress: step ? 0.5 : 0 } } : {}),
+			hoursUsed: billing.computerHours.used,
+			hoursIncluded: billing.computerHours.included,
+		};
+	}
+
+	/** The owner takes the bot's screen (the bot pauses its desktop actions) or hands it back. */
+	async setControl(botId: string, take: boolean): Promise<ProtocolComputerState> {
+		const controllers = JSON.parse(this.#get("controllers") ?? "{}") as Record<string, "bot" | "user">;
+		controllers[botId] = take ? "user" : "bot";
+		this.#set("controllers", JSON.stringify(controllers));
+		return this.clientState();
+	}
+
+	/** Starts a maintenance job from the client; its progress shows in the computer's state. */
+	async startMaintenance(action: MaintenanceKind): Promise<ProtocolComputerState> {
+		const principal = { accountId: this.#account } as Principal;
+		void this.maintain(principal, action).catch((error: unknown) => console.error("maintenance", error));
+		return this.clientState();
+	}
+
+	setupScript(): string {
+		return this.#get("setup_script") ?? "";
+	}
+
+	/** Types a value the owner entered into the bot's focused field, without the bot ever reading it. */
+	async protectedInput(botId: string, value: string): Promise<void> {
+		if (!this.#holds(botId)) throw new Error("The computer is not running for this bot.");
+		if (!this.#provider.desktop) throw new Error("This computer has no desktop.");
+		await this.#provider.desktop(this.#account, await botUserFor(botId), { action: "type", text: value });
 	}
 
 	/** The owner's setup script, run as root on every fresh start and after Update. */

@@ -2,6 +2,11 @@
 // the durable harness over its own SQLite, keeps its alarm armed so work survives eviction and deploys, and serves the
 // bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner. Its own tables share
 // the database with the harness, so every host write goes through the harness's queue (host-sql.ts).
+import type { Bot, ConversationView as ConversationViewProtocol, Entry, Note, Recipe } from "@knightcode/bots-protocol";
+import { addHostEntry, createHostEntriesTable, findCard, hostEntries, hostEntry, patchCard } from "./host-entries.ts";
+import type { ViewExtras } from "./socket.ts";
+import { mintWebhook } from "../routines/webhook.ts";
+import type { VaultInput } from "../user/vault.ts";
 import { isDeleted } from "../account/deletion.ts";
 import { getSupportedThinkingLevels } from "@knightcode/ai/models";
 import {
@@ -177,6 +182,7 @@ export class BotObject extends DurableObject<Env> {
 		const sql = ctx.storage.sql;
 		sql.exec("CREATE TABLE IF NOT EXISTS bot_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
 		// Every admitted input, with the grant of the routine that sent it (none for any other input).
+		createHostEntriesTable(sql);
 		sql.exec("CREATE TABLE IF NOT EXISTS run_inputs (submission_id TEXT PRIMARY KEY, grant TEXT, at INTEGER NOT NULL)");
 		// Messages that came in on a channel and await the bot's answer, to send it back there.
 		// Bot messages seen (a retried delivery is dropped) and requests from bots awaiting their automatic result.
@@ -1233,6 +1239,408 @@ export class BotObject extends DurableObject<Env> {
 	}
 	#deleted = false;
 
+	// ─── The client's view of this bot ────────────────────────────────────────
+
+	/** The bot's own part of the protocol's Bot (the sidebar's flags and the address are the account's). */
+	entity(principal: Principal) {
+		this.#check(principal, this.#id);
+		const settings = this.#settings.read();
+		const model = settings.model ?? this.#model ?? { provider: "", modelId: "" };
+		const created = Number(this.#meta("created_at") ?? 0);
+		const last = this.#meta("last_activity");
+		return {
+			id: this.#id,
+			name: settings.name,
+			purpose: settings.purpose,
+			instructions: settings.instructions,
+			instructionsVersion: settings.instructionsVersion,
+			model: { provider: model.provider, modelId: model.modelId, ...(settings.thinking ? { thinking: settings.thinking } : {}) },
+			avatar: (settings.avatar ?? { shape: "blob", color: "blue" }) as Bot["avatar"],
+			approvals: settings.approvals,
+			computerAccess: settings.computerAccess,
+			notify: settings.notify ?? "input",
+			suggestions: settings.suggestions ?? false,
+			showTools: settings.showTools ?? false,
+			appIds: settings.appIds ?? [],
+			status: (this.#harness.wake().active ? "working" : "idle") as Bot["status"],
+			...(last ? { lastActivityAt: Number(last) } : {}),
+			createdAt: created,
+		};
+	}
+
+	/** A new bot from the client: claimed by the account, with its first settings. */
+	async create(principal: Principal, fields: Partial<Bot> & { name: string; model: Bot["model"] }): Promise<void> {
+		await this.claim(principal, { provider: fields.model.provider, modelId: fields.model.modelId });
+		await this.#settings.write({ ...this.#settings.read(), ...this.#fromClient({ ...fields }) });
+		if (!this.#meta("created_at")) await this.#setMeta("created_at", String(Date.now()));
+		await this.#register(principal.accountId);
+	}
+
+	/** The client's change to the bot's settings (the account's sidebar flags are not the bot's). */
+	async updateFromClient(principal: Principal, patch: Partial<Bot>): Promise<void> {
+		this.#check(principal, this.#id);
+		await this.updateSettings(principal, this.#fromClient(patch));
+		await this.#register(principal.accountId);
+	}
+
+	#fromClient(patch: Partial<Bot>): Partial<BotSettings> {
+		const out: Partial<BotSettings> = {};
+		if (patch.name !== undefined) out.name = patch.name;
+		if (patch.purpose !== undefined) out.purpose = patch.purpose;
+		if (patch.instructions !== undefined) out.instructions = patch.instructions;
+		if (patch.approvals !== undefined) out.approvals = patch.approvals;
+		if (patch.computerAccess !== undefined) out.computerAccess = patch.computerAccess;
+		if (patch.notify !== undefined) out.notify = patch.notify;
+		if (patch.suggestions !== undefined) out.suggestions = patch.suggestions;
+		if (patch.showTools !== undefined) out.showTools = patch.showTools;
+		if (patch.appIds !== undefined) out.appIds = patch.appIds;
+		if (patch.avatar !== undefined) out.avatar = patch.avatar;
+		if (patch.model !== undefined) {
+			out.model = { provider: patch.model.provider, modelId: patch.model.modelId };
+			if (patch.model.thinking !== undefined) out.thinking = patch.model.thinking;
+		}
+		return out;
+	}
+
+	/** Every version of the instructions, oldest first. */
+	instructionVersions(principal: Principal) {
+		this.#check(principal, this.#id);
+		const versions: { version: number; text: string; createdAt: number; author: { kind: "user" } | { kind: "bot"; botId: string } }[] = [];
+		for (const entry of this.#settings.history()) {
+			if (versions.at(-1)?.version === entry.settings.instructionsVersion) continue;
+			versions.push({
+				version: entry.settings.instructionsVersion,
+				text: entry.settings.instructions,
+				createdAt: entry.at,
+				author: entry.settings.updatedBy ? { kind: "bot", botId: entry.settings.updatedBy } : { kind: "user" },
+			});
+		}
+		return versions;
+	}
+
+	/** The thread as the live view shows it, a page before `before` at most `limit` long. */
+	async history(principal: Principal, before?: string, limit = 50) {
+		this.#check(principal, this.#id);
+		const view = (await this.#startLive()).view;
+		const end = before ? view.entries.findIndex((entry) => entry.id === before) : view.entries.length;
+		const stop = end < 0 ? view.entries.length : end;
+		const start = Math.max(0, stop - limit);
+		return { entries: view.entries.slice(start, stop), running: view.running, hasEarlier: view.hasEarlier || start > 0 };
+	}
+
+	/** Toggles the user's reaction on a message. */
+	async react(principal: Principal, entryId: string, emoji: string): Promise<void> {
+		this.#check(principal, this.#id);
+		const reactions = JSON.parse(this.#meta("reactions") ?? "{}") as Record<string, { emoji: string; count: number; mine: boolean }[]>;
+		const list = (reactions[entryId] ?? []).map((reaction) => ({ ...reaction }));
+		const existing = list.find((reaction) => reaction.emoji === emoji);
+		if (!existing) list.push({ emoji, count: 1, mine: true });
+		else if (existing.mine) Object.assign(existing, { count: existing.count - 1, mine: false });
+		else Object.assign(existing, { count: existing.count + 1, mine: true });
+		reactions[entryId] = list.filter((reaction) => reaction.count > 0);
+		await this.#setMeta("reactions", JSON.stringify(reactions));
+		await this.#refreshView();
+	}
+
+	/** Cards and other host rows, the approvals as cards, and the reactions, for the live view. */
+	#viewExtras(): ViewExtras {
+		const approvals = this.ctx.storage.sql.exec<{ id: string }>("SELECT id FROM approvals").toArray();
+		const cards: Entry[] = approvals.flatMap((row) => {
+			const approval = getApproval(this.ctx.storage.sql, row.id);
+			if (!approval) return [];
+			const { actionId: _action, ...plain } = approval;
+			return [{ kind: "card" as const, id: `approval-${row.id}`, createdAt: approval.expiresAt - APPROVAL_TTL_MS, card: { type: "approval" as const, approval: plain } }];
+		});
+		return { entries: [...hostEntries(this.ctx.storage.sql), ...cards], reactions: JSON.parse(this.#meta("reactions") ?? "{}") };
+	}
+
+	/** Re-projects the live view after cards or reactions changed, and sends the change to every subscriber. */
+	async #refreshView(): Promise<void> {
+		if (!this.#live) return;
+		const delivery = (await this.#live).refresh();
+		if (!delivery) return;
+		const text = encodeFrame(this.#frame(delivery));
+		for (const socket of this.#sockets()) socket.send(text);
+	}
+
+	/** A "Messaged <bot>" row's exchange, read-only. */
+	exchange(principal: Principal, entryId: string) {
+		this.#check(principal, this.#id);
+		const row = hostEntry(this.ctx.storage.sql, entryId);
+		if (row?.kind !== "bot-message") throw new Error(`no bot message ${entryId}`);
+		const [from, to] = row.direction === "to" ? [this.#id, row.peerBotId] : [row.peerBotId, this.#id];
+		return { peerBotId: row.peerBotId, messages: [{ from, intent: row.intent, text: row.text, createdAt: row.createdAt }], to };
+	}
+
+	/** An app panel's action, through the same approval path as the model's own actions. */
+	async appAction(principal: Principal, entryId: string, action: unknown) {
+		this.#check(principal, this.#id);
+		const row = hostEntry(this.ctx.storage.sql, entryId);
+		if (row?.kind !== "card" || row.card.type !== "app-panel") throw new Error(`no app panel ${entryId}`);
+		const result = await this.#gate({ tool: `${row.card.appId}.action`, title: `Run an action from ${row.card.title}`, target: row.card.appId, args: { action } }, { alwaysAsk: true });
+		const approval = result.decision === "ask" ? getApproval(this.ctx.storage.sql, result.approvalId) : undefined;
+		await this.#refreshView();
+		if (!approval) return {};
+		const { actionId: _action, ...plain } = approval;
+		return { approval: plain };
+	}
+
+	/** The owner answers a card: discards a skill draft, saves or dismisses a requested secret, or undoes a change. */
+	async answerCard(principal: Principal, entryId: string, answer: { type: "discard-skill" } | { type: "secret"; value?: string } | { type: "undo" }): Promise<void> {
+		this.#check(principal, this.#id);
+		const row = hostEntry(this.ctx.storage.sql, entryId);
+		if (row?.kind !== "card") throw new Error(`no card ${entryId}`);
+		const card = row.card;
+		if (answer.type === "discard-skill" && card.type === "skill-draft") await patchCard(this.#write, this.ctx.storage.sql, entryId, () => ({ ...card, state: "discarded" }));
+		else if (answer.type === "secret" && card.type === "secret-request") {
+			// The value is sealed in the vault at once and never stored here.
+			if (answer.value) await this.#user().vaultPut({ kind: card.kind, name: card.name, origin: card.origin, value: answer.value } as VaultInput);
+			await patchCard(this.#write, this.ctx.storage.sql, entryId, () => ({ ...card, state: answer.value ? "saved" : "dismissed" }));
+		} else if (answer.type === "undo" && card.type === "settings-change") {
+			await this.undoSettings(principal);
+			await patchCard(this.#write, this.ctx.storage.sql, entryId, () => ({ ...card, undone: true }));
+		} else throw new Error(`that card takes no such answer`);
+		await this.#refreshView();
+	}
+
+	/** A suggestion card's answer; false when the suggestion is not this bot's. */
+	async answerSuggestion(principal: Principal, suggestionId: string, accept: boolean): Promise<boolean> {
+		this.#check(principal, this.#id);
+		const found = findCard(this.ctx.storage.sql, (card) => card.type === "suggestion" && card.suggestionId === suggestionId);
+		if (!found || found.card.type !== "suggestion") return false;
+		const card = found.card;
+		await patchCard(this.#write, this.ctx.storage.sql, found.id, () => ({ ...card, state: accept ? "accepted" : "dismissed" }));
+		await this.#refreshView();
+		return true;
+	}
+
+	async saveSkillDraft(principal: Principal, entryId: string, draft: { name: string; description: string; content: string }) {
+		this.#check(principal, this.#id);
+		const skill = await this.#user().skillAdd({ ...draft, scope: "bot", botId: this.#id });
+		await patchCard(this.#write, this.ctx.storage.sql, entryId, (card) => (card.type === "skill-draft" ? { ...card, state: "saved" } : card));
+		await this.#refreshView();
+		return skill;
+	}
+
+	/** Every approval this bot asked for, in the protocol's shape. */
+	clientApprovals(principal: Principal) {
+		this.#check(principal, this.#id);
+		return this.ctx.storage.sql
+			.exec<{ id: string }>("SELECT id FROM approvals ORDER BY expires_at DESC")
+			.toArray()
+			.flatMap((row) => {
+				const approval = getApproval(this.ctx.storage.sql, row.id);
+				if (!approval) return [];
+				const { actionId: _action, ...plain } = approval;
+				return [plain];
+			});
+	}
+
+	/** Answers approval `id` when it is this bot's; "always" also allows its tool from now on. Undefined when it is not. */
+	async answerClientApproval(principal: Principal, id: string, decision: "allow" | "always" | "deny", passkey?: unknown) {
+		this.#check(principal, this.#id);
+		if (!getApproval(this.ctx.storage.sql, id)) return undefined;
+		const result = await this.answerApproval(principal, id, decision === "deny" ? "deny" : "allow", passkey);
+		const approval = getApproval(this.ctx.storage.sql, id)!;
+		if (decision === "always" && result === "ok") {
+			const settings = await this.#user().approvalSettings();
+			await this.#user().updateApprovalSettings({ allow: [...settings.allow, { id: `rule_${crypto.randomUUID()}`, kind: "tool", value: approval.action.tool }] });
+		}
+		await this.#refreshView();
+		const { actionId: _action, ...plain } = approval;
+		return { result, approval: plain };
+	}
+
+	notes(principal: Principal) {
+		this.#check(principal, this.#id);
+		return this.memory.notes.list().map((note) => ({
+			name: note.name,
+			description: note.description,
+			type: note.type,
+			body: note.body,
+			updatedAt: note.updatedAt,
+			shared: false,
+			outside: note.outside ?? false,
+		}));
+	}
+	async deleteNote(principal: Principal, name: string): Promise<void> {
+		this.#check(principal, this.#id);
+		await this.memory.notes.delete(name);
+	}
+	/** Moves notes to shared memory; ones that look private, or that outside text wrote, stay with the bot. */
+	async takeNotesToShare(principal: Principal, names: string[]) {
+		const all = this.notes(principal).filter((note) => names.includes(note.name));
+		const keep = all.filter((note) => note.outside || /password|salary|address|phone|health/i.test(note.body));
+		const move = all.filter((note) => !keep.includes(note));
+		for (const note of move) await this.memory.notes.delete(note.name);
+		return { notes: move.map((note) => ({ ...note, shared: true })), keptPrivate: keep.length };
+	}
+
+	openWork(principal: Principal) {
+		this.#check(principal, this.#id);
+		return this.memory.openWork.list();
+	}
+	async openWorkAdd(principal: Principal, text: string) {
+		this.#check(principal, this.#id);
+		return this.memory.openWork.add(text);
+	}
+	async openWorkUpdate(principal: Principal, id: string, patch: { text?: string; done?: boolean }) {
+		this.#check(principal, this.#id);
+		if (patch.text !== undefined) await this.#write((sql) => void sql.exec("UPDATE open_work SET text = ? WHERE id = ?", patch.text, id));
+		if (patch.done) await this.memory.openWork.complete(id);
+		return this.memory.openWork.list().find((item) => item.id === id);
+	}
+	async openWorkDelete(principal: Principal, id: string): Promise<void> {
+		this.#check(principal, this.#id);
+		await this.memory.openWork.remove(id);
+	}
+
+	startTeachingFromClient(principal: Principal, goal: string) {
+		return this.startTeaching(principal, goal);
+	}
+	stopTeachingFromClient(principal: Principal, sessionId: string) {
+		return this.stopTeaching(principal, sessionId);
+	}
+
+	hasRoutine(principal: Principal, id: string): boolean {
+		this.#check(principal, this.#id);
+		return this.#routines.get(id) !== undefined;
+	}
+	clientRoutines(principal: Principal) {
+		return this.listRoutines(principal);
+	}
+	createClientRoutine(principal: Principal, fields: RoutineInput) {
+		return this.createRoutine(principal, fields);
+	}
+	updateClientRoutine(principal: Principal, id: string, patch: Partial<RoutineInput>) {
+		return this.updateRoutine(principal, id, patch);
+	}
+	/** Runs a routine now, as its schedule would; the run as the client sees it. */
+	async testRoutine(principal: Principal, id: string) {
+		this.#check(principal, this.#id);
+		const routine = this.#routines.get(id);
+		if (!routine) throw new Error(`no routine ${id}`);
+		await this.#fireRoutine(routine, { firedAt: routineNow(), title: `Test run of ${routine.name}`, startedBy: "routine", lateMs: 0 });
+		return this.#clientRunsFor([routine.id])[0]!;
+	}
+	async mintWebhook(principal: Principal, id: string) {
+		this.#check(principal, this.#id);
+		const routine = this.#routines.get(id);
+		if (!routine) throw new Error(`no routine ${id}`);
+		const minted = await mintWebhook(this.env.DB, { routineId: id, botId: this.#id, accountId: this.#owner!, origin: this.env.APP_ORIGIN ?? "https://bots.knightcode.dev" });
+		const trigger = { kind: "webhook" as const, id: minted.id };
+		await this.#routines.update(id, { triggers: [...routine.triggers, trigger] });
+		return { trigger, url: minted.url };
+	}
+
+	#clientRunsFor(routineIds: string[]) {
+		const running = this.#harness.wake().active;
+		return routineIds
+			.flatMap((routineId) => this.#routines.runs(routineId))
+			.sort((a, b) => b.firedAt - a.firedAt)
+			.map((run, index) => ({
+				id: run.id,
+				botId: this.#id,
+				routineId: run.routineId,
+				title: run.title,
+				startedBy: run.startedBy,
+				status: (index === 0 && running ? "running" : "succeeded") as "running" | "succeeded",
+				startedAt: run.firedAt,
+				...(run.lateMs > LATE_MS ? { late: true } : {}),
+			}));
+	}
+	clientRuns(principal: Principal, filter: { routineId?: string; status?: string; from?: number; to?: number }) {
+		this.#check(principal, this.#id);
+		const ids = filter.routineId ? [filter.routineId] : this.#routines.list().map((routine) => routine.id);
+		return this.#clientRunsFor(ids).filter(
+			(run) => (filter.status === undefined || run.status === filter.status) && (filter.from === undefined || run.startedAt >= filter.from) && (filter.to === undefined || run.startedAt <= filter.to),
+		);
+	}
+	async stopClientRun(principal: Principal, id: string) {
+		this.#check(principal, this.#id);
+		const run = this.#clientRunsFor(this.#routines.list().map((routine) => routine.id)).find((candidate) => candidate.id === id);
+		if (!run) return undefined;
+		if (run.status === "running") await this.stop(principal);
+		return { ...run, status: "stopped" as const, endedAt: Date.now() };
+	}
+
+	/** A page button: a routine runs now, an app action asks the owner first. */
+	async pressButton(principal: Principal, action: { kind: "routine"; routineId: string } | { kind: "connector"; appId: string; tool: string; args: Record<string, unknown> }, label: string) {
+		this.#check(principal, this.#id);
+		if (action.kind === "routine") return { runId: (await this.testRoutine(principal, action.routineId)).id };
+		const result = await this.#gate({ tool: `${action.appId}.${action.tool}`, title: label, target: action.appId, args: action.args ?? {} }, { alwaysAsk: true });
+		const approval = result.decision === "ask" ? getApproval(this.ctx.storage.sql, result.approvalId) : undefined;
+		if (!approval) return {};
+		const { actionId: _action, ...plain } = approval;
+		return { approval: plain };
+	}
+
+	/** Messages in this bot's thread that mention `needle`. */
+	async searchThread(principal: Principal, needle: string) {
+		this.#check(principal, this.#id);
+		const name = this.#settings.read().name;
+		const hits: { kind: "bot" | "message"; id: string; botId: string; title: string; snippet?: string }[] = [];
+		if (name.toLowerCase().includes(needle)) hits.push({ kind: "bot", id: this.#id, botId: this.#id, title: name, snippet: this.#settings.read().purpose });
+		for (const entry of (await this.#startLive()).view.entries)
+			if (entry.kind === "message" && entry.text.toLowerCase().includes(needle)) hits.push({ kind: "message", id: entry.id, botId: this.#id, title: name, snippet: entry.text.slice(0, 140) });
+		return hits;
+	}
+
+	/** Imports a recipe's ticked parts into this new bot; returns the plugins that matched nothing in the catalog. */
+	async importRecipeParts(
+		principal: Principal,
+		request: { recipe: Recipe; origin: "self" | "other"; memory: number[]; sharedMemory: number[]; skills: number[]; routines: number[]; plugins: number[] },
+	): Promise<string[]> {
+		this.#check(principal, this.#id);
+		const { recipe } = request;
+		const shared = request.origin === "self" ? request.sharedMemory : [];
+		const sharedNotes: Note[] = [];
+		for (const [index, item] of recipe.memory.entries()) {
+			if (!request.memory.includes(index) && !shared.includes(index)) continue;
+			const note = { name: `imported-${index + 1}`, description: item.content.slice(0, 60), type: "fact" as const, body: item.content };
+			if (shared.includes(index)) sharedNotes.push({ ...note, updatedAt: Date.now(), shared: true, outside: false });
+			// Another person's memory is outside text.
+			else await this.memory.notes.write({ ...note, outside: request.origin === "other" });
+		}
+		if (sharedNotes.length > 0) await this.#user().addSharedNotes(sharedNotes);
+		for (const [index, skill] of recipe.skills.entries())
+			if (request.skills.includes(index)) await this.#user().skillAdd({ name: skill.name, description: skill.description, content: skill.content, scope: "user" });
+		for (const [index, routine] of recipe.routines.entries())
+			if (request.routines.includes(index))
+				await this.createRoutine(principal, { name: routine.name, prompt: routine.content, triggers: [], grant: { actions: [], targets: [], limits: {} }, active: false, note: routine.description } as RoutineInput);
+		const catalog = await this.#user().catalog({});
+		const plugins = recipe.plugins.filter((_, index) => request.plugins.includes(index));
+		const matched = plugins.map((plugin) => catalog.find((entry) => entry.id === plugin.pluginId || entry.name.toLowerCase() === plugin.name.toLowerCase())?.id);
+		await this.#settings.write({ ...this.#settings.read(), appIds: matched.filter((id): id is string => id !== undefined) });
+		return plugins.filter((_, index) => matched[index] === undefined).map((plugin) => plugin.name);
+	}
+
+	/** Development only (BOTS_DEV_SEED): this bot as the seed describes it, its thread's rows and cards included. */
+	async importSeed(
+		principal: Principal,
+		part: { bot: Bot; thread?: ConversationViewProtocol; notes: Note[]; openWork: { id: string; text: string; done: boolean; createdAt: number }[]; routines: Routine[]; approvals: Approval[]; instructionVersions: unknown[]; reply?: string },
+	): Promise<void> {
+		if (this.env.BOTS_DEV_SEED !== "1") throw new Error("seeding is off");
+		await this.create(principal, part.bot);
+		await this.#setMeta("created_at", String(part.bot.createdAt));
+		if (part.reply) await this.#setMeta("seed_reply", part.reply);
+		for (const entry of part.thread?.entries ?? []) await addHostEntry(this.#write, entry);
+		const reactions = Object.fromEntries((part.thread?.entries ?? []).flatMap((entry) => (entry.kind === "message" && entry.reactions?.length ? [[entry.id, entry.reactions]] : [])));
+		await this.#setMeta("reactions", JSON.stringify(reactions));
+		for (const note of part.notes) await this.memory.notes.write({ name: note.name, description: note.description, type: note.type, body: note.body, outside: note.outside });
+		for (const item of part.openWork) await this.memory.openWork.add(item.text);
+		for (const routine of part.routines)
+			await this.createRoutine(principal, { name: routine.name, prompt: routine.prompt, triggers: routine.triggers, grant: routine.grant, active: routine.active, ...(routine.note ? { note: routine.note } : {}) } as RoutineInput);
+		// Seeded approvals become real pending approvals with their cards.
+		for (const approval of part.approvals) {
+			if (approval.state !== "pending") continue;
+			const intent = { ...approval.action, args: {} };
+			const record = await this.#write((sql) => recordAction(sql, this.#id, intent));
+			const created = await createApproval(this.ctx.storage.sql, { botId: this.#id, actionId: record.id, action: intent, policyVersion: this.#policyVersion, ttlMs: APPROVAL_TTL_MS });
+			await this.#write((sql) => void sql.exec("UPDATE actions SET approval_id = ? WHERE id = ?", created.id, record.id));
+		}
+	}
+
 	/** The wallet this bot's purchases draw on (the owner links it once). */
 	async setWallet(principal: Principal, customerId: string): Promise<void> {
 		this.#check(principal, this.#id);
@@ -1631,7 +2039,7 @@ export class BotObject extends DurableObject<Env> {
 	#startLive(): Promise<LiveView> {
 		this.#live ??= (async () => {
 			const root = await this.#conversation();
-			const live = new LiveView((query, limit, ctx) => root.entries(query, limit, undefined, ctx));
+			const live = new LiveView((query, limit, ctx) => root.entries(query, limit, undefined, ctx), () => this.#viewExtras());
 			const watch = await root.watch(context);
 			live.update(watch.value);
 			watch.start(async (call) => {

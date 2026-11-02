@@ -15,6 +15,10 @@ export interface BotSettings {
 	approvals: "never" | "auto" | "ask" | "default";
 	/** Push when the bot finishes (and when it needs input), only when it needs input, or never. */
 	notify?: "finish" | "input" | "never";
+	/** How the bot looks, whether chat shows the tools it used, and the apps it may use. */
+	avatar?: { shape: string; color: string };
+	showTools?: boolean;
+	appIds?: string[];
 	/** Proactive suggestions: off until the owner turns them on. */
 	suggestions?: boolean;
 	/** A Chief of Staff: it gets the management tools (in runs the owner started). */
@@ -62,6 +66,12 @@ export class SettingsStore {
 				JSON.stringify(settings),
 			);
 		});
+	}
+
+	/** Every earlier version, oldest first, with when it was replaced, then the current one. */
+	history(): { settings: BotSettings; at: number }[] {
+		const rows = this.#sql.exec<{ value: string; at: number }>("SELECT value, at FROM bot_settings_history ORDER BY version").toArray();
+		return [...rows.map((row) => ({ settings: { ...DEFAULTS, ...(JSON.parse(row.value) as Partial<BotSettings>) }, at: row.at })), { settings: this.read(), at: Date.now() }];
 	}
 
 	/** Restores the settings before the newest change; undefined when there is nothing to undo. */

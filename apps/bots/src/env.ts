@@ -42,6 +42,12 @@ export interface Env {
 	/** Stripe (agent payments): secret key, and (tests) the emulator's base URL. Payments are offered in PAYMENTS_COUNTRIES. */
 	STRIPE_SECRET_KEY?: string;
 	STRIPE_API_URL?: string;
+	/** Slack's OAuth client id, for installing the app into a workspace. */
+	SLACK_CLIENT_ID?: string;
+	/** Development and browser tests only, never in a deployed configuration: "1" serves the seed import. */
+	BOTS_DEV_SEED?: string;
+	/** Development only: an OpenAI-compatible server (the fake model server) offered as the provider "fake". */
+	BOTS_DEV_MODEL_URL?: string;
 	/** Web Push (VAPID): the public key (raw P-256, base64url), its private scalar (a secret, base64url) and contact. */
 	VAPID_PUBLIC_KEY?: string;
 	VAPID_PRIVATE_KEY?: string;

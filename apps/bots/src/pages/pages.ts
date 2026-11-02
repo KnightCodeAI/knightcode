@@ -118,6 +118,32 @@ export class PageStore {
 		return this.get(id)!;
 	}
 
+	/** One stored version of the page, whole. */
+	version(id: string, version: number): Page | undefined {
+		const current = this.get(id);
+		const row = this.#sql
+			.exec<{ title: string; blocks: string; at: number }>("SELECT title, blocks, at FROM page_versions WHERE page_id = ? AND version = ?", id, version)
+			.toArray()[0];
+		if (!current || !row) return undefined;
+		return { ...current, title: row.title, blocks: JSON.parse(row.blocks) as Page["blocks"], version, updatedAt: row.at };
+	}
+
+	/** Development seeding: a page with its own id, version and time. */
+	import(page: Page): void {
+		const blocks = JSON.stringify(validateBlocks(page.blocks));
+		this.#sql.exec(
+			"INSERT OR REPLACE INTO pages (id, title, owner_bot, pinned, version, blocks, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			page.id,
+			page.title,
+			page.ownerBotId,
+			page.pinned ? 1 : 0,
+			page.version,
+			blocks,
+			page.updatedAt,
+		);
+		this.#sql.exec("INSERT OR REPLACE INTO page_versions (page_id, version, title, blocks, author, at) VALUES (?, ?, ?, ?, ?, ?)", page.id, page.version, page.title, blocks, page.ownerBotId, page.updatedAt);
+	}
+
 	versions(id: string): { version: number; author: string; at: number }[] {
 		return this.#sql
 			.exec<{ version: number; author: string; at: number }>("SELECT version, author, at FROM page_versions WHERE page_id = ? ORDER BY version DESC", id)

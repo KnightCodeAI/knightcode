@@ -1,9 +1,18 @@
+import type { FakeSeed } from "@knightcode/bots-protocol";
 import { CLEAR_SESSION_COOKIE, issueSession, readSession, revokeSession, sessionCookie } from "./auth/session.ts";
 import { sendEmailCode, TooManyCodes, verifyEmailCode } from "./auth/email-code.ts";
 import { completeOAuth, startOAuth } from "./auth/oauth.ts";
 import { beginPasskey, finishPasskey } from "./auth/passkeys.ts";
 import { isDeleted } from "./account/deletion.ts";
-import { issueTicket } from "./auth/tickets.ts";
+import { accountHandlers } from "./api/account.ts";
+import { botHandlers } from "./api/bots.ts";
+import { groupHandlers } from "./api/groups.ts";
+import { type Handlers, HttpError } from "./api/http.ts";
+import { settingsHandlers } from "./api/settings.ts";
+import { threadHandlers } from "./api/threads.ts";
+import { workHandlers } from "./api/work.ts";
+import { workspaceHandlers } from "./api/workspace.ts";
+import { devSeedEnabled, importSeed } from "./dev/seed.ts";
 import { StripeBilling } from "./billing/stripe.ts";
 import { billingChanges, type StripeEvent, verifyStripeSignature } from "./billing/webhooks.ts";
 import type { Principal } from "./auth/session.ts";
@@ -92,12 +101,8 @@ const userOf = (env: Env, principal: Principal) => env.USER.get(env.USER.idFromN
 
 type Handler<N extends RouteName> = (env: Env, principal: Principal, request: RouteRequest<N>) => Promise<RouteResponse<N>>;
 
-/** The API routes served so far; the rest of the contract answers 404 until its task lands. */
-const HANDLERS: { [N in RouteName]?: Handler<N> } = {
-	issueTicket: async (env, principal, { scope }) => {
-		const ttlMs = 60_000;
-		return { ticket: await issueTicket(env, principal, scope, ttlMs), expiresAt: Date.now() + ttlMs };
-	},
+/** The vault and push routes; every other route is in src/api. */
+const CORE_HANDLERS: { [N in RouteName]?: Handler<N> } = {
 	listVault: async (env, principal) => ({ items: await userOf(env, principal).vaultList() }),
 	getPushKey: async (env) => ({ publicKey: env.VAPID_PUBLIC_KEY ?? "" }),
 	subscribePush: async (env, principal, { subscription }) => {
@@ -113,6 +118,18 @@ const HANDLERS: { [N in RouteName]?: Handler<N> } = {
 		await userOf(env, principal).vaultDelete(id);
 		return { ok: true as const };
 	},
+};
+
+/** Every route of the contract. */
+const HANDLERS: Handlers = {
+	...accountHandlers,
+	...botHandlers,
+	...groupHandlers,
+	...threadHandlers,
+	...workspaceHandlers,
+	...workHandlers,
+	...settingsHandlers,
+	...(CORE_HANDLERS as Handlers),
 };
 
 async function api(request: Request, env: Env, pathname: string): Promise<Response> {
@@ -134,9 +151,25 @@ async function api(request: Request, env: Env, pathname: string): Promise<Respon
 	try {
 		return json(await handler(env, principal, input));
 	} catch (error) {
+		if (error instanceof HttpError) return json({ error: error.code, message: error.message }, error.status);
 		console.error("api", match.route.name, error);
 		return json({ error: "failed" }, 500);
 	}
+}
+
+/** A file of the signed-in account, served after the session check. */
+async function fileContent(request: Request, env: Env, id: string): Promise<Response> {
+	const principal = await readSession(env, request);
+	if (!principal) return json({ error: "unauthorized" }, 401);
+	const file = await userOf(env, principal).getFile(id);
+	if (!file) return json({ error: "not_found" }, 404);
+	return new Response(file.body, {
+		headers: {
+			"content-type": file.ref.mime ?? "application/octet-stream",
+			"content-disposition": `attachment; filename="${file.ref.name.replace(/["\\\r\n]/g, "_")}"`,
+			"x-content-type-options": "nosniff",
+		},
+	});
 }
 
 /** Inbound trigger events (spec section 12): each source's signature is checked before anything is read. */
@@ -271,6 +304,21 @@ export default {
 		const desktop = /^\/api\/desktop\/([^/]+)\/link$/.exec(pathname);
 		if (desktop && request.headers.get("upgrade")?.toLowerCase() === "websocket")
 			return env.USER.get(env.USER.idFromName(decodeURIComponent(desktop[1]!))).fetch(request);
+		// The UI's one realtime socket: the account's user object checks the ticket in its first frame. The web app's
+		// cookie names the account; the desktop names it in the query (the ticket must still be that account's).
+		if (pathname === "/api/socket" && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+			const accountId = (await readSession(env, request))?.accountId ?? new URL(request.url).searchParams.get("account");
+			if (!accountId) return json({ error: "unauthorized" }, 401);
+			return env.USER.get(env.USER.idFromName(accountId)).fetch(request);
+		}
+		const content = /^\/api\/files\/([^/]+)\/content$/.exec(pathname);
+		if (content && request.method === "GET") return fileContent(request, env, decodeURIComponent(content[1]!));
+		// Development and browser tests only: loads a seed world into the signed-in account.
+		if (pathname === "/__dev/seed" && request.method === "POST" && devSeedEnabled(env)) {
+			const principal = await readSession(env, request);
+			if (!principal) return json({ error: "unauthorized" }, 401);
+			return json(await importSeed(env, principal, (await request.json()) as FakeSeed));
+		}
 		// A bot's live socket: the bot object checks the ticket in its first frame.
 		const socket = /^\/api\/bots\/([^/]+)\/socket$/.exec(pathname);
 		if (socket && request.headers.get("upgrade")?.toLowerCase() === "websocket")
