@@ -42,6 +42,7 @@ async function ensureChrome(user: string): Promise<{ session: Session; target: s
 			HOME: `/home/${user}`,
 			USER: user,
 			DISPLAY: `:${session.display}`,
+			XAUTHORITY: `/home/${user}/.Xauthority`,
 			PATH: process.env.PATH ?? "/usr/bin:/bin",
 			...(process.env.TZ ? { TZ: process.env.TZ } : {}),
 		},

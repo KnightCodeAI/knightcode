@@ -110,3 +110,18 @@ it("joins Tailscale with a single-use ephemeral tagged key and an exit node thro
 	expect(script).toContain(`--hostname='bot'\\''s computer'`);
 	expect(joinScript({ key, hostname: "b" })).not.toContain("--exit-node");
 });
+
+it("review 3.15: a linked desktop whose session is revoked stops receiving commands", async () => {
+	const signedIn = await signedInPrincipal();
+	const account = env.USER.get(env.USER.idFromName(signedIn.accountId));
+	await bot("revoked-bot").claim(signedIn, { provider: "fake", modelId: "fake-model" });
+	const desktop = await linkDesktop(signedIn.accountId, await issueTicket(env, signedIn, "socket"), (command) => ({ output: `ran ${command}`, exitCode: 0 }));
+	expect(await runOnMyComputer("revoked-bot", "ls")).toEqual({ text: "exit 0\nran ls", isError: false });
+	await env.DB.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ?").bind(Date.now(), signedIn.sessionId).run();
+	// The next check is due.
+	await runInDurableObject(account, (_instance: UserObject, state) => {
+		for (const socket of state.getWebSockets("desktop")) socket.serializeAttachment({ ...(socket.deserializeAttachment() as object), checkedAt: 0 });
+	});
+	expect(await runOnMyComputer("revoked-bot", "ls")).toEqual({ text: OFFLINE, isError: true });
+	await until(() => desktop.closed() !== undefined);
+});

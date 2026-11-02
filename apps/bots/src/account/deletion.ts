@@ -18,6 +18,7 @@ const ACCOUNT_TABLES = [
 	"email_correspondents",
 	"email_health",
 	"email_sends",
+	"github_installations",
 	"groups",
 	"handles",
 	"identities",
@@ -46,33 +47,53 @@ export async function deleteAccount(env: Env, principal: Principal): Promise<Del
 	const accountId = principal.accountId;
 	await env.DB.prepare("INSERT OR IGNORE INTO deleted_accounts (account_id, deleted_at) VALUES (?, ?)").bind(accountId, Date.now()).run();
 
-	const botIds = (await env.DB.prepare("SELECT id FROM bots WHERE account_id = ?").bind(accountId).all<{ id: string }>()).results.map((row) => row.id);
+	const registered = async () => (await env.DB.prepare("SELECT id FROM bots WHERE account_id = ?").bind(accountId).all<{ id: string }>()).results.map((row) => row.id);
+	const botIds = await registered();
 	const groupIds = (await env.DB.prepare("SELECT id FROM groups WHERE account_id = ?").bind(accountId).all<{ id: string }>()).results.map((row) => row.id);
 	const emails = (await env.DB.prepare("SELECT email FROM identities WHERE account_id = ? AND email IS NOT NULL").bind(accountId).all<{ email: string }>()).results.map(
 		(row) => row.email,
 	);
 
-	// Connections, while their credentials still exist.
+	// First every connection is revoked and the computer destroyed, while their credentials still exist. A failure stops
+	// here, before anything is deleted: the tombstone keeps the account frozen and running the deletion again finishes it.
 	const revoked = { composio: 0, plaid: 0, stripe: 0 };
 	const connections = (await env.DB.prepare("SELECT connected_account_id AS id FROM composio_accounts WHERE account_id = ?").bind(accountId).all<{ id: string }>())
 		.results;
-	if (env.COMPOSIO_API_KEY) {
+	if (connections.length > 0) {
+		if (!env.COMPOSIO_API_KEY) throw new Error("Composio connections cannot be revoked without its key; deletion stopped");
 		const composio = new ComposioClient({ apiKey: env.COMPOSIO_API_KEY, baseUrl: env.COMPOSIO_BASE_URL });
-		for (const connection of connections) if (await composio.deleteConnection(connection.id)) revoked.composio++;
+		for (const connection of connections) {
+			if (!(await composio.deleteConnection(connection.id))) throw new Error(`Composio did not revoke ${connection.id}; deletion stopped`);
+			await env.DB.prepare("DELETE FROM composio_accounts WHERE connected_account_id = ?").bind(connection.id).run();
+			revoked.composio++;
+		}
 	}
-	const stripeCustomers: string[] = [];
-	for (const botId of botIds) {
-		const purged = await env.BOT.get(env.BOT.idFromName(botId)).purge(principal);
-		if (purged.walletCustomer) stripeCustomers.push(purged.walletCustomer);
-	}
-	const user = await env.USER.get(env.USER.idFromName(accountId)).purge();
-	revoked.plaid = user.plaidItems;
-	if (user.stripeCustomer) stripeCustomers.push(user.stripeCustomer);
-	if (env.STRIPE_SECRET_KEY) {
+	const user = env.USER.get(env.USER.idFromName(accountId));
+	revoked.plaid = await user.revokeBanks();
+	const stripeCustomers = [await user.stripeCustomer()];
+	for (const botId of botIds) stripeCustomers.push(await env.BOT.get(env.BOT.idFromName(botId)).walletCustomer(principal));
+	const customers = [...new Set(stripeCustomers.filter((customer): customer is string => !!customer))];
+	if (customers.length > 0) {
+		if (!env.STRIPE_SECRET_KEY) throw new Error("Stripe customers cannot be removed without its key; deletion stopped");
 		const stripe = new StripeBilling({ secretKey: env.STRIPE_SECRET_KEY, apiUrl: env.STRIPE_API_URL });
-		for (const customer of new Set(stripeCustomers)) if (await stripe.deleteCustomer(customer)) revoked.stripe++;
+		for (const customer of customers) {
+			if (!(await stripe.deleteCustomer(customer))) throw new Error(`Stripe did not remove ${customer}; deletion stopped`);
+			revoked.stripe++;
+		}
 	}
-	await env.COMPUTER.get(env.COMPUTER.idFromName(accountId)).purge();
+	const computer = env.COMPUTER.get(env.COMPUTER.idFromName(accountId));
+	await computer.destroyForDeletion();
+
+	// Then every object's storage and alarm. A bot registered meanwhile (an in-flight create) is purged too; new ones
+	// cannot be claimed once the tombstone is written.
+	const purged = new Set<string>();
+	for (let ids = botIds; ids.length > 0; ids = (await registered()).filter((id) => !purged.has(id)))
+		for (const botId of ids) {
+			await env.BOT.get(env.BOT.idFromName(botId)).purge(principal);
+			purged.add(botId);
+		}
+	await user.purge();
+	await computer.purge();
 
 	let r2Objects = 0;
 	for (const prefix of accountPrefixes(accountId)) {
@@ -95,5 +116,5 @@ export async function deleteAccount(env: Env, principal: Principal): Promise<Del
 		env.DB.prepare("DELETE FROM accounts WHERE id = ?").bind(accountId),
 	];
 	await env.DB.batch(statements);
-	return { bots: botIds.length, r2Objects, revoked };
+	return { bots: purged.size, r2Objects, revoked };
 }

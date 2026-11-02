@@ -18,7 +18,7 @@ FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 RUN apt-get update && apt-get install -y --no-install-recommends \
 		ca-certificates curl gnupg unzip xz-utils tar procps psmisc sudo locales tzdata \
-		xvfb openbox x11vnc xdotool imagemagick novnc \
+		xvfb xauth openbox x11vnc xdotool imagemagick novnc \
 		fonts-dejavu fonts-liberation fonts-noto-color-emoji \
 		git python3 python3-venv nodejs npm poppler-utils pandoc \
 	&& rm -rf /var/lib/apt/lists/*

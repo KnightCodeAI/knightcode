@@ -29,6 +29,8 @@ export async function startPlaid(): Promise<{ url: string; close(): Promise<void
 				if (!body.public_token?.startsWith("public-")) return json(400, { error_code: "INVALID_PUBLIC_TOKEN" });
 				return json(200, { access_token: `access-${body.public_token.slice(7)}`, item_id: `item-${body.public_token.slice(7)}` });
 			case "/item/remove":
+				// A token named "access-fail" stands for Plaid being down.
+				if (body.access_token === "access-fail") return json(503, { error_code: "INTERNAL_SERVER_ERROR" });
 				if (!body.access_token?.startsWith("access-") || removed.has(body.access_token)) return json(400, { error_code: "ITEM_NOT_FOUND" });
 				removed.add(body.access_token);
 				return json(200, { removed: true });

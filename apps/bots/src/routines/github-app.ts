@@ -61,6 +61,26 @@ function describe(name: string, payload: Payload): { title: string; text: string
 	return { title, text: body.join("\n"), branch, user };
 }
 
+/**
+ * Binds an installation to the account whose GitHub sign-in installed it (created), or drops it (deleted). Events from
+ * an installation reach only the routines of accounts bound to it.
+ */
+async function recordInstallation(db: D1Database, payload: Payload): Promise<void> {
+	const installation = String(payload.installation?.id ?? "");
+	if (!installation) return;
+	if (payload.action === "deleted") {
+		await db.prepare("DELETE FROM github_installations WHERE installation_id = ?").bind(installation).run();
+		return;
+	}
+	if (payload.action !== "created" || payload.sender?.id === undefined) return;
+	await db
+		.prepare(
+			"INSERT OR IGNORE INTO github_installations (installation_id, account_id) SELECT ?, account_id FROM identities WHERE provider = 'github' AND subject = ?",
+		)
+		.bind(installation, String(payload.sender.id))
+		.run();
+}
+
 export const githubAdapter: TriggerAdapter<"github"> = {
 	kind: "github",
 	async verify(request, env) {
@@ -70,7 +90,13 @@ export const githubAdapter: TriggerAdapter<"github"> = {
 		const raw = await request.text();
 		if (!sameSignature(signature.slice(7), await hmacHex(secret, raw))) return undefined;
 		const payload = JSON.parse(raw) as Payload;
-		const name = eventName(request.headers.get("x-github-event") ?? "", payload);
+		const kind = request.headers.get("x-github-event") ?? "";
+		// The app was installed or removed: the installing user's account holds the installation.
+		if (kind === "installation") {
+			await recordInstallation(env.DB, payload);
+			return [];
+		}
+		const name = eventName(kind, payload);
 		const repo = payload.repository?.full_name as string | undefined;
 		if (!name || !repo) return [];
 		const { title, text, branch, user } = describe(name, payload);

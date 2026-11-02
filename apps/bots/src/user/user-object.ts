@@ -12,7 +12,8 @@ import * as balance from "./balance.ts";
 import type { Balance, MeteredKind, Reservation } from "./balance.ts";
 import { createCredentialsTable, SealedCredentialStore } from "./credentials.ts";
 import { beginEnrollment, createEnrollmentTable, spendEnrollment } from "./enrollment.ts";
-import { type BankAccount, linkBank, PlaidClient } from "../finance/plaid.ts";
+import { BANK_FEE_PERIOD_MS, BANK_GRACE_MS, type BankAccount, linkBank, PlaidClient } from "../finance/plaid.ts";
+import { isDeleted } from "../account/deletion.ts";
 import { DesktopLink, type ExecResult } from "../desktop/link.ts";
 import { type Feature, planAllows, type PlanStatus } from "../billing/plans.ts";
 import { createUsageTable, recordUsage, type UsageDelta, usageSummary } from "../billing/usage.ts";
@@ -81,6 +82,7 @@ export class UserObject extends DurableObject<Env> {
 			createSpendTables(this.#sql);
 			createUsageTable(this.#sql);
 			createPushTables(this.#sql);
+			this.#sql.exec("CREATE TABLE IF NOT EXISTS bank_links (item_id TEXT PRIMARY KEY, accounts INTEGER NOT NULL, renews_at INTEGER NOT NULL, unpaid_since INTEGER)");
 			this.#sql.exec("CREATE TABLE IF NOT EXISTS user_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
 			// Entries an earlier instance could not copy are copied soon.
 			if (this.#sql.exec("SELECT 1 FROM journal_outbox LIMIT 1").toArray().length > 0)
@@ -244,8 +246,11 @@ export class UserObject extends DurableObject<Env> {
 
 	override async alarm(): Promise<void> {
 		if (this.#deleted) return;
+		// A deleted account's object, woken by an alarm a lost instance left: it removes itself instead.
+		if (await isDeleted(this.env.DB, this.#accountId)) return this.purge();
 		await this.#flush();
 		await this.flushPushes();
+		await this.renewBankLinks().catch((error: unknown) => console.error("bank renewal", error));
 	}
 
 	// ─── Export and deletion ──────────────────────────────────────────────────
@@ -265,22 +270,31 @@ export class UserObject extends DurableObject<Env> {
 	 * Revokes the account's bank links, then deletes everything this object holds (the data key with it) and its alarm.
 	 * Returns the Stripe customer for the caller to delete.
 	 */
-	async purge(): Promise<{ plaidItems: number; stripeCustomer?: string }> {
-		let plaidItems = 0;
-		for (const item of (await this.credentials().list()).filter((entry) => entry.providerId.startsWith("plaid:"))) {
-			const credential = (await this.credentials().read(item.providerId)) as { key?: string } | undefined;
-			if (!credential?.key) continue;
-			await this.#plaid()
-				.removeItem(credential.key)
-				.then(() => plaidItems++)
-				.catch((error: unknown) => console.error("plaid revoke", error));
-		}
-		const stripeCustomer = this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'stripe_customer'").toArray()[0]?.value;
+	async purge(): Promise<void> {
 		for (const socket of this.ctx.getWebSockets()) socket.close(4410, "account deleted");
+		this.#deleted = true;
 		await this.ctx.storage.deleteAlarm();
 		await this.ctx.storage.deleteAll();
-		this.#deleted = true;
-		return { plaidItems, ...(stripeCustomer ? { stripeCustomer } : {}) };
+	}
+
+	/**
+	 * Removes every bank link at Plaid; each one's token is forgotten only once Plaid confirms. A failure throws with the
+	 * rest kept, so deletion stops and can run again.
+	 */
+	async revokeBanks(): Promise<number> {
+		let removed = 0;
+		for (const item of (await this.credentials().list()).filter((entry) => entry.providerId.startsWith("plaid:"))) {
+			const credential = (await this.credentials().read(item.providerId)) as { key?: string } | undefined;
+			if (credential?.key) await this.#plaid().removeItem(credential.key);
+			await this.credentials().delete(item.providerId);
+			this.#sql.exec("DELETE FROM bank_links WHERE item_id = ?", item.providerId.slice("plaid:".length));
+			removed++;
+		}
+		return removed;
+	}
+
+	stripeCustomer(): string | undefined {
+		return this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'stripe_customer'").toArray()[0]?.value;
 	}
 
 	// ─── Notifications ────────────────────────────────────────────────────────
@@ -419,10 +433,23 @@ export class UserObject extends DurableObject<Env> {
 	/** One verified Stripe event's changes; grants and refunds are keyed, so replays change nothing. */
 	applyBilling(changes: BillingChange[]): void {
 		for (const change of changes) {
-			if (change.type === "plan") this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('plan', ?)", change.status);
+			if (change.type === "plan") {
+				// Stripe redelivers and reorders events: only a change at least as new as the last one applies.
+				const last = Number(this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'plan_at'").toArray()[0]?.value ?? -1);
+				if (change.at < last) continue;
+				this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('plan', ?), ('plan_at', ?)", change.status, String(change.at));
+			}
 			else if (change.type === "customer") this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('stripe_customer', ?)", change.id);
 			else if (change.type === "grant") balance.grantCredits(this.#sql, change.cents, change.key, this.#journal);
-			else balance.revokeCredits(this.#sql, change.cents, change.key, this.#journal);
+			else if (change.type === "refund") {
+				// What was refunded comes off at the rate it was bought; only the part not already taken back.
+				const key = `refunded:${change.chargeId}`;
+				const applied = Number(this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = ?", key).toArray()[0]?.value ?? 0);
+				if (change.refundedTotal <= applied) continue;
+				const cents = Math.floor(change.refundedTotal / 1.1) - Math.floor(applied / 1.1);
+				this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES (?, ?)", key, String(change.refundedTotal));
+				if (cents > 0) balance.revokeCredits(this.#sql, cents, `refund:${change.chargeId}:${change.refundedTotal}`, this.#journal);
+			}
 		}
 	}
 	recordUsage(deltas: UsageDelta[]): void {
@@ -448,10 +475,18 @@ export class UserObject extends DurableObject<Env> {
 	spendCheck(botId: string, amount: number) {
 		return checkLimits(this.#sql, botId, amount);
 	}
-	recordPurchase(botId: string, purchase: Purchase, approvalId: string): string {
-		const id = recordPurchase(this.#sql, botId, purchase, approvalId);
+	/** Checks the bot's limits and holds the amount in one step (nothing awaits between): the purchase's record. */
+	spendCommit(botId: string, purchase: Purchase, approvalId: string): { ok: true; id: string } | { ok: false; reason: string } {
+		const limits = checkLimits(this.#sql, botId, purchase.amount);
+		if (!limits.ok) return limits;
+		return { ok: true, id: recordPurchase(this.#sql, botId, purchase, approvalId) };
+	}
+	/** A held purchase whose credential was refused: the amount is free again. */
+	purchaseCancel(id: string): void {
+		this.#sql.exec("DELETE FROM purchases WHERE id = ?", id);
+	}
+	purchaseIssued(botId: string, purchase: Purchase): void {
 		this.inbox.add({ kind: "review", botId, title: `Bought ${purchase.item} from ${purchase.merchant}`, detail: `${purchase.amount / 100} ${purchase.currency}` });
-		return id;
 	}
 
 	#plaid(): PlaidClient {
@@ -465,16 +500,61 @@ export class UserObject extends DurableObject<Env> {
 		const result = await linkBank({
 			plaid: this.#plaid(),
 			publicToken,
-			reserve: async () => {
-				const reservation = await this.reserve("bank", 1);
+			reserve: async (units) => {
+				const reservation = await this.reserve("bank", units);
 				return reservation === "insufficient" ? "insufficient" : { id: reservation.id };
 			},
-			settle: (reservationId) => this.settle(reservationId, 1),
-			store: async (itemId, accessToken) => {
+			settle: (reservationId, units) => this.settle(reservationId, units),
+			store: async (itemId, accessToken, accounts) => {
 				await this.credentials().modify(`plaid:${itemId}`, async () => ({ type: "api_key", key: accessToken }));
+				this.#sql.exec(
+					"INSERT OR REPLACE INTO bank_links (item_id, accounts, renews_at, unpaid_since) VALUES (?, ?, ?, NULL)",
+					itemId,
+					accounts,
+					Date.now() + BANK_FEE_PERIOD_MS,
+				);
 			},
 		});
+		if (result !== "insufficient") await this.#alarmAt(this.#nextBankDue());
 		return result;
+	}
+
+	/** When the next bank link renews, or an unpaid one's grace ends. */
+	#nextBankDue(): number {
+		const row = this.#sql
+			.exec<{ due: number | null }>("SELECT MIN(CASE WHEN unpaid_since IS NULL THEN renews_at ELSE MIN(renews_at, unpaid_since + ?) END) AS due FROM bank_links", BANK_GRACE_MS)
+			.one();
+		return row.due ?? Number.MAX_SAFE_INTEGER;
+	}
+
+	/**
+	 * Each bank link due pays its next month (one unit per account). One that cannot is marked unpaid and the owner told;
+	 * after seven unpaid days it is removed at Plaid and here, so the fee stops. Relinking restores it.
+	 */
+	async renewBankLinks(now = Date.now()): Promise<void> {
+		const due = this.#sql
+			.exec<{ item_id: string; accounts: number; renews_at: number; unpaid_since: number | null }>("SELECT * FROM bank_links WHERE renews_at <= ?", now)
+			.toArray();
+		for (const link of due) {
+			const reservation = await this.reserve("bank", link.accounts);
+			if (reservation !== "insufficient") {
+				await this.settle(reservation.id, link.accounts);
+				this.#sql.exec("UPDATE bank_links SET renews_at = ?, unpaid_since = NULL WHERE item_id = ?", link.renews_at + BANK_FEE_PERIOD_MS, link.item_id);
+				continue;
+			}
+			if (link.unpaid_since === null) {
+				this.#sql.exec("UPDATE bank_links SET unpaid_since = ? WHERE item_id = ?", now, link.item_id);
+				this.inbox.add({ kind: "review", botId: "account", title: "A bank link's monthly fee could not be paid", detail: "Top up within 7 days or the link is removed." });
+				continue;
+			}
+			if (now - link.unpaid_since < BANK_GRACE_MS) continue;
+			const credential = (await this.credentials().read(`plaid:${link.item_id}`)) as { key?: string } | undefined;
+			if (credential?.key) await this.#plaid().removeItem(credential.key);
+			await this.credentials().delete(`plaid:${link.item_id}`);
+			this.#sql.exec("DELETE FROM bank_links WHERE item_id = ?", link.item_id);
+			this.inbox.add({ kind: "review", botId: "account", title: "A bank link was removed", detail: "Its monthly fee went unpaid for 7 days. Link it again any time." });
+		}
+		if (this.#sql.exec("SELECT 1 FROM bank_links LIMIT 1").toArray().length > 0) await this.#alarmAt(Math.max(now + 60_000, this.#nextBankDue()));
 	}
 
 	/** Every linked bank account, read-only, across the account's Plaid items. */

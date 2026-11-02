@@ -1,6 +1,8 @@
 // Bank data (spec section 22): a read-only Finance connector over Plaid that lists the user's linked bank, card, loan
 // and brokerage accounts with balances and transactions. Bots use it before opening a bank's website. Each linked
-// account costs a monthly fee, reserved from credits before the link is made: too little balance refuses the link.
+// account costs a monthly fee: the month's fee for every account the link returns is reserved when it is made (too
+// little balance removes it again at Plaid), and again each month; a month that cannot be paid is removed after seven
+// days (the user object's renewal).
 // Plaid covers the US, Canada, the UK and the EU; Finance is hidden elsewhere.
 
 export const PLAID_COUNTRIES = [
@@ -57,9 +59,17 @@ export class PlaidClient {
 		return { accessToken: body.access_token, itemId: body.item_id };
 	}
 
-	/** Ends a link: Plaid forgets the item and the token stops working. */
+	/** Ends a link: Plaid forgets the item and the token stops working. An item already gone counts as removed. */
 	async removeItem(accessToken: string): Promise<void> {
-		await this.#post("/item/remove", { access_token: accessToken });
+		const response = await fetch(`${this.#base}/item/remove`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ client_id: this.#clientId, secret: this.#secret, access_token: accessToken }),
+		});
+		if (response.ok) return;
+		const body = (await response.json().catch(() => ({}))) as { error_code?: string };
+		if (body.error_code === "ITEM_NOT_FOUND") return;
+		throw new Error(`Plaid answered ${response.status}`);
 	}
 
 	async accounts(accessToken: string): Promise<BankAccount[]> {
@@ -77,21 +87,30 @@ export class PlaidClient {
 	}
 }
 
+/** Months are 30 days for the fee; the grace before an unpaid link is removed is seven. */
+export const BANK_FEE_PERIOD_MS = 30 * 24 * 3600_000;
+export const BANK_GRACE_MS = 7 * 24 * 3600_000;
+
 /**
- * Links a bank for an account: the month's fee is reserved first (refused with too little balance), then the token is
- * exchanged and kept with the account's credentials. Returns the linked accounts.
+ * Links a bank: the token is exchanged and the month's fee reserved for every account the link returns. Too little
+ * balance removes the item again at Plaid and refuses; otherwise the token is kept with the account's credentials.
  */
 export async function linkBank(input: {
 	plaid: PlaidClient;
 	publicToken: string;
-	reserve: () => Promise<{ id: string } | "insufficient">;
-	settle: (reservationId: string) => Promise<void>;
-	store: (itemId: string, accessToken: string) => Promise<void>;
+	reserve: (units: number) => Promise<{ id: string } | "insufficient">;
+	settle: (reservationId: string, units: number) => Promise<void>;
+	store: (itemId: string, accessToken: string, accounts: number) => Promise<void>;
 }): Promise<BankAccount[] | "insufficient"> {
-	const reservation = await input.reserve();
-	if (reservation === "insufficient") return "insufficient";
 	const { accessToken, itemId } = await input.plaid.exchange(input.publicToken);
-	await input.store(itemId, accessToken);
-	await input.settle(reservation.id);
-	return input.plaid.accounts(accessToken);
+	const accounts = await input.plaid.accounts(accessToken);
+	const units = Math.max(1, accounts.length);
+	const reservation = await input.reserve(units);
+	if (reservation === "insufficient") {
+		await input.plaid.removeItem(accessToken);
+		return "insufficient";
+	}
+	await input.store(itemId, accessToken, units);
+	await input.settle(reservation.id, units);
+	return accounts;
 }

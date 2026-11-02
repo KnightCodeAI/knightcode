@@ -3,6 +3,7 @@
 // control and open viewer, and sleeps after 10 minutes with none of them (one idle timer for the whole computer). It
 // reserves computer time in 5-minute blocks; a block it cannot reserve stops the computer, and chat keeps working.
 // Every save goes through the save coordinator; the workspace is sealed by the user object with the user's data key.
+import { isDeleted } from "../account/deletion.ts";
 import type { Transport } from "@knightcode/env";
 import { DurableObject } from "cloudflare:workers";
 import type { Principal } from "../auth/session.ts";
@@ -39,6 +40,11 @@ export function setComputerClock(next: (() => number) | undefined): void {
 
 /** The fake computers, per account, when BOTS_COMPUTER_PROVIDER is "fake" (the Workers test pool runs no containers). */
 export const fakeComputers = new Map<string, FakeComputerProvider>();
+
+/** A maintenance job as stored: what it does and whether the computer ran before it. */
+type MaintenanceJob = { kind: MaintenanceKind; running: boolean };
+/** How soon a stored maintenance job is checked on, in case the instance running it was lost. */
+const JOB_WATCHDOG_MS = 5 * 60_000;
 
 export class ComputerObject extends DurableObject<Env> {
 	readonly #sql: SqlStorage;
@@ -126,11 +132,11 @@ export class ComputerObject extends DurableObject<Env> {
 	async acquire(botId: string, kind: LeaseKind): Promise<{ leaseId: string } | { refused: "spending_limit" | "maintenance" }> {
 		if (this.#state === "maintenance") return { refused: "maintenance" };
 		if (this.#state !== "running") {
-			if (!(await this.#reserveBlock())) {
-				this.#set("stopped_reason", "spending_limit");
-				return { refused: "spending_limit" };
-			}
-			await this.#start();
+			// One start at a time: acquisitions arriving while it runs share it (and its one reservation).
+			this.#starting ??= this.#startWithBlock().finally(() => {
+				this.#starting = undefined;
+			});
+			if (!(await this.#starting)) return { refused: "spending_limit" };
 		}
 		const leaseId = `lease_${crypto.randomUUID()}`;
 		this.#sql.exec(
@@ -155,6 +161,18 @@ export class ComputerObject extends DurableObject<Env> {
 		this.#sql.exec("DELETE FROM leases WHERE id = ?", leaseId);
 		this.#set("last_active", String(clock()));
 		await this.#arm();
+	}
+
+	/** The start in progress, shared by every acquisition that needs it. */
+	#starting: Promise<boolean> | undefined;
+
+	async #startWithBlock(): Promise<boolean> {
+		if (!(await this.#reserveBlock())) {
+			this.#set("stopped_reason", "spending_limit");
+			return false;
+		}
+		await this.#start();
+		return true;
 	}
 
 	async #reserveBlock(): Promise<boolean> {
@@ -233,6 +251,8 @@ export class ComputerObject extends DurableObject<Env> {
 	}
 
 	async #arm(): Promise<void> {
+		// A stored maintenance job keeps its watchdog until it finishes.
+		if (this.#get("maintenance_job")) return this.ctx.storage.setAlarm(Date.now() + JOB_WATCHDOG_MS);
 		if (this.#state !== "running") return this.ctx.storage.deleteAlarm();
 		const leases = this.#leases();
 		const block = this.#get("block");
@@ -246,17 +266,30 @@ export class ComputerObject extends DurableObject<Env> {
 	}
 
 	/** Account deletion: the computer (and its snapshots) destroyed, then its storage and alarm. */
+	/** Destroys the container and its snapshots; a failure throws, so deletion stops before anything is lost. */
+	async destroyForDeletion(): Promise<void> {
+		await this.#provider.destroy(this.#account);
+	}
+
 	async purge(): Promise<void> {
-		await this.#provider.destroy(this.#account).catch((error: unknown) => console.error("computer destroy", error));
+		this.#deleted = true;
 		await this.ctx.storage.deleteAlarm();
 		await this.ctx.storage.deleteAll();
-		this.#deleted = true;
 	}
 	#deleted = false;
 
 	override async alarm(): Promise<void> {
 		if (this.#deleted) return;
+		if (await isDeleted(this.env.DB, this.#account)) return this.purge();
+		// A maintenance job a lost instance left part-way: run it again (or, while it runs here, check back later).
+		const stored = this.#get("maintenance_job");
+		if (stored) {
+			await this.ctx.storage.setAlarm(Date.now() + JOB_WATCHDOG_MS);
+			if (!this.#job) void this.#runStoredJob(JSON.parse(stored) as MaintenanceJob).catch((error: unknown) => console.error("maintenance", error));
+			return;
+		}
 		const now = clock();
+		this.#renewLive(now);
 		this.#sql.exec("DELETE FROM leases WHERE expires_at <= ?", now);
 		if (this.#state === "running") {
 			const idle = this.#leases().length === 0 && now - Number(this.#get("last_active") ?? now) >= IDLE_MS;
@@ -277,7 +310,30 @@ export class ComputerObject extends DurableObject<Env> {
 	async openTransport(botId: string): Promise<Transport> {
 		if (this.#state !== "running") throw new Error("the computer is not running");
 		if (!this.#leases().some((lease) => lease.bot_id === botId)) throw new Error("the bot does not hold the computer");
-		return this.#provider.transport(this.#account, await botUserFor(botId));
+		const transport = await this.#provider.transport(this.#account, await botUserFor(botId));
+		// While its command channel is open (a long command, say), the bot's hold does not lapse.
+		this.#liveTransports.set(botId, (this.#liveTransports.get(botId) ?? 0) + 1);
+		transport.onClose(() => {
+			const left = (this.#liveTransports.get(botId) ?? 1) - 1;
+			if (left > 0) this.#liveTransports.set(botId, left);
+			else this.#liveTransports.delete(botId);
+		});
+		return transport;
+	}
+
+	/** Leases held by an open screen, and bots with an open command channel: renewed while they stay open. */
+	readonly #liveScreens = new Set<string>();
+	readonly #liveTransports = new Map<string, number>();
+
+	/** Renews every hold a live connection keeps, and counts them as activity. */
+	#renewLive(now: number): void {
+		const screens = [...this.#liveScreens];
+		const bots = [...this.#liveTransports.keys()];
+		if (screens.length === 0 && bots.length === 0) return;
+		const expires = now + LEASE_TTL_MS;
+		for (const id of screens) this.#sql.exec("UPDATE leases SET expires_at = ? WHERE id = ?", expires, id);
+		for (const botId of bots) this.#sql.exec("UPDATE leases SET expires_at = ? WHERE bot_id = ? AND kind = 'run'", expires, botId);
+		this.#set("last_active", String(now));
 	}
 
 	#holds(botId: string): boolean {
@@ -403,18 +459,24 @@ export class ComputerObject extends DurableObject<Env> {
 		const filter = grant.mode === "view" ? new ViewOnlyFilter() : undefined;
 		const open = this.#screens.get(grant.botId) ?? new Set<WebSocket>();
 		this.#screens.set(grant.botId, open.add(server));
+		// An open screen keeps its hold for as long as it is open, watched or not.
+		this.#liveScreens.add(held.leaseId);
 		vnc.addEventListener("message", (event) => server.send(event.data as ArrayBuffer));
 		server.addEventListener("message", (event) => {
 			const data = event.data;
 			const bytes = typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data as ArrayBuffer);
-			// A view grant's input never reaches the computer.
-			if (!filter || filter.allow(bytes)) vnc.send(bytes);
+			// A view grant's input never reaches the computer: anything but pixel requests closes the connection.
+			if (!filter) return vnc.send(bytes);
+			const allowed = filter.feed(bytes);
+			if (allowed === undefined) return close();
+			if (allowed.length > 0) vnc.send(allowed);
 		});
 		let closed = false;
 		const close = () => {
 			if (closed) return;
 			closed = true;
 			open.delete(server);
+			this.#liveScreens.delete(held.leaseId);
 			vnc.close(1000, "viewer left");
 			server.close(1000, "screen closed");
 			void this.release(held.leaseId);
@@ -429,10 +491,33 @@ export class ComputerObject extends DurableObject<Env> {
 
 	// ─── Maintenance and setup ────────────────────────────────────────────────
 
-	/** Stop, Update, Recover or Reset, as one job that holds off new runs and reports its steps. */
+	/**
+	 * Stop, Update, Recover or Reset, as one job that holds off new runs and reports its steps. The job is stored before
+	 * it starts and a watchdog alarm is set: if the instance dies part-way (a deploy, say), the alarm finds the job and
+	 * runs it again from the start (its steps, save then rebuild then restore, are safe to repeat).
+	 */
 	async maintain(principal: Principal, kind: MaintenanceKind): Promise<void> {
 		if (principal.accountId !== this.#account) throw new Error("unauthorized");
-		const running = this.#state === "running";
+		const stored = this.#get("maintenance_job");
+		if (stored) return this.#runStoredJob(JSON.parse(stored) as MaintenanceJob);
+		const job: MaintenanceJob = { kind, running: this.#state === "running" };
+		this.#set("maintenance_job", JSON.stringify(job));
+		this.#set("state", "maintenance");
+		await this.ctx.storage.setAlarm(Date.now() + JOB_WATCHDOG_MS);
+		return this.#runStoredJob(job);
+	}
+
+	/** The job running in this instance, shared by everyone waiting on it. */
+	#job: Promise<void> | undefined;
+
+	#runStoredJob(job: MaintenanceJob): Promise<void> {
+		this.#job ??= this.#runJob(job).finally(() => {
+			this.#job = undefined;
+		});
+		return this.#job;
+	}
+
+	async #runJob({ kind, running }: MaintenanceJob): Promise<void> {
 		this.#set("state", "maintenance");
 		try {
 			await runMaintenance(kind, {
@@ -448,6 +533,7 @@ export class ComputerObject extends DurableObject<Env> {
 			});
 		} finally {
 			this.#set("step", undefined);
+			this.#set("maintenance_job", undefined);
 			if (kind === "stop" || this.#state === "maintenance") {
 				this.#set("state", kind === "stop" ? "stopped" : running ? "running" : "stopped");
 				if (kind === "stop") {

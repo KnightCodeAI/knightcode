@@ -71,6 +71,9 @@ it("fires on a signed GitHub pull_request.opened and refuses an unsigned one", a
 		triggers: [{ kind: "github", repo: "owner/repo", events: ["pr.opened"] }],
 		grant: reviewGrant,
 	});
+	// The owner, signed in with GitHub, installs the app (installation 42).
+	await env.DB.prepare("INSERT INTO identities (provider, subject, account_id, created_at) VALUES ('github', '1001', ?, 0)").bind(owner.accountId).run();
+	await postGitHub("installation", { action: "created", installation: { id: 42 }, sender: { id: 1001, login: "owner" } });
 	expect((await postGitHub("pull_request", pullRequestOpened("owner/repo"), "wrong-secret")).status).toBe(401);
 	const response = await postGitHub("pull_request", pullRequestOpened("owner/repo"));
 	expect(await response.json()).toMatchObject({ fired: 1 });

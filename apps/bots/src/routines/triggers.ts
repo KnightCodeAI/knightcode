@@ -57,11 +57,19 @@ export async function dispatchEvent(
 	const routes = await routesFor(env.DB, event.kind, event.routeKey);
 	let fired = 0;
 	for (const route of routes) {
+		// A repository's events reach only accounts that installed the app on the installation that sent them.
+		if (event.kind === "github" && !(await holdsInstallation(env.DB, route.accountId, event.fields?.installation))) continue;
 		const extra = perAccount ? await perAccount(route.accountId) : {};
 		const bot = env.BOT.get(env.BOT.idFromName(route.botId));
 		if (await bot.routineEvent(route.routineId, { ...event, fields: { ...event.fields, ...extra } })) fired++;
 	}
 	return fired;
+}
+
+/** Whether `accountId` holds the installation an event came through. */
+export async function holdsInstallation(db: D1Database, accountId: string, installation: string | undefined): Promise<boolean> {
+	if (!installation) return false;
+	return (await db.prepare("SELECT 1 AS hit FROM github_installations WHERE installation_id = ? AND account_id = ?").bind(installation, accountId).first()) !== null;
 }
 
 /** Constant-time comparison of two hex or text signatures. */

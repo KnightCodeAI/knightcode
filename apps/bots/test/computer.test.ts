@@ -95,16 +95,23 @@ it("expires screen URLs, revokes them, and never lets a view send input", async 
 	expect(await computer(account).checkScreen(controlToken)).toBeUndefined();
 
 	// A viewer's messages: the RFB handshake and pixel requests pass; keys, pointer and clipboard do not.
-	const filter = new ViewOnlyFilter();
-	expect([filter.allow(rfb("RFB 003.008\n")), filter.allow(new Uint8Array([2])), filter.allow(new Uint8Array([1]))]).toEqual([
-		true,
-		true,
-		true,
-	]);
-	expect(filter.allow(new Uint8Array([3, 0, 0, 0, 0, 0, 4, 0, 3, 0]))).toBe(true);
-	expect(filter.allow(new Uint8Array([5, 1, 0, 10, 0, 10]))).toBe(false);
-	expect(filter.allow(new Uint8Array([4, 1, 0, 0, 0, 0, 0, 65]))).toBe(false);
-	expect(filter.allow(new Uint8Array([6, 0, 0, 0, 0, 0, 0, 1, 120]))).toBe(false);
+	const viewer = () => {
+		const filter = new ViewOnlyFilter();
+		expect(filter.feed(rfb("RFB 003.008\n"))).toHaveLength(12);
+		expect(filter.feed(new Uint8Array([1, 1]))).toHaveLength(2);
+		return filter;
+	};
+	const request = [3, 0, 0, 0, 0, 0, 4, 0, 3, 0];
+	expect(viewer().feed(new Uint8Array(request))).toEqual(new Uint8Array(request));
+	// A pixel request split across frames passes once whole.
+	const split = viewer();
+	expect(split.feed(new Uint8Array(request.slice(0, 4)))).toHaveLength(0);
+	expect(split.feed(new Uint8Array(request.slice(4)))).toEqual(new Uint8Array(request));
+	for (const control of [[5, 1, 0, 10, 0, 10], [4, 1, 0, 0, 0, 0, 0, 65], [6, 0, 0, 0, 0, 0, 0, 1, 120]]) expect(viewer().feed(new Uint8Array(control))).toBeUndefined();
+	// Review 3.6: a key event riding in the same frame as a valid pixel request is refused.
+	expect(viewer().feed(new Uint8Array([...request, 4, 1, 0, 0, 0, 0, 0, 65]))).toBeUndefined();
+	// A key event hidden in the handshake's frame is refused too.
+	expect(new ViewOnlyFilter().feed(new Uint8Array([...rfb("RFB 003.008\n"), 1, 1, 4, 1, 0, 0, 0, 0, 0, 65]))).toBeUndefined();
 });
 
 it("keeps one bot's shell out of another bot's Chrome profile", async () => {
@@ -201,3 +208,46 @@ async function lastAnswer(botId: string): Promise<string> {
 		await new Promise((resolve) => setTimeout(resolve, 20));
 	}
 }
+
+it("review 3.16: two bots waking a sleeping computer together start it once, with one reservation", async () => {
+	const account = "acct-together";
+	await grant(account, 100);
+	const [first, second] = await Promise.all([acquire(account, "b1"), acquire(account, "b2")]);
+	expect(first).not.toBe(second);
+	expect(fakeComputers.get(account)!.running).toBe(true);
+	expect((await balance(account)).reserved).toBe(unitCost("computer"));
+});
+
+it("review 3.17: an open command channel keeps the bot's hold past the lease time, and the computer sleeps once it closes", async () => {
+	const account = "acct-long-command";
+	await grant(account, 1_000);
+	await acquire(account, "b-long");
+	const transport = await runInDurableObject(computer(account), (instance: ComputerObject) => instance.openTransport("b-long"));
+	// Twenty minutes of one long command, with no other sign of life.
+	for (let minute = 0; minute < 20; minute += 5) {
+		now += 5 * MINUTE;
+		await runDurableObjectAlarm(computer(account));
+	}
+	expect(fakeComputers.get(account)!.running).toBe(true);
+	await runInDurableObject(computer(account), () => transport.close());
+	for (let minute = 0; minute < 30; minute += 5) {
+		now += 5 * MINUTE;
+		await runDurableObjectAlarm(computer(account));
+	}
+	expect(fakeComputers.get(account)!.running).toBe(false);
+});
+
+it("review 3.19: a maintenance job a lost instance left part-way is finished by the alarm, not left stuck", async () => {
+	const account = "acct-maintenance";
+	await grant(account, 1_000);
+	// What a deploy mid-job leaves behind: the job stored, the computer in maintenance, its watchdog alarm set.
+	await runInDurableObject(computer(account), async (_instance: ComputerObject, state) => {
+		state.storage.sql.exec("INSERT OR REPLACE INTO computer_meta (key, value) VALUES ('state', 'maintenance'), ('maintenance_job', ?)", JSON.stringify({ kind: "stop", running: false }));
+		await state.storage.setAlarm(Date.now() + 60_000);
+	});
+	expect(await computer(account).acquire("b1", "run")).toEqual({ refused: "maintenance" });
+	await runDurableObjectAlarm(computer(account));
+	for (let i = 0; i < 100 && (await computer(account).status()).state === "maintenance"; i++) await new Promise((resolve) => setTimeout(resolve, 20));
+	expect((await computer(account).status()).state).toBe("stopped");
+	expect(await computer(account).acquire("b1", "run")).toMatchObject({ leaseId: expect.any(String) });
+});

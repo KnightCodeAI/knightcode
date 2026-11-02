@@ -66,6 +66,16 @@ in_as "$user_b" curl -s --max-time 5 "http://127.0.0.1:$debug_b/json" | grep -q 
 	fail "$user_b cannot reach its own Chrome"
 pass "profiles and debugging ports stay with their bot"
 
+# Each display takes only its own bot's cookie: the other bot's user cannot open it through the shared X11 socket.
+display_b="$(docker exec "$name" bun -e "console.log(10 + require('/var/lib/kb/sessions.json')['$user_b'])")"
+in_as "$user_b" env DISPLAY=":$display_b" XAUTHORITY="/home/$user_b/.Xauthority" xdotool getmouselocation >/dev/null ||
+	fail "$user_b cannot use its own display"
+if in_as "$user_a" env DISPLAY=":$display_b" XAUTHORITY="/home/$user_a/.Xauthority" xdotool getmouselocation >/dev/null 2>&1; then
+	fail "$user_a opened $user_b's display"
+fi
+if in_as "$user_a" env DISPLAY=":$display_b" xdotool getmouselocation >/dev/null 2>&1; then fail "$user_a opened $user_b's display without a cookie"; fi
+pass "each display takes only its own bot's cookie"
+
 # The shared folder is shared.
 in_as "$user_a" bash -c 'echo hello > /home/shared/note.txt'
 [ "$(in_as "$user_b" cat /home/shared/note.txt)" = "hello" ] || fail "$user_b cannot read the shared folder"

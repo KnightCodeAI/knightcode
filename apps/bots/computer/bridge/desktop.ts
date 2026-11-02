@@ -90,7 +90,7 @@ export function ensureSession(user: string): Promise<Session> {
 		if (!existsSync(`/tmp/.X11-unix/X${session.display}`)) {
 			Bun.spawn([RUNUSER, "-u", user, "--", "/opt/computer/desktop/session.sh", String(session.display), String(session.vncPort)], {
 				stdio: ["ignore", "ignore", "ignore"],
-				env: { HOME: `/home/${user}`, USER: user, PATH: process.env.PATH ?? "/usr/bin:/bin" },
+				env: { HOME: `/home/${user}`, USER: user, XAUTHORITY: `/home/${user}/.Xauthority`, PATH: process.env.PATH ?? "/usr/bin:/bin" },
 			});
 			for (let i = 0; i < 100 && !existsSync(`/tmp/.X11-unix/X${session.display}`); i++) await Bun.sleep(100);
 		}
@@ -115,7 +115,7 @@ export type DesktopRequest =
 /** Screenshots and input on the bot's display, as the bot's user. */
 export async function desktopAction(user: string, request: DesktopRequest) {
 	const session = await ensureSession(user);
-	const env = { DISPLAY: `:${session.display}` };
+	const env = { DISPLAY: `:${session.display}`, XAUTHORITY: `/home/${user}/.Xauthority` };
 	const as = (command: string[]) => [RUNUSER, "-u", user, "--", ...command];
 	const xdotool = (...args: string[]) => run(as(["xdotool", ...args]), { env });
 	switch (request.action) {

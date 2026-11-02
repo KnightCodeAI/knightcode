@@ -9,6 +9,9 @@ import { fakeComputers } from "../src/computer/computer-object.ts";
 import { CardsUnavailable, type PaymentCredential, type PaymentsProvider, StripeLinkProvider } from "../src/payments/link.ts";
 import { spendChallenge, verifySpendAssertion } from "../src/payments/spend-approvals.ts";
 import { fakeModels } from "./fake-model.ts";
+import { PlaidClient } from "../src/finance/plaid.ts";
+import { unitCost } from "../src/user/balance.ts";
+import { PLAID_TEST } from "./emulators/plaid.ts";
 import { signedInPrincipal } from "./helpers.ts";
 
 let owner: Principal;
@@ -111,14 +114,13 @@ it("offers payments and finance only where they are available", async () => {
 	expect((await tool("abroad", "bank_accounts", {})).missing).toBe(true);
 });
 
-it("links a Stripe wallet and asks for shared payment tokens against the Stripe emulator", async () => {
+it("links a Stripe wallet against the Stripe emulator, and issues no credential until agent payments access exists", async () => {
 	const stripe = new StripeLinkProvider({ secretKey: env.STRIPE_SECRET_KEY!, apiUrl: env.STRIPE_API_URL });
 	const wallet = await stripe.linkWallet({ accountId: owner.accountId, returnUrl: "https://bots.knightcode.dev/settings/payments" });
 	expect(wallet.customerId).toMatch(/^cus_/);
 	expect(wallet.url).toMatch(/^https?:\/\//);
 	const purchase = { merchant: "Shop", amount: 2_500, currency: "usd", item: "Desk lamp", customerId: wallet.customerId };
-	const token = await stripe.requestCredential({ ...purchase, acceptsSharedTokens: true });
-	expect(token).toMatchObject({ kind: "shared_token", token: expect.stringMatching(/^pi_/), limitedTo: { merchant: "Shop", amount: 2_500 } });
+	await expect(stripe.requestCredential({ ...purchase, acceptsSharedTokens: true })).rejects.toThrow(CardsUnavailable);
 	await expect(stripe.requestCredential({ ...purchase, acceptsSharedTokens: false })).rejects.toThrow(CardsUnavailable);
 });
 
@@ -134,4 +136,45 @@ it("refuses to link a bank with too little balance, and lists accounts from the 
 		["Everyday Checking", "0042", 1520.35],
 		["Rewards Card", "9911", 245.1],
 	]);
+});
+
+it("review 3.8 and 3.9: identical purchases get their own challenges, and limits hold across approvals waiting together", async () => {
+	const provider = cardProvider();
+	setPaymentsProvider(() => provider);
+	setSpendVerifier(async () => true);
+	await user().setCountry("US");
+	await bot("limit-bot").claim(owner, { provider: "fake", modelId: "fake-model" });
+	await bot("limit-bot").setWallet(owner, "cus_test");
+	await user().setSpendLimit("limit-bot", { perPurchase: 6_000, perMonth: 10_000 });
+	const order = { merchant: "Shop", amount: 6_000, currency: "usd", item: "Chair" };
+	await tool("limit-bot", "buy", order);
+	await tool("limit-bot", "buy", order);
+	const [first, second] = await bot("limit-bot").pendingApprovals(owner);
+	// The same purchase twice: two challenges, so one passkey assertion cannot confirm both.
+	expect(first!.digest).not.toBe(second!.digest);
+	expect(spendChallenge(first!.digest)).not.toBe(spendChallenge(second!.digest));
+	// Both allowed: only the first fits the monthly limit when its credential is issued.
+	expect(await bot("limit-bot").answerApproval(owner, first!.id, "allow", {})).toBe("ok");
+	await bot("limit-bot").answerApproval(owner, second!.id, "allow", {});
+	expect(provider.requests).toBe(1);
+});
+
+it("review 3.20: a bank link pays each month for every account it returns, and an unpaid one is removed after seven days", async () => {
+	const holder = await signedInPrincipal();
+	const account = env.USER.get(env.USER.idFromName(holder.accountId));
+	const monthly = 2 * unitCost("bank");
+	await account.grantCredits(monthly * 2, `grant-${crypto.randomUUID()}`);
+	expect(await account.linkBank("public-monthly")).not.toBe("insufficient");
+	expect((await account.balance()).credits).toBe(monthly);
+	const day = 24 * 3600_000;
+	// A month on: the second month is paid.
+	await account.renewBankLinks(Date.now() + 31 * day);
+	expect((await account.balance()).credits).toBe(0);
+	// Another month on, nothing left: unpaid, still linked during the grace.
+	await account.renewBankLinks(Date.now() + 61 * day);
+	expect(await account.bankAccounts()).toHaveLength(2);
+	// Seven days later: removed here and at Plaid.
+	await account.renewBankLinks(Date.now() + 69 * day);
+	expect(await account.bankAccounts()).toEqual([]);
+	await expect(new PlaidClient({ ...PLAID_TEST, apiUrl: env.PLAID_API_URL }).accounts("access-monthly")).rejects.toThrow(/400/);
 });

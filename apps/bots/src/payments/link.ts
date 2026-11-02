@@ -2,8 +2,9 @@
 // approved purchase the bot gets a shared payment token where the merchant accepts one (it never exposes a card number,
 // so it is preferred), else a single-use card limited to the approved merchant and amount. KnightCode never stores card
 // numbers. Stripe's agent payments are in preview and US-first: payments are offered only in the countries listed in
-// PAYMENTS_COUNTRIES. The wallet link and shared tokens run against Stripe's API (the Stripe emulator in tests); single-use
-// cards need Stripe's agent payments access (a human task), so the Stripe provider refuses them until then.
+// PAYMENTS_COUNTRIES. The wallet link runs against Stripe's API (the Stripe emulator in tests). Shared payment tokens and
+// single-use cards both need Stripe's agent payments access (a human task); until it is granted the Stripe provider
+// issues no credential at all, rather than something that only looks like one.
 
 export interface Purchase {
 	merchant: string;
@@ -25,8 +26,8 @@ export interface PaymentsProvider {
 }
 
 export class CardsUnavailable extends Error {
-	constructor() {
-		super("Single-use cards need Stripe's agent payments access; this merchant does not take shared payment tokens.");
+	constructor(message = "Agent payments are not available yet: they need Stripe's agent payments access.") {
+		super(message);
 		this.name = "CardsUnavailable";
 	}
 }
@@ -66,17 +67,9 @@ export class StripeLinkProvider implements PaymentsProvider {
 		return { url: session.url, customerId: customer.id };
 	}
 
-	async requestCredential(input: Purchase & { customerId: string; acceptsSharedTokens: boolean }): Promise<PaymentCredential> {
-		if (!input.acceptsSharedTokens) throw new CardsUnavailable();
-		// A payment authorised for exactly this merchant and amount; its id is the token the merchant redeems.
-		const intent = await this.#post<{ id: string }>("/v1/payment_intents", {
-			amount: String(input.amount),
-			currency: input.currency.toLowerCase(),
-			customer: input.customerId,
-			"metadata[merchant]": input.merchant,
-			"metadata[item]": input.item,
-		});
-		const { customerId: _customer, acceptsSharedTokens: _accepts, ...limitedTo } = input;
-		return { kind: "shared_token", token: intent.id, limitedTo };
+	async requestCredential(_input: Purchase & { customerId: string; acceptsSharedTokens: boolean }): Promise<PaymentCredential> {
+		// A PaymentIntent id is not a credential a merchant can redeem, and its metadata restricts nothing. Shared payment
+		// tokens and single-use cards come from Stripe's agent payments API, which needs access first (a human task).
+		throw new CardsUnavailable();
 	}
 }

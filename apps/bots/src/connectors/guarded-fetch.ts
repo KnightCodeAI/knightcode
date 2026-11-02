@@ -19,6 +19,8 @@ export function isPublicHost(hostname: string): boolean {
 }
 
 export interface FetchPolicy {
+	/** Refuse redirects to another origin (calls that carry a credential). */
+	sameOrigin?: boolean;
 	/** host or host:port the user allowed to be private (none by default). */
 	allowPrivate: string[];
 	/** Resolves a name to its addresses; DNS over HTTPS by default. */
@@ -74,6 +76,8 @@ export async function guardedFetch(input: RequestInfo | URL, init: RequestInit =
 	const headers = new Headers(init.headers ?? request?.headers);
 	for (let hop = 0; hop <= (policy.maxRedirects ?? 5); hop++) {
 		await check(url, policy);
+		// A call carrying a vault credential (in any header) stays on its issuing origin.
+		if (policy.sameOrigin && url.origin !== issuing) throw new Error(`redirected to another origin (${url.origin}); the credential is not sent there`);
 		const hopHeaders = new Headers(headers);
 		if (url.origin !== issuing) for (const name of CREDENTIALS) hopHeaders.delete(name);
 		const response = await fetch(url, { ...init, method, headers: hopHeaders, body, redirect: "manual" });

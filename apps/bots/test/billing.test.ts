@@ -89,7 +89,7 @@ it("bank links and Composio overage are unavailable during the trial", async () 
 
 it("a failed renewal stops routines and the computer, while sign-in, history and export still work", async () => {
 	const userObject = userOf(owner.accountId);
-	await userObject.applyBilling([{ type: "grant", cents: 1000, key: "seed-lapse" }, { type: "plan", status: "active" }]);
+	await userObject.applyBilling([{ type: "grant", cents: 1000, key: "seed-lapse" }, { type: "plan", status: "active", at: Date.now() }]);
 	const bot = env.BOT.get(env.BOT.idFromName("lapsing-bot"));
 	await bot.claim(owner, { provider: "fake", modelId: "fake-model" });
 	const routine = await bot.createRoutine(owner, {
@@ -135,4 +135,26 @@ it("records usage per bot, routine and model from the providers' usage reports",
 	]);
 	expect(usage.byRoutine.map((row) => row.key)).toEqual(["r1"]);
 	expect(usage.byModel.find((row) => row.key === "fake/fake-model")).toMatchObject({ input: 51, output: 11 });
+});
+
+it("review 3.11 and 3.12: cumulative refunds come off once each, and an old event never overrides a newer plan state", async () => {
+	const account = "acct-review-billing";
+	const user = userOf(account);
+	await user.applyBilling([{ type: "grant", cents: 1_000, key: "seed-r12" }]);
+	const refunded = async (total: number) =>
+		(await billingChanges(event("charge.refunded", { id: "ch_r", amount_refunded: total, metadata: { account } }), { fee: async () => 0 }))!.changes;
+	// 100 refunded, then 200 cumulatively: 181 comes off in all, not 90 + 181.
+	await user.applyBilling(await refunded(100));
+	await user.applyBilling(await refunded(200));
+	await user.applyBilling(await refunded(200));
+	expect((await user.balance()).credits).toBe(1_000 - Math.floor(200 / 1.1));
+
+	const at = (seconds: number, type: string, object: Record<string, unknown>) => ({ ...event(type, { ...object, metadata: { account } }), created: seconds });
+	const apply = async (stripeEvent: StripeEvent) => user.applyBilling((await billingChanges(stripeEvent, { fee: async () => 0 }))!.changes);
+	await apply(at(100, "invoice.paid", { id: "in_old", amount_paid: 1000 }));
+	await apply(at(200, "customer.subscription.deleted", { id: "sub_1" }));
+	expect(await user.plan()).toBe("lapsed");
+	// Stripe redelivers the old invoice.paid: its credit was already given, and it does not reactivate the plan.
+	await apply(at(100, "invoice.paid", { id: "in_old", amount_paid: 1000 }));
+	expect(await user.plan()).toBe("lapsed");
 });

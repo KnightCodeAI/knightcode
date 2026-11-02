@@ -117,6 +117,7 @@ async function openSocket(socket: import("bun").ServerWebSocket<SocketData>): Pr
 					LOGNAME: data.user,
 					SHELL: "/bin/bash",
 					DISPLAY: `:${session.display}`,
+					XAUTHORITY: `/home/${data.user}/.Xauthority`,
 					PATH: "/home/" + data.user + "/.local/bin:/usr/local/bin:/usr/bin:/bin",
 					LANG: "C.UTF-8",
 				},

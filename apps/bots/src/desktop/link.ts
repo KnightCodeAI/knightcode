@@ -2,6 +2,7 @@
 // authenticates with a "socket" ticket in its first frame. Bots send commands down it; the desktop decides locally
 // (asking before the first command in a session, then "Allow on this computer") and answers. With no linked desktop
 // (app closed, PC asleep) the bot is told the computer is offline.
+import { sessionLive } from "../auth/session.ts";
 import { verifyTicket } from "../auth/tickets.ts";
 import type { Env } from "../env.ts";
 
@@ -18,7 +19,10 @@ export type DesktopFrame =
 
 export type ExecResult = { ok: true; output: string; exitCode: number } | { ok: false; error: string };
 
-type Attachment = { authed?: boolean };
+type Attachment = { authed?: boolean; sessionId?: string; checkedAt?: number };
+
+/** How often a linked desktop's session is checked again. */
+const SESSION_RECHECK_MS = 30_000;
 
 /** The user object's half of the link: one per account. */
 export class DesktopLink {
@@ -60,9 +64,10 @@ export class DesktopLink {
 		if (!attachment.authed) {
 			const principal = frame.kind === "auth" ? await verifyTicket(this.#env, frame.ticket, "socket") : undefined;
 			if (!principal || principal.accountId !== this.#accountId()) return socket.close(4401, "unauthorized");
-			socket.serializeAttachment({ authed: true } satisfies Attachment);
+			socket.serializeAttachment({ authed: true, sessionId: principal.sessionId, checkedAt: Date.now() } satisfies Attachment);
 			return;
 		}
+		if (!(await this.#stillSignedIn(socket))) return;
 		if (frame.kind !== "exec-result") return;
 		const settle = this.#pending.get(frame.id);
 		if (!settle) return;
@@ -79,10 +84,28 @@ export class DesktopLink {
 		this.#pending.clear();
 	}
 
-	exec(input: { botId: string; session: string; command: string }): Promise<ExecResult> {
-		const socket = this.#linked()[0];
-		if (!socket) return Promise.resolve({ ok: false, error: OFFLINE });
+	/**
+	 * Whether the session that linked this socket is still live (checked at most every 30 seconds). A revoked or expired
+	 * session closes the socket: the desktop stops receiving commands at once.
+	 */
+	async #stillSignedIn(socket: WebSocket): Promise<boolean> {
+		const attachment = (socket.deserializeAttachment() ?? {}) as Attachment;
+		if (Date.now() - (attachment.checkedAt ?? 0) < SESSION_RECHECK_MS) return true;
+		if (attachment.sessionId && (await sessionLive(this.#env, attachment.sessionId))) {
+			socket.serializeAttachment({ ...attachment, checkedAt: Date.now() } satisfies Attachment);
+			return true;
+		}
+		socket.serializeAttachment({} satisfies Attachment);
+		socket.close(4401, "session ended");
+		return false;
+	}
+
+	async exec(input: { botId: string; session: string; command: string }): Promise<ExecResult> {
+		let socket: WebSocket | undefined;
+		for (const candidate of this.#linked()) if (await this.#stillSignedIn(candidate)) socket = candidate;
+		if (!socket) return { ok: false, error: OFFLINE };
 		const id = crypto.randomUUID();
+		const linked = socket;
 		return new Promise<ExecResult>((resolve) => {
 			const timer = setTimeout(() => {
 				this.#pending.delete(id);
@@ -92,7 +115,7 @@ export class DesktopLink {
 				clearTimeout(timer);
 				resolve(result);
 			});
-			socket.send(JSON.stringify({ kind: "exec", id, ...input } satisfies DesktopFrame));
+			linked.send(JSON.stringify({ kind: "exec", id, ...input } satisfies DesktopFrame));
 		});
 	}
 }

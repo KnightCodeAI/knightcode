@@ -232,7 +232,6 @@ export async function receiveEmail(env: Env, mail: InboundMail): Promise<number>
 	await recordCorrespondent(env.DB, bot.account_id, from);
 	const fired = await dispatchEvent(env, mailEvent(mail));
 	if (fired > 0) return fired;
-	const owner = await env.DB.prepare("SELECT email FROM accounts WHERE id = ?").bind(bot.account_id).first<{ email: string | null }>();
 	const messageId = mail.headers.get("message-id") ?? undefined;
 	const references = (mail.headers.get("references") ?? "").split(/\s+/).filter(Boolean);
 	await env.BOT.get(env.BOT.idFromName(bot.bot_id)).channelMessage(
@@ -246,7 +245,8 @@ export async function receiveEmail(env: Env, mail: InboundMail): Promise<number>
 			references,
 			subject: mail.headers.get("subject") ?? "",
 		},
-		{ outside: owner?.email?.toLowerCase() !== from },
+		// Mail is always outside text: an envelope sender, even the owner's address, proves nothing about who wrote it.
+		{ outside: true },
 	);
 	return 0;
 }

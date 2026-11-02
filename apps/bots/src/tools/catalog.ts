@@ -39,6 +39,8 @@ export interface BotToolDeps {
 	/** Runs after update_bot changes a setting. */
 	settingsChanged?: (settings: BotSettings, before: BotSettings) => Promise<void>;
 	/** Each model response, for the usage page (provider usage reports). */
+	/** Whether this run may use the computer (false in an outside-started run whose grant lacks computer.use). */
+	computerAllowed?: () => Promise<boolean>;
 	onResponse?: (message: { provider?: string; model?: string; usage?: { input?: number; output?: number; cost?: { total?: number } } }) => void;
 	/** What chat may change right now: the outside mark and the user's models. */
 	settingsRules?: () => UpdateRules;
@@ -108,9 +110,28 @@ export function botTools(deps: BotToolDeps): ToolRegistration[] {
 					// The largest definition; bots that edit code load it through tool_search.
 					{ ...createEditTool(), deferred: true as const },
 					...computerTools(deps.computer),
-				]
+				].map((tool) => guardComputerTool(tool as ToolRegistration, deps.computerAllowed))
 			: []),
 	] as ToolRegistration[];
+}
+
+/**
+ * A computer tool that refuses while `allowed` says no: in a run outside text started or entered, the bot's computer is
+ * used only when the run's grant includes computer.use.
+ */
+export function guardComputerTool(tool: ToolRegistration, allowed: (() => Promise<boolean>) | undefined): ToolRegistration {
+	if (!allowed) return tool;
+	const execute = tool.execute as (...args: unknown[]) => unknown;
+	return {
+		...tool,
+		execute: (async (...args: unknown[]) =>
+			(await allowed())
+				? execute(...args)
+				: {
+						output: [{ type: "text", text: "Outside text started or entered this run, and its grant does not include the computer (computer.use); ask the owner." }],
+						isError: true,
+					}) as ToolRegistration["execute"],
+	} as ToolRegistration;
 }
 
 /** The bot's extensions: its own tools and sections, and tool search over the deferred ones. */

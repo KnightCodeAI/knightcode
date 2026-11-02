@@ -30,6 +30,8 @@ export function scrub(text: string, secrets: string[]): string {
 }
 
 export interface VaultAccess {
+	/** A credentialed write, through the owner's approval; its outcome or why it waits. */
+	write?(request: { name: string; method: string; url: string; body?: string }): Promise<{ ok: boolean; text: string }>;
 	list(): Promise<VaultItem[]>;
 	/** The value, server-side only. */
 	reveal(id: string): Promise<string>;
@@ -49,6 +51,23 @@ export function injection(item: VaultItem, value: string): { headers: Record<str
 }
 
 const text = (value: string, isError = false) => ({ output: [{ type: "text" as const, text: value }], ...(isError ? { isError } : {}) });
+
+/** Sends one credentialed request to the item's own origin and returns its scrubbed text. */
+export async function callWithSecret(item: VaultItem, value: string, request: { method: string; url: string; body?: string }): Promise<{ ok: boolean; text: string }> {
+	const { headers, secrets } = injection(item, value);
+	try {
+		const response = await guardedFetch(
+			request.url,
+			{ method: request.method, headers: { ...headers, ...(request.body ? { "content-type": "application/json" } : {}) }, ...(request.body ? { body: request.body } : {}) },
+			{ allowPrivate: [], sameOrigin: true },
+		);
+		const body = (await response.text()).slice(0, RESPONSE_MAX);
+		const headerText = [...response.headers].map(([name, headerValue]) => `${name}: ${headerValue}`).join("\n");
+		return { ok: response.ok, text: scrub(`HTTP ${response.status}\n${headerText}\n\n${body}`, secrets) };
+	} catch (error) {
+		return { ok: false, text: scrub(error instanceof Error ? error.message : String(error), secrets) };
+	}
+}
 
 export function vaultTools(vault: VaultAccess) {
 	return [
@@ -74,20 +93,15 @@ export function vaultTools(vault: VaultAccess) {
 				// Only to the credential's own origin, over HTTPS.
 				if (url.protocol !== "https:" || url.origin !== new URL(item.origin).origin)
 					return text(`${args.name} is for ${item.origin}; it is never sent anywhere else.`, true);
-				const value = await vault.reveal(item.id);
-				const { headers, secrets } = injection(item, value);
-				try {
-					const response = await guardedFetch(
-						url,
-						{ method: args.method ?? "GET", headers: { ...headers, ...(args.body ? { "content-type": "application/json" } : {}) }, ...(args.body ? { body: args.body } : {}) },
-						{ allowPrivate: [] },
-					);
-					const body = (await response.text()).slice(0, RESPONSE_MAX);
-					const headerText = [...response.headers].map(([name, headerValue]) => `${name}: ${headerValue}`).join("\n");
-					return text(scrub(`HTTP ${response.status}\n${headerText}\n\n${body}`, secrets));
-				} catch (error) {
-					return text(scrub(error instanceof Error ? error.message : String(error), secrets), true);
+				const method = args.method ?? "GET";
+				// A write changes something at the service: it is an action, approved like any other.
+				if (method !== "GET") {
+					if (!vault.write) return text("Writes with a credential need the owner's approval, which is not available here.", true);
+					const result = await vault.write({ name: item.name, method, url: url.href, ...(args.body ? { body: args.body } : {}) });
+					return text(result.text, !result.ok);
 				}
+				const result = await callWithSecret(item, await vault.reveal(item.id), { method, url: url.href });
+				return text(result.text, !result.ok);
 			},
 		}),
 		defineTool({

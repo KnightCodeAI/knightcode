@@ -42,19 +42,66 @@ export async function verifyScreenToken(secret: string, token: string, now = Dat
 }
 
 /**
- * Filters a viewer's messages to the VNC server. The RFB handshake (version, security type, ClientInit) passes; after
- * it, only messages that ask for pixels pass (SetPixelFormat 0, SetEncodings 2, FramebufferUpdateRequest 3). Key,
- * pointer and clipboard messages (4, 5, 6) and anything unknown are dropped, so a view connection cannot control.
+ * Parses a viewer's byte stream to the VNC server, whatever the WebSocket framing (messages split across frames, or
+ * several in one). The RFB handshake passes: the 12-byte version, the security type (None, or VNC auth with its 16-byte
+ * response) and the 1-byte ClientInit. After it only whole pixel requests pass: SetPixelFormat (0, 20 bytes),
+ * SetEncodings (2, 4 + 4 per encoding) and FramebufferUpdateRequest (3, 10 bytes). Any other message (keys, pointer,
+ * clipboard, unknown) is a violation: the connection is closed, so a view connection cannot control.
  */
 export class ViewOnlyFilter {
-	#handshake = 3;
+	#buffer = new Uint8Array(0);
+	#stage: "version" | "security" | "auth" | "init" | "messages" = "version";
 
-	allow(message: Uint8Array): boolean {
-		if (this.#handshake > 0) {
-			this.#handshake--;
+	/** The complete messages to forward from these bytes, or undefined when the viewer sent something it may not. */
+	feed(bytes: Uint8Array): Uint8Array | undefined {
+		const joined = new Uint8Array(this.#buffer.length + bytes.length);
+		joined.set(this.#buffer, 0);
+		joined.set(bytes, this.#buffer.length);
+		let offset = 0;
+		const passed: Uint8Array[] = [];
+		const take = (length: number): boolean => {
+			if (joined.length - offset < length) return false;
+			passed.push(joined.subarray(offset, offset + length));
+			offset += length;
 			return true;
+		};
+		for (;;) {
+			if (this.#stage === "version") {
+				if (!take(12)) break;
+				this.#stage = "security";
+			} else if (this.#stage === "security") {
+				if (joined.length - offset < 1) break;
+				const type = joined[offset];
+				if (type !== 1 && type !== 2) return undefined;
+				take(1);
+				this.#stage = type === 2 ? "auth" : "init";
+			} else if (this.#stage === "auth") {
+				if (!take(16)) break;
+				this.#stage = "init";
+			} else if (this.#stage === "init") {
+				if (!take(1)) break;
+				this.#stage = "messages";
+			} else {
+				if (joined.length - offset < 1) break;
+				const type = joined[offset];
+				let length: number;
+				if (type === 0) length = 20;
+				else if (type === 3) length = 10;
+				else if (type === 2) {
+					if (joined.length - offset < 4) break;
+					length = 4 + 4 * ((joined[offset + 2]! << 8) | joined[offset + 3]!);
+				} else return undefined;
+				if (!take(length)) break;
+			}
 		}
-		const type = message[0];
-		return type === 0 || type === 2 || type === 3;
+		this.#buffer = joined.slice(offset);
+		if (this.#buffer.length > 65_536) return undefined;
+		const out = new Uint8Array(passed.reduce((total, part) => total + part.length, 0));
+		let at = 0;
+		for (const part of passed) {
+			out.set(part, at);
+			at += part.length;
+		}
+		return out;
 	}
 }
