@@ -6,7 +6,8 @@ import { beginPasskey, finishPasskey } from "./auth/passkeys.ts";
 import { issueTicket } from "./auth/tickets.ts";
 import type { Principal } from "./auth/session.ts";
 import { safeNext } from "./auth/util.ts";
-import type { Env } from "./env.ts";
+import { consumeOutbound } from "./delivery/queue.ts";
+import type { Env, OutboundMessage } from "./env.ts";
 import { matchRoute, parse, ProtocolError, queryToRequest, type RouteName, type RouteRequest, type RouteResponse } from "@knightcode/bots-protocol";
 
 export { BotObject } from "./bot/bot-object.ts";
@@ -129,4 +130,5 @@ export default {
 		if (isApi) return api(request, env, pathname);
 		return env.ASSETS.fetch(request);
 	},
-} satisfies ExportedHandler<Env>;
+	queue: (batch, env) => consumeOutbound(batch, env),
+} satisfies ExportedHandler<Env, OutboundMessage>;

@@ -363,7 +363,7 @@ git commit -m "feat(bots): run each bot in a durable object with a live view"
     Auto asks the user's chosen reviewer model and asks the user when it
     errors or is unsure; Ask asks before any change.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/actions.test.ts
@@ -398,11 +398,11 @@ it("keeps the outside mark through a helper and a bot message", async () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/actions.test.ts`)
-- [ ] **Step 3: Implement the listed modules** (the approval waits as its
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/actions.test.ts`)
+- [x] **Step 3: Implement the listed modules** (the approval waits as its
   own task, so the conversation keeps running)
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/bot/actions.ts apps/bots/src/bot/approvals.ts apps/bots/src/bot/grants.ts apps/bots/src/bot/provenance.ts apps/bots/src/delivery apps/bots/test/actions.test.ts

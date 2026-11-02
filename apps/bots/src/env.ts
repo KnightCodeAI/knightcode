@@ -1,10 +1,9 @@
 import type { BotObject, ComputerObject, UserObject } from "./worker.ts";
 
-/** A message queued for delivery through a channel. Filled in by the channel tasks. */
+/** A queued delivery: the bot whose action record holds the write. */
 export interface OutboundMessage {
-	channel: string;
-	to: string;
-	text: string;
+	botId: string;
+	actionId: string;
 }
 
 export interface Env {

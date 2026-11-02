@@ -9,7 +9,11 @@ import { DurableObject } from "cloudflare:workers";
 import type { Principal } from "../auth/session.ts";
 import { verifyTicket } from "../auth/tickets.ts";
 import type { Env } from "../env.ts";
+import { adapterFor } from "../delivery/queue.ts";
+import { type ActionState, createActionsTable, dispatch, getAction } from "./actions.ts";
+import { consumeApproval, type ConsumeResult, createApprovalsTable, denyApproval, digestOf, getApproval } from "./approvals.ts";
 import { modelsFor } from "./models.ts";
+import { createProvenanceTable } from "./provenance.ts";
 import { assertOwns, Unauthorized } from "./principal.ts";
 import { nextAlarm } from "./scheduler.ts";
 import { type Delivery, LiveView } from "./socket.ts";
@@ -32,6 +36,9 @@ export class BotObject extends DurableObject<Env> {
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 		ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS bot_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+		createActionsTable(ctx.storage.sql);
+		createApprovalsTable(ctx.storage.sql);
+		createProvenanceTable(ctx.storage.sql);
 		void ctx.blockConcurrencyWhile(async () => {
 			// A fallback before anything can throw: an object whose open or recovery fails is started again.
 			const fallback = Date.now() + HEARTBEAT_MS;
@@ -115,6 +122,40 @@ export class BotObject extends DurableObject<Env> {
 			{ type: "input", content: `Run routine ${routineId}.`, requestId: `routine:${routineId}:${firedAt}` },
 			context,
 		);
+	}
+
+	/**
+	 * The owner's answer to an approval card. Allowing consumes the approval for the exact recorded action, once however
+	 * many devices answer, and only then delivers it: the action runs as its own step, not inside the conversation.
+	 */
+	async answerApproval(principal: Principal, approvalId: string, decision: "allow" | "deny"): Promise<ConsumeResult> {
+		this.#check(principal, this.#id);
+		const sql = this.ctx.storage.sql;
+		const approval = getApproval(sql, approvalId);
+		const record = approval && getAction(sql, approval.actionId);
+		if (!approval || !record) return "revoked";
+		if (decision === "deny") {
+			denyApproval(sql, approvalId);
+			return "revoked";
+		}
+		const result = consumeApproval(sql, approvalId, await digestOf(record.intent), this.#policyVersion);
+		if (result === "ok") await this.deliverAction(record.id);
+		return result;
+	}
+
+	/** Delivers one recorded action through its adapter; the queue consumer calls this too. */
+	async deliverAction(actionId: string): Promise<ActionState> {
+		const record = getAction(this.ctx.storage.sql, actionId);
+		if (!record) return "failed";
+		const adapter = adapterFor(record.intent.tool);
+		if (!adapter) return record.state;
+		return dispatch(this.ctx.storage.sql, record, adapter);
+	}
+
+	/** Bumped whenever the bot's approval settings change, revoking approvals granted under the old ones. */
+	get #policyVersion(): number {
+		const row = this.ctx.storage.sql.exec<{ value: string }>("SELECT value FROM bot_meta WHERE key = 'policy_version'").toArray()[0];
+		return row ? Number(row.value) : 1;
 	}
 
 	override async alarm(): Promise<void> {
