@@ -1,0 +1,31 @@
+apps/bots/src/bot/socket.ts
+  s_0076c3aa0f9a3b::t_db6aa6e916aaca 31-38,40-41,43-48,60,63-71,95-96,98-99,101,108-119
+apps/bots/src/computer/computer-object.ts
+  s_0076c3aa0f9a3b::t_ba42cad7486a02 6,550-596
+apps/bots/src/env.ts
+  s_0076c3aa0f9a3b::t_b459ee5b4f6cb7 45-50
+apps/bots/src/pages/pages.ts
+  s_0076c3aa0f9a3b::t_aea1d3b39359db 121-146
+apps/bots/src/tools/settings-tool.ts
+  s_0076c3aa0f9a3b::t_75e6bc48256812 18-21,71-76
+apps/bots/src/user/user-object.ts
+  s_0076c3aa0f9a3b::t_11ff607210f8b4 17-48,76-77,100-101,109-110,123,137,140,149,152-156,302-767
+apps/bots/src/worker.ts
+  s_0076c3aa0f9a3b::t_6620d626db23c2 1,7-15,104-105,123-134,154,160-174,307-321
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c31ca6e345b33734aaf505e4af250e635b16f048",
+  "prompts": {},
+  "sessions": {
+    "s_0076c3aa0f9a3b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e7ca457-c384-4bcc-a55a-8aac1bca9405",
+        "model": "unknown"
+      },
+      "human_author": "Raghav Seth <sethraghav12345@gmail.com>"
+    }
+  }
+}
