@@ -92,6 +92,7 @@ function cluster() {
 		principals,
 		workers,
 		resolveGate: undefined as Promise<void> | undefined,
+		authorize: () => true,
 		slowGate: latch(),
 		browser(principal: unknown, restamp?: (p: unknown) => unknown | undefined) {
 			const [down, up] = memoryLinkPair();
@@ -118,7 +119,7 @@ function cluster() {
 	};
 	server.route("session:", {
 		principal: (name) => ({ host: name }),
-		authorize: () => true,
+		authorize: () => state.authorize(),
 		resolve: async (name) => {
 			await state.resolveGate;
 			const existing = workers.get(name);
@@ -310,6 +311,35 @@ describe("links review: relay ownership", () => {
 		await sleep(10);
 		assert.ok(!(c.workers.get("session:S1")?.link.sent ?? []).some((frame) => frame.t === "hold"));
 	});
+
+	it.each(["released", "revoked", "refused"] as const)(
+		"a %s relay still admits the resolved worker: its references upstream go live",
+		async (outcome) => {
+			const Feed = remote("t.feed", {
+				version: 1,
+				input: { type: "object" },
+				host: hostNamed("server"),
+				variants: { main: { methods: { ping: method(undefined, { type: "string" }) } } },
+			});
+			const c = cluster();
+			c.server.serve(Feed, () => ({ variant: "main", ping: () => "pong" }));
+			const gate = latch();
+			c.resolveGate = gate.promise;
+			const { raw } = c.raw({ guest: "g" });
+			raw.send({ t: "hold", id: 1, at: "session:S1", token: Counter.description, input: { name: "a" } });
+			await sleep(5);
+			// The request loses permission or ownership while the worker starts; the worker still needs its link read.
+			if (outcome === "released") raw.send({ t: "release", id: 1 });
+			else if (outcome === "revoked") await c.server.invalidatePrincipal({ guest: "g" });
+			else c.authorize = () => false;
+			gate.open();
+			await until(() => c.workers.has("session:S1"));
+			const worker = c.workers.get("session:S1")!.host;
+			const feed = await worker.get(Feed, {}, { signal: AbortSignal.timeout(500) });
+			assert.equal(await feed.ping(), "pong");
+			assert.ok(!c.workers.get("session:S1")!.link.sent.some((frame) => frame.t === "hold"));
+		},
+	);
 
 	it("#9 an origin disconnect removes its relayed holds and subscriptions downstream", async () => {
 		const c = cluster();
