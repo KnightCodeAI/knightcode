@@ -13,7 +13,7 @@ export function uuidv7(): string {
 	const timestamp = Math.max(Date.now(), lastTimestamp);
 	lastTimestamp = timestamp;
 	const bytes = new Uint8Array(16);
-	globalThis.crypto.getRandomValues(bytes);
+	crypto.getRandomValues(bytes);
 	if (sequence === undefined) {
 		sequence =
 			(BigInt(bytes[1]!) << 32n) |

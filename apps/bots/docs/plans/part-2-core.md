@@ -292,7 +292,7 @@ git commit -m "feat(bots): add the user object with vault, credentials and balan
     `transcript.resume` on reconnect.
   - `assertOwns(principal, botId)` on every RPC and frame.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/bot.test.ts
@@ -326,13 +326,13 @@ it("arms the earliest of heartbeat, sleep and routine deadline", () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/bot.test.ts test/scheduler.test.ts`)
-- [ ] **Step 3: Implement the bot object** following the Durable Object host
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/bot.test.ts test/scheduler.test.ts`)
+- [x] **Step 3: Implement the bot object** following the Durable Object host
   pattern in `packages/durable/README.md` ("Persist and Resume"): a fallback
   alarm before opening, `onWake` arming, arming before every call that can
   start work.
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/bot apps/bots/test/bot.test.ts apps/bots/test/scheduler.test.ts

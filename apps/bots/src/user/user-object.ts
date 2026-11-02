@@ -1,7 +1,7 @@
 // The user object (spec sections 4, 8, 16 and 21): one per account, named by the account id. It holds the vault, the
 // model provider credentials, the balance and the file index, all sealed with the account's own data key (itself
 // wrapped by the key-encryption key), so destroying that key makes the account's data unreadable at once.
-import type { Credential, CredentialStore } from "@knightcode/ai";
+import type { Credential, CredentialInfo, CredentialStore } from "@knightcode/ai";
 import { builtinModels } from "@knightcode/ai/providers/all";
 import type { FileKind, FileRef, VaultItem } from "@knightcode/bots-protocol";
 import { DurableObject } from "cloudflare:workers";
@@ -81,6 +81,23 @@ export class UserObject extends DurableObject<Env> {
 	credentials(): CredentialStore {
 		this.#credentials ??= new SealedCredentialStore(this.#sql, () => this.#key());
 		return this.#credentials;
+	}
+
+	// The store over RPC, for the account's bot objects (a function argument arrives as a stub).
+	credentialRead(provider: string): Promise<Credential | undefined> {
+		return this.credentials().read(provider);
+	}
+	credentialList(): Promise<readonly CredentialInfo[]> {
+		return this.credentials().list();
+	}
+	credentialModify(
+		provider: string,
+		fn: (current: Credential | undefined) => Promise<Credential | undefined>,
+	): Promise<Credential | undefined> {
+		return this.credentials().modify(provider, fn);
+	}
+	credentialDelete(provider: string): Promise<void> {
+		return this.credentials().delete(provider);
 	}
 
 	/** Whether `provider` has usable auth, refreshing an expired OAuth token (once, however many ask at a time). */

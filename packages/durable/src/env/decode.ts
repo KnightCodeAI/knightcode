@@ -6,7 +6,7 @@
 
 /** A streaming decoder for a byte range; callers that start at the beginning of a file skip a leading mark themselves. */
 export function rangeDecoder(): InstanceType<typeof TextDecoder> {
-	return new TextDecoder("utf-8", { ignoreBOM: true });
+	return new TextDecoder("utf-8", { fatal: false, ignoreBOM: true });
 }
 
 /** Whether decoding the whole input drops its first three bytes as a byte-order mark. */

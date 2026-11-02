@@ -101,7 +101,9 @@ export function decodeCursor(table: TableDefinition, sqlName: string, order: Ord
 	try {
 		const binary = atob(cursor.replaceAll("-", "+").replaceAll("_", "/"));
 		decoded = JSON.parse(
-			new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (c) => c.charCodeAt(0))),
+			new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(
+				Uint8Array.from(binary, (c) => c.charCodeAt(0)),
+			),
 		);
 	} catch {
 		return refuse();

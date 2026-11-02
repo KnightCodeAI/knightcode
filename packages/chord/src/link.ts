@@ -128,7 +128,7 @@ export class Packed {
 export function unpack(value: unknown): unknown {
 	if (!(value instanceof Packed)) return value;
 	if (zlib === undefined) throw new TypeError("packed payload without zlib");
-	return JSON.parse(zlib.inflateRawSync(value.bytes).toString("utf8"));
+	return JSON.parse(decoder.decode(zlib.inflateRawSync(value.bytes)));
 }
 
 type PayloadField = "args" | "value";
@@ -219,7 +219,7 @@ export function inflateMessage(data: Uint8Array): string {
 	if (zlib === undefined) throw new TypeError("inflateMessage needs zlib");
 	const { envelope, field, bytes } = splitMessage(data);
 	const head = JSON.stringify(envelope);
-	return `${head.slice(0, -1)},${JSON.stringify(field)}:${zlib.inflateRawSync(bytes).toString("utf8")}}`;
+	return `${head.slice(0, -1)},${JSON.stringify(field)}:${decoder.decode(zlib.inflateRawSync(bytes))}}`;
 }
 
 /** Inflates without zlib (browsers). */

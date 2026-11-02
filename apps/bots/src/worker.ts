@@ -9,10 +9,10 @@ import { safeNext } from "./auth/util.ts";
 import type { Env } from "./env.ts";
 import { matchRoute, parse, ProtocolError, queryToRequest, type RouteName, type RouteRequest, type RouteResponse } from "@knightcode/bots-protocol";
 
+export { BotObject } from "./bot/bot-object.ts";
 export { UserObject } from "./user/user-object.ts";
 
-// Empty shells; Parts 2 and 3 fill them in.
-export class BotObject extends DurableObject<Env> {}
+// An empty shell; Part 3 fills it in.
 export class ComputerObject extends DurableObject<Env> {}
 
 const json = (body: unknown, status = 200, headers?: HeadersInit) => Response.json(body, { status, headers });
@@ -122,6 +122,10 @@ export default {
 		const isAuth = pathname.startsWith("/auth/");
 		if ((isApi || isAuth) && crossOrigin(request)) return json({ error: "forbidden_origin" }, 403);
 		if (isAuth) return auth(request, env, pathname);
+		// A bot's live socket: the bot object checks the ticket in its first frame.
+		const socket = /^\/api\/bots\/([^/]+)\/socket$/.exec(pathname);
+		if (socket && request.headers.get("upgrade")?.toLowerCase() === "websocket")
+			return env.BOT.get(env.BOT.idFromName(decodeURIComponent(socket[1]!))).fetch(request);
 		if (isApi) return api(request, env, pathname);
 		return env.ASSETS.fetch(request);
 	},

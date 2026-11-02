@@ -37,7 +37,7 @@ const ESCAPE_SEQUENCE =
 	/\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\x1b[\x20-\x2f]*[\x30-\x7e]/g;
 const encoder = new TextEncoder();
 /** Slices decode exactly: a U+FEFF at a slice's start is text, not a byte-order mark. */
-const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+const decoder = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true });
 
 /** Remove escape sequences and control characters that break display and transcripts; tabs and newlines stay. */
 export function sanitizeOutput(text: string): string {
@@ -134,7 +134,7 @@ export class OutputBuffer {
 	 * the next byte chunk then starts a new character. As in `StreamDecoder`, only a byte-order mark at the very start of
 	 * the output is dropped, never a U+FEFF later in it.
 	 */
-	readonly #decoder = new TextDecoder("utf-8", { ignoreBOM: true });
+	readonly #decoder = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true });
 	#started = false;
 	/** Stored chunks: for head the start of the stream, for tail a suffix that still contains the next window. */
 	#chunks: { readonly text: string; readonly bytes: number; readonly newlines: number }[] = [];

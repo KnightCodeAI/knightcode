@@ -20,6 +20,8 @@
 	"dependencies": {
 		"@knightcode/ai": "workspace:*",
 		"@knightcode/bots-protocol": "workspace:*",
+		"@knightcode/chord": "workspace:*",
+		"@knightcode/durable": "workspace:*",
 		"@simplewebauthn/server": "14.0.3"
 	}
 }

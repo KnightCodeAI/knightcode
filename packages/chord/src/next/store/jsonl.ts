@@ -26,7 +26,7 @@ export async function* encodeJsonl(parts: AsyncIterable<ArchivePart>): AsyncIter
  * no UTF-8 and a line that is no JSON are `invalid/args`).
  */
 export async function* decodeJsonl(bytes: AsyncIterable<Uint8Array>): AsyncIterable<unknown> {
-	const decoder = new TextDecoder("utf-8", { fatal: true });
+	const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false });
 	let rest = "";
 	let line = 0;
 	const parse = (text: string): unknown => {
