@@ -146,6 +146,44 @@ describe("codemode renderer", () => {
 		expect(text).not.toContain("Elapsed");
 	});
 
+	// PR #511: script failure must not turn a nested Write header into a content preview.
+	it.each([false, true])("keeps nested write headers compact after script failure (expanded: %s)", (expanded) => {
+		const text = render(
+			{
+				content: [{ type: "text", text: "Script error: bad result" }],
+				details: {
+					calls: [
+						{
+							id: "call/1",
+							name: "write",
+							args: '{"path":"notes.md","content":"hello"}',
+							status: "ok",
+							durationMs: 5,
+						},
+					],
+				},
+			},
+			true,
+			expanded,
+		);
+		expect(text.split("\n").find((line) => line.startsWith("✓"))).toMatch(/^✓ Write\(notes.md\)\s+5ms$/);
+	});
+
+	it("uses the cancelled icon without repeating the status in row metadata", () => {
+		const text = render(
+			{
+				content: [HEADER],
+				details: {
+					calls: [{ id: "call/1", name: "bash", args: '{"command":"bun test"}', status: "cancelled", durationMs: 5 }],
+				},
+			},
+			false,
+			false,
+		);
+		expect(text).toContain("1 call cancelled");
+		expect(text.split("\n").find((line) => line.startsWith("⊘"))).toMatch(/^⊘ Bash\(bun test\)\s+5ms$/);
+	});
+
 	it.each([40, 80])("keeps nested rows and their duration on one line at width %i", (width) => {
 		const component = codemodeRenderers.renderResult!(
 			{

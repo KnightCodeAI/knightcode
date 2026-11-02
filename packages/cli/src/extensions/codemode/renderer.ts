@@ -13,6 +13,7 @@ import {
 	getTextOutput,
 	linkPath,
 	plural,
+	renderToolPath,
 	replaceTabs,
 	shortenPath,
 	startToolTimer,
@@ -74,21 +75,34 @@ function nestedCallHeader(call: CodemodeNestedCall, theme: Theme, context: ToolR
 			const path = displayArgs[key];
 			if (typeof path === "string") displayArgs[key] = getCwdRelativePath(path, context.cwd) ?? path;
 		}
+		// Full Write/Edit renderers own content highlighting and filesystem diff preflight.
+		// Nested rows only need their path header, even when the call or script failed.
+		if (call.name === "write" || call.name === "edit") {
+			const path = renderToolPath(str(displayArgs.file_path ?? displayArgs.path), theme, context.cwd);
+			return new Text(formatToolCall(theme, call.name === "write" ? "Write" : "Update", path), 0, 0);
+		}
 		const renderer = Object.hasOwn(BUILT_IN_RENDERERS, call.name)
 			? BUILT_IN_RENDERERS[call.name as keyof typeof BUILT_IN_RENDERERS].renderCall
 			: undefined;
 		if (renderer) {
 			return renderer(displayArgs, theme, {
-				...context,
 				args: displayArgs,
 				toolCallId: call.id,
+				invalidate: context.invalidate,
 				state: {},
 				lastComponent: undefined,
-				// Nested headers must not start timers or compute edit previews.
+				cwd: context.cwd,
+				// Stored arguments are snapshots; rendering a header must not start execution.
 				executionStarted: false,
-				argsComplete: false,
+				argsComplete: true,
 				isPartial: false,
 				expanded: false,
+				showImages: context.showImages,
+				isError: call.status === "error",
+				durationMs: call.durationMs,
+				outputPad: context.outputPad,
+				keyText: context.keyText,
+				keyHint: context.keyHint,
 			});
 		}
 	}
@@ -98,11 +112,7 @@ function nestedCallHeader(call: CodemodeNestedCall, theme: Theme, context: ToolR
 /** Keep status and timing visible while long arguments yield to the terminal width. */
 function nestedCallRow(call: CodemodeNestedCall, theme: Theme, context: ToolRenderContext): Component {
 	const header = nestedCallHeader(call, theme, context);
-	const metadata = [
-		call.status === "cancelled" ? "cancelled" : "",
-		formatDuration(call.durationMs),
-		call.cost ? formatCost(call.cost) : "",
-	]
+	const metadata = [formatDuration(call.durationMs), call.cost ? formatCost(call.cost) : ""]
 		.filter(Boolean)
 		.join(" · ");
 	return {
