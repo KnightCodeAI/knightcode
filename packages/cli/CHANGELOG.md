@@ -1,5 +1,21 @@
 # @knightcodeai/cli
 
+## 0.23.5
+
+### Changed
+
+- Changed codemode tool calls to use compact headers, standard nested tool layouts,
+  aligned timings, and cleaner output previews.
+
+### Fixed
+
+- Fixed AgentRouter's default model referencing the unavailable DeepSeek V4 Flash by selecting GPT-6.1 Sol from its current catalog.
+
+- Fixed AgentRouter GPT-5.6 Sol, GPT-6 Astra, and GPT-6.1 Sol requests using Chat Completions instead of the required Responses API, including when model generation falls back to the committed catalog.
+
+- Fixed malformed file URLs in nested codemode calls hiding their status, errors,
+  and timings.
+
 ## 0.23.4
 
 ### Changed
