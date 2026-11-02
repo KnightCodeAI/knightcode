@@ -1,0 +1,67 @@
+apps/bots/computer/test/image.test.sh
+  s_0076c3aa0f9a3b::t_8e8090edf1e187 69-78
+apps/bots/computer/Dockerfile
+  s_0076c3aa0f9a3b::t_2d2912f9ffb341 21
+apps/bots/computer/bridge/browser.ts
+  s_0076c3aa0f9a3b::t_e96f0c9d0a9c88 45
+apps/bots/computer/bridge/desktop.ts
+  s_0076c3aa0f9a3b::t_dd02f9a2fa0963 93,118
+apps/bots/computer/bridge/server.ts
+  s_0076c3aa0f9a3b::t_16f5eb99525a29 120
+apps/bots/computer/desktop/session.sh
+  s_0076c3aa0f9a3b::t_0afd595d7b3b66 4-5,9,11-15,22
+apps/bots/migrations/0010_github_installations.sql
+  s_0076c3aa0f9a3b::t_eaa1d2114c5dcc 1-7
+apps/bots/src/account/deletion.ts
+  s_0076c3aa0f9a3b::t_80f61cd14f2846 21,50-51,57-58,62-63,65-69,71-77,79-82,84-96,119
+apps/bots/src/bot/bot-object.ts
+  s_0076c3aa0f9a3b::t_b043d6cc16a06c 5,67,170-171,179-180,297,323,611,637-650,678,685-710,803-805,810-811,845,930,1095-1096,1217,1220-1223,1228-1232,1307-1308,1317,1343-1349,1467-1480,1490-1495,1497,1499,1502,1535-1536
+apps/bots/src/computer/computer-object.ts
+  s_0076c3aa0f9a3b::t_b7c16fea1aa582 6,44-48,135-139,166-177,254-255,269-273,275,283-290,292,313-336,462-463,468-472,479,494-498,501-520,536
+apps/bots/src/computer/screens.ts
+  s_0076c3aa0f9a3b::t_cbd4eeff0ae855 45-49,52-53,55-65,67-95,97-105
+apps/bots/src/desktop/link.ts
+  s_0076c3aa0f9a3b::t_7388b3e579cfcb 5,22-25,67,70,87-106,108,118
+apps/bots/src/finance/plaid.ts
+  s_0076c3aa0f9a3b::t_edf12ada224a4e 3-5,62,64-72,90-93,95-96,101-103,106-115
+apps/bots/src/payments/link.ts
+  s_0076c3aa0f9a3b::t_e90ad4edd88364 5-7,29-30,70-73
+apps/bots/src/routines/github-app.ts
+  s_0076c3aa0f9a3b::t_530204955f9959 64-83,93-99
+apps/bots/src/routines/triggers.ts
+  s_0076c3aa0f9a3b::t_ce1f34e2052d9a 60-61,69-74
+apps/bots/src/user/user-object.ts
+  s_0076c3aa0f9a3b::t_62b7ca2116e6a7 15-16,85,249-250,253,273,275,278-297,436-441,444-452,478-488,503-504,507-508,510-515,518,522-559
+apps/bots/src/vault/tools.ts
+  s_0076c3aa0f9a3b::t_5ab253af50c75f 33-34,55-71,96-101,103-104
+apps/bots/src/worker.ts
+  s_0076c3aa0f9a3b::t_485fbee7b00b57 248-249
+apps/bots/test/computer.test.ts
+  s_0076c3aa0f9a3b::t_fea9e0b072e92b 98-114,211-253
+apps/bots/test/desktop-link.test.ts
+  s_0076c3aa0f9a3b::t_b03143d2cf8e0e 113-127
+apps/bots/test/emulators/plaid.ts
+  s_0076c3aa0f9a3b::t_7507a83bad0510 32-33
+apps/bots/test/payments.test.ts
+  s_0076c3aa0f9a3b::t_9b80195c3c764d 12-14,117,123,140-180
+apps/bots/test/review-3-fixes.test.ts
+  s_0076c3aa0f9a3b::t_5c707b134fbf43 1-192
+apps/bots/test/routines.test.ts
+  s_0076c3aa0f9a3b::t_077cc9276f7045 74-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91c65da680638362de5a9085099eacb8df6654f5",
+  "prompts": {},
+  "sessions": {
+    "s_0076c3aa0f9a3b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e7ca457-c384-4bcc-a55a-8aac1bca9405",
+        "model": "unknown"
+      },
+      "human_author": "Raghav Seth <sethraghav12345@gmail.com>"
+    }
+  }
+}
