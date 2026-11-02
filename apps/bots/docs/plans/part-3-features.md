@@ -249,17 +249,17 @@ git commit -m "feat(bots): add routines with grants and every MVP trigger"
   reserved words refused); email threading headers; the 50 new recipients
   per day cap and bounce pause.
 
-- [ ] **Step 1: Write the failing tests**: a Telegram link code sent from
+- [x] **Step 1: Write the failing tests**: a Telegram link code sent from
   the emulator links the chat and later messages reach the bot's thread; a
   reply goes back to Telegram; Slack DMs reach the linked bot; an email
   reply keeps `In-Reply-To` and `References`; the 51st new recipient in a
   day is refused; `claimBotAddress` refuses `admin.raghav` and a second
   `reviewer.raghav`.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/channels.test.ts`)
-- [ ] **Step 3: Spike the Chat SDK on Workers for 30 minutes, then implement**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/channels.test.ts`)
+- [x] **Step 3: Spike the Chat SDK on Workers for 30 minutes, then implement**
   (record the outcome in a code comment in `contract.ts`)
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/channels apps/bots/test/emulators/telegram.ts apps/bots/test/channels.test.ts

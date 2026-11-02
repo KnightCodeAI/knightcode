@@ -4,10 +4,11 @@ import { createEmulator, type Emulator, type ServiceName } from "emulate";
 import config, { TEST_OAUTH } from "../emulate.config.ts";
 import { COMPOSIO_TEST_KEY, startComposio } from "./emulators/composio.ts";
 import { startMcpServer } from "./emulators/mcp-server.ts";
+import { startTelegram, TELEGRAM_TEST_SECRET, TELEGRAM_TEST_TOKEN } from "./emulators/telegram.ts";
 
 const RUNNING = Symbol.for("knightcode-bots.emulators");
 type Closer = { url: string; close(): Promise<void> };
-type Running = Promise<Partial<Record<ServiceName, Emulator>> & { mcp?: Closer; composio?: Closer }>;
+type Running = Promise<Partial<Record<ServiceName, Emulator>> & { mcp?: Closer; composio?: Closer; telegram?: Closer }>;
 const registry = globalThis as { [RUNNING]?: Running };
 
 async function start(): Running {
@@ -19,6 +20,7 @@ async function start(): Running {
 	// Our own stand-ins: a remote MCP server and Composio's API.
 	out.mcp = await startMcpServer();
 	out.composio = await startComposio();
+	out.telegram = await startTelegram();
 	return out;
 }
 
@@ -36,6 +38,9 @@ export async function emulatorBindings(): Promise<Record<string, string>> {
 		EMULATE_MCP_URL: running.mcp!.url,
 		COMPOSIO_BASE_URL: running.composio!.url,
 		COMPOSIO_API_KEY: COMPOSIO_TEST_KEY,
+		TELEGRAM_API_URL: running.telegram!.url,
+		TELEGRAM_BOT_TOKEN: TELEGRAM_TEST_TOKEN,
+		TELEGRAM_WEBHOOK_SECRET: TELEGRAM_TEST_SECRET,
 	};
 }
 

@@ -44,8 +44,14 @@ export interface Env {
 	COMPOSIO_BASE_URL?: string;
 	/** Tests only: the emulated remote MCP server. */
 	EMULATE_MCP_URL?: string;
-	/** Outbound mail (Email Service), set up with the email channel in Task 3.5. */
-	EMAIL?: { send(message: { to: string; from: string; subject: string; text: string }): Promise<unknown> };
+	/** Outbound mail (Email Service). */
+	EMAIL?: { send(message: { to: string; from: string; subject: string; text: string; headers?: Record<string, string> }): Promise<unknown> };
+	/** The KnightCode Bots Telegram bot: its token, the webhook's secret token, and (tests) the emulated Bot API. */
+	TELEGRAM_BOT_TOKEN?: string;
+	TELEGRAM_WEBHOOK_SECRET?: string;
+	TELEGRAM_API_URL?: string;
+	/** Tests only: the emulated Slack Web API. */
+	SLACK_API_URL?: string;
 }
 
 /** The AES-KW key-encryption key (256-bit, base64 secret) used to wrap per-record data keys. */

@@ -7,6 +7,11 @@ import type { Principal } from "./auth/session.ts";
 import { safeNext } from "./auth/util.ts";
 import { verifyScreenToken } from "./computer/screens.ts";
 import { indexPlugins } from "./connectors/plugin-indexer.ts";
+import { recordBounce, recordCorrespondent } from "./channels/email.ts";
+import { consumeLinkCode, linkFor } from "./channels/linking.ts";
+import { slackDirectMessages } from "./channels/slack.ts";
+import { telegramChannel, telegramNotice } from "./channels/telegram.ts";
+import { addressOf } from "./routines/email-trigger.ts";
 import { consumeOutbound } from "./delivery/queue.ts";
 import { composioAdapter } from "./routines/composio-events.ts";
 import { type InboundMail, mailEvent } from "./routines/email-trigger.ts";
@@ -136,12 +141,36 @@ async function hooks(request: Request, env: Env, pathname: string): Promise<Resp
 		return json({ ok: true, fired });
 	};
 	if (pathname === "/hooks/github") return run(githubAdapter);
+	if (pathname === "/hooks/telegram") {
+		const messages = await telegramChannel.verify(request, env);
+		if (messages === undefined) return json({ error: "unauthorized" }, 401);
+		for (const message of messages) {
+			const link = await linkFor(env.DB, "telegram", message.externalChat);
+			if (link) {
+				// Group chats (negative ids) carry other people's words: outside text.
+				await env.BOT.get(env.BOT.idFromName(link.botId)).channelMessage(link, message, { outside: message.externalChat.startsWith("-") });
+				continue;
+			}
+			const linked = await consumeLinkCode(env.DB, { channel: "telegram", code: message.text, externalChat: message.externalChat });
+			await telegramNotice(
+				env,
+				message.externalChat,
+				linked ? "Linked. Your messages here now go to your bot." : "Send the link code shown in KnightCode Bots, Settings, Chat apps.",
+			);
+		}
+		return json({ ok: true });
+	}
 	if (pathname === "/hooks/slack") {
 		// Slack's endpoint check is answered only on a correctly signed request.
 		const body = await verifySlack(request.clone(), env.SLACK_SIGNING_SECRET);
 		if (body === undefined) return json({ error: "unauthorized" }, 401);
 		const parsed = JSON.parse(body) as { type?: string; challenge?: string };
 		if (parsed.type === "url_verification") return json({ challenge: parsed.challenge });
+		// The user's DMs with the app go to the bot they linked ("Link DMs").
+		for (const message of slackDirectMessages(body)) {
+			const link = await linkFor(env.DB, "slack", message.externalChat);
+			if (link) await env.BOT.get(env.BOT.idFromName(link.botId)).channelMessage(link, message, { outside: false });
+		}
 		return run(slackAdapter);
 	}
 	if (pathname === "/hooks/composio")
@@ -164,9 +193,40 @@ const slackOwner = (env: Env, event: TriggerEvent) => async (accountId: string) 
 	return { owner: row?.owner_user_id ?? undefined };
 };
 
-/** Mail to a bot's address (Cloudflare Email Routing): fires its email routines. */
+/**
+ * Mail to a bot's address (Cloudflare Email Routing). Bounce reports count against the account's sending health. The
+ * sender becomes a correspondent (replies to them are not capped). Matching email routines fire; otherwise the mail goes
+ * to the bot's thread, as outside text unless it is from the owner's own address, and the bot's answer is a reply.
+ */
 export async function receiveEmail(env: Env, mail: InboundMail): Promise<number> {
-	return dispatchEvent(env, mailEvent(mail));
+	const to = addressOf(mail.to);
+	const bot = await env.DB.prepare("SELECT bot_id, account_id FROM bot_addresses WHERE address = ?").bind(to).first<{ bot_id: string; account_id: string }>();
+	if (!bot) return 0;
+	const from = addressOf(mail.from);
+	if (/^(mailer-daemon|postmaster)@/i.test(from) || /multipart\/report/i.test(mail.headers.get("content-type") ?? "")) {
+		await recordBounce(env.DB, bot.account_id);
+		return 0;
+	}
+	await recordCorrespondent(env.DB, bot.account_id, from);
+	const fired = await dispatchEvent(env, mailEvent(mail));
+	if (fired > 0) return fired;
+	const owner = await env.DB.prepare("SELECT email FROM accounts WHERE id = ?").bind(bot.account_id).first<{ email: string | null }>();
+	const messageId = mail.headers.get("message-id") ?? undefined;
+	const references = (mail.headers.get("references") ?? "").split(/\s+/).filter(Boolean);
+	await env.BOT.get(env.BOT.idFromName(bot.bot_id)).channelMessage(
+		{ channel: "email", externalChat: from, accountId: bot.account_id, botId: bot.bot_id, mode: "direct" },
+		{
+			channel: "email",
+			externalChat: from,
+			externalUser: from,
+			text: mail.text,
+			...(messageId ? { messageId } : {}),
+			references,
+			subject: mail.headers.get("subject") ?? "",
+		},
+		{ outside: owner?.email?.toLowerCase() !== from },
+	);
+	return 0;
 }
 
 export default {
