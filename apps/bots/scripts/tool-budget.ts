@@ -4,6 +4,10 @@
 import type { BotMemory } from "../src/memory/memory.ts";
 import { botExtensions, TOOL_BUDGET_BYTES, visibleToolBytes, visibleToolDefinitions } from "../src/tools/catalog.ts";
 import type { SettingsStore } from "../src/tools/settings-tool.ts";
+import type { ToolRegistration } from "@knightcode/durable";
+import { type FleetDeps, fleetTools } from "../src/team/fleet.ts";
+import { startHelperTool } from "../src/team/helpers.ts";
+import { messageBotTool } from "../src/team/message-bot.ts";
 
 // Building the definitions touches none of these; stand-ins keep the script off Workers storage.
 const { core, toolSearch } = botExtensions({
@@ -14,6 +18,12 @@ const { core, toolSearch } = botExtensions({
 	// The largest set: a bot with computer access.
 	computer: { browser: async () => ({}), desktop: async () => ({}), fillLogin: async () => ({}) },
 	gate: async () => ({ decision: "refuse", reason: "budget" }),
+	// A manager bot: messaging, helpers and the management tools too.
+	extraTools: [
+		messageBotTool({ directory: { bots: async () => [] }, hop: () => 0, send: async () => ({ ok: false, reason: "budget" }) }),
+		{ ...startHelperTool({ tools: () => [], inherit: async () => {} }), deferred: true as const },
+		...fleetTools({} as FleetDeps),
+	] as ToolRegistration[],
 });
 const tools = [...(core.tools ?? []), ...(toolSearch.tools ?? [])];
 const bytes = visibleToolBytes(tools);

@@ -286,17 +286,17 @@ git commit -m "feat(bots): add Telegram, Slack and email channels"
   `exportRecipe(botId): Recipe`; the 42 gallery templates served from
   `gallery.ts` (the same data as `templates-data.ts` in Part 1).
 
-- [ ] **Step 1: Write the failing tests**: a seventh hop is refused and the
+- [x] **Step 1: Write the failing tests**: a seventh hop is refused and the
   bot reports to the user; a duplicate message id is dropped; in a group of
   three, a bot that passes posts nothing and a cancelled turn's late result
   is rejected; fleet tools are absent in an email-started run and present in
   a user-started run; replacing instructions always creates an approval;
   `importRecipe(_, "other")` leaves memory and routines unticked and never
   targets shared memory; `exportRecipe` then `parseRecipe` round-trips.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/team.test.ts test/recipes.test.ts`)
-- [ ] **Step 3: Implement the team and recipe modules**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/team.test.ts test/recipes.test.ts`)
+- [x] **Step 3: Implement the team and recipe modules**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/team apps/bots/src/recipes apps/bots/src/templates apps/bots/test/team.test.ts apps/bots/test/recipes.test.ts

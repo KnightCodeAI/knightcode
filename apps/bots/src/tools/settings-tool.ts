@@ -13,6 +13,10 @@ export interface BotSettings {
 	instructionsVersion: number;
 	computerAccess: boolean;
 	approvals: "never" | "auto" | "ask" | "default";
+	/** A Chief of Staff: it gets the management tools (in runs the owner started). */
+	manager?: boolean;
+	/** Who made the newest change, when another bot did ("Updated by <bot>"). */
+	updatedBy?: string;
 	/** The bot's model, when changed from what it was created with. */
 	model?: { provider: string; modelId: string };
 	thinking?: string;

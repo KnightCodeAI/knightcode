@@ -61,6 +61,7 @@ const toApproval = (row: Row): Approval & { actionId: string } => {
 			title: action.title,
 			...(action.target ? { target: action.target } : {}),
 			...(action.spend ? { spend: action.spend } : {}),
+			...(action.change ? { change: action.change } : {}),
 		},
 		expiresAt: row.expires_at,
 		state: row.expires_at <= Date.now() && row.state === "pending" ? "expired" : row.state,

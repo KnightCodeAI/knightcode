@@ -40,6 +40,8 @@ export interface BotToolDeps {
 	settingsChanged?: (settings: BotSettings, before: BotSettings) => Promise<void>;
 	/** What chat may change right now: the outside mark and the user's models. */
 	settingsRules?: () => UpdateRules;
+	/** More of the bot's tools: messaging other bots, helpers, and (for a manager) the management tools. */
+	extraTools?: ToolRegistration[];
 	/** Decides and records outward actions (send_email and, with Part 3's channels and connectors, the rest). */
 	gate?: Gate;
 	/** Outside-text provenance of the current run. */
@@ -72,6 +74,8 @@ function knowledgeTool(knowledge: Knowledge) {
 	return defineTool({
 		name: "read_knowledge",
 		description: "Read one of your knowledge files by name.",
+		// The files are listed in the prompt; the reader loads through tool_search when needed.
+		deferred: true,
 		parameters: obj({ name: str() }),
 		execute: async ({ name }) => {
 			const content = await knowledge.read(name);
@@ -90,6 +94,7 @@ export function botTools(deps: BotToolDeps): ToolRegistration[] {
 		knowledgeTool(deps.knowledge),
 		...webTools(() => deps.provenance?.enter("web") ?? Promise.resolve()),
 		...(deps.gate ? [sendEmailTool(deps.gate)] : []),
+		...(deps.extraTools ?? []),
 		helpTool(deps.help),
 		...(deps.image && deps.image.available.length > 0 ? [imageTool(deps.image)] : []),
 		// Shell and files run on the bot's computer (the harness's env), the browser and desktop through the bridge.

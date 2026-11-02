@@ -175,6 +175,8 @@ export function historyTools(history: HistoryIndex) {
 		defineTool({
 			name: "read_history",
 			description: "Read a search_history ref with the messages around it.",
+			// Loaded through tool_search once a search found something: it costs nothing until then.
+			deferred: true,
 			parameters: obj({
 				ref: str(),
 				before: opt(num({ description: "Messages before it, at most 10" })),

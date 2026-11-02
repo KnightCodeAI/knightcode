@@ -16,6 +16,8 @@ export interface ActionIntent {
 	/** The exact payload, part of the approval digest. */
 	args: unknown;
 	spend?: { merchant: string; amount: number; currency: string; item: string };
+	/** The full change, for instruction or model edits: shown on the approval card. */
+	change?: { before: string; after: string };
 }
 
 export type ActionState = "pending" | "sent" | "confirmed" | "unknown" | "failed";

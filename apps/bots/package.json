@@ -20,6 +20,7 @@
 	"dependencies": {
 		"@knightcode/ai": "workspace:*",
 		"@knightcode/bots-protocol": "workspace:*",
+		"@knightcode/bots-ui": "workspace:*",
 		"@knightcode/chord": "workspace:*",
 		"@knightcode/durable": "workspace:*",
 		"@knightcode/env": "workspace:*",
