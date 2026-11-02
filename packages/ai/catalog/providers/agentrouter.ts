@@ -8,6 +8,8 @@ import { type ModelsDevModel, normalizeModelsDevModel, roundCost } from "../sour
 
 const ANTHROPIC_BASE_URL = "https://agentrouter.org";
 const OPENAI_BASE_URL = "https://agentrouter.org/v1";
+// Confirmed by AgentRouter HTTP 400 responses rejecting Chat Completions for these models.
+const RESPONSES_MODEL_IDS = new Set(["gpt-5.6-sol", "gpt-6-astra", "gpt-6.1-sol"]);
 // AgentRouter publishes no cache_ratio / create_cache_ratio, so these cannot be read and have to be
 // chosen: Anthropic's own multipliers applied to AgentRouter's input price. Contested: when a model is
 // absent from new-api's cache map, GetCacheRatio returns 1, i.e. cached reads bill at full input price;
@@ -118,26 +120,32 @@ const DEEPSEEK_COMPLETIONS_COMPAT = {
 export default defineProvider({
 	id: "agentrouter",
 	models: (ctx) => {
-		const live = "rates" in ctx.sources.agentRouter ? liveModels(ctx, ctx.sources.agentRouter.rates) : [];
-		if (live.length > 0) {
-			console.log(`Fetched ${live.length} tool-capable models from AgentRouter`);
-			return live;
+		let models = "rates" in ctx.sources.agentRouter ? liveModels(ctx, ctx.sources.agentRouter.rates) : [];
+		if (models.length > 0) {
+			console.log(`Fetched ${models.length} tool-capable models from AgentRouter`);
+		} else {
+			// Every entry skipped is as fatal as an unreachable endpoint: an empty result deletes the provider.
+			const failure =
+				"failure" in ctx.sources.agentRouter
+					? ctx.sources.agentRouter.failure
+					: "AgentRouter /api/pricing yielded no usable models";
+			models = committedModels();
+			if (models.length === 0) {
+				console.error(`Failed to fetch AgentRouter models: ${failure}`);
+				if (ctx.strict) throw new Error(failure);
+				return [];
+			}
+			console.warn(`Failed to fetch AgentRouter models, keeping the ${models.length} committed ones: ${failure}`);
 		}
-		// Every entry skipped is as fatal as an unreachable endpoint: an empty result deletes the provider.
-		const failure =
-			"failure" in ctx.sources.agentRouter
-				? ctx.sources.agentRouter.failure
-				: "AgentRouter /api/pricing yielded no usable models";
-		const committed = committedModels();
-		if (committed.length === 0) {
-			console.error(`Failed to fetch AgentRouter models: ${failure}`);
-			if (ctx.strict) throw new Error(failure);
-			return [];
+		// AgentRouter rejects Chat Completions for these GPT models even when its rate table lists "openai".
+		// Correct both live and committed data before API-specific compatibility and family rules run.
+		for (const model of models) {
+			if (RESPONSES_MODEL_IDS.has(model.id)) model.api = "openai-responses";
 		}
-		console.warn(`Failed to fetch AgentRouter models, keeping the ${committed.length} committed ones: ${failure}`);
-		return committed;
+		return models;
 	},
 	compat: {
+		"openai-responses": { supportsStrictMode: true },
 		"openai-completions": (model: Model<"openai-completions">) =>
 			model.id.includes("deepseek") ? DEEPSEEK_COMPLETIONS_COMPAT : { supportsStrictMode: true },
 	},

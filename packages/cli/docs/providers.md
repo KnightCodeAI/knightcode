@@ -168,6 +168,14 @@ Regional endpoints filter models to their region. To use one, set the base URL i
 
 If the base URL rejects the key at `/models/user` or does not have that endpoint, for example a proxy configured as the OpenRouter base URL, KnightCode lists every OpenRouter model.
 
+### AgentRouter
+
+Authenticate with `/login agentrouter` or `AGENTROUTER_API_KEY`.
+
+KnightCode sends `gpt-5.6-sol`, `gpt-6-astra`, and `gpt-6.1-sol` through the OpenAI Responses API because AgentRouter rejects Chat Completions for these models. Other models keep their configured Chat Completions or Anthropic Messages API.
+
+When developing from source, run `bun run generate:models` after changing catalog definitions, then restart KnightCode. AgentRouter catalog generation keeps the committed model data if its pricing endpoint is unavailable; the GPT API corrections apply to that fallback too.
+
 ### Azure OpenAI
 
 The provider ID is `azure` (formerly `azure-openai-responses`). Use it as the key in `auth.json`, `models.json`, and `settings.json`, and in model references such as `--model azure/gpt-5.4`.
