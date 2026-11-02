@@ -36,7 +36,8 @@ export function webfetchResultText(result: RenderableResult<WebfetchDetails>, ex
 	const text = getTextOutput(result, false).trim();
 	if (expanded) return expandedLines(theme, text);
 	const d = result.details;
-	if (!d) return theme.fg("toolOutput", text.split("\n")[0] ?? "");
+	// The agent supplies empty details when execute throws, not page metadata.
+	if (d?.bytes === undefined) return theme.fg("toolOutput", text.split("\n")[0] ?? "");
 	const summary =
 		d.matches !== undefined
 			? `${d.matches} matches of ${d.totalLines} lines`

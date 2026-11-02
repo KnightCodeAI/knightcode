@@ -56,7 +56,7 @@ section.
 |---|---|---|
 | Package | `packages/tools`, one hidden built-in extension for all KnightCode-native tools | Zero engine edits after the first three lines; `/tools` sees every tool it owns |
 | Tool names | `webfetch`, `websearch` | Engine's lowercase style; `packages/ai/src/api/anthropic-messages.ts` already maps them to `WebFetch`/`WebSearch` in stealth mode |
-| Fetch backend | Bun `fetch`, manual redirects | No reader service, no browser, nothing to run |
+| Fetch backend | Undici `fetch` (Bun's native implementation under Bun), manual redirects | Preserves the checked IP and original TLS identity on both runtimes; no reader service or browser |
 | HTML → markdown | `turndown` + junk removal + `<main>`/`<article>` pick | Doc sidebars are 30-50% of raw pages; readability would need a DOM library in the binary |
 | Truncation | Engine's `truncateHead`; `limit` default 400 lines, clamped 1-2000; byte ceiling is the engine's `DEFAULT_MAX_BYTES` (50 KB) | Lines are the knob the model reasons about; a round trip re-sends the whole conversation, so too small a cap costs more than it saves |
 | Targeted reads | `offset`/`limit` (same names as `read`) and `grep` | Most doc lookups become one call |
@@ -229,9 +229,13 @@ empty clears, Esc keeps.
   address is checked against the same ranges. `connect` is `url` with the
   hostname swapped for that address (IPv6 bracketed); the fetch goes to
   `connect` with `Host: url.host`, so the name is never resolved a second
-  time (no rebinding or mixed-answer bypass). Bun takes the TLS server name
-  and certificate identity from `Host`, so HTTPS still verifies as the name.
-  For literals and `allowHosts`, `connect` is `url`.
+  time (no rebinding or mixed-answer bypass). Bun preserves `Host` natively.
+  Node's fetch strips it, so a per-hop dispatcher interceptor restores it
+  after fetch sanitization. Undici takes the TLS server name and certificate
+  identity from that header. The interceptor delegates to the global
+  dispatcher, preserving proxy settings and connection handling; proxy
+  CONNECT still names the checked IP. For literals and `allowHosts`,
+  `connect` is `url`.
 - `allowHosts` lists exact hostnames exempt from the host checks (tests pass
   `["127.0.0.1"]` for their fixture server; a redirect hop to any other
   private host is still blocked). `lookup` is the DNS seam for tests. Neither
@@ -357,7 +361,9 @@ Mirror `packages/cli/src/core/tools/renderers/find.ts` (reuse
   `→ <matches> matches of <total> lines`; expanded: the content text.
 - `websearch` call: `websearch "<query>"`; result collapsed:
   `→ <n> results (<provider>)`; expanded: the list.
-- Errors render through the engine's default path.
+- Fetch errors show the first content line when collapsed and the full text
+  when expanded. The engine supplies empty `details` for thrown errors;
+  these must not be formatted as page-size or line-range metadata.
 
 ### Engine wiring (the only three edits outside the package)
 
