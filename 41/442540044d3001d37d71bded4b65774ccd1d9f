@@ -1,0 +1,21 @@
+packages/cli/src/extensions/codemode/renderer.ts
+  s_0c37a9347cb159::t_8c2e610e8ba505 74-83
+packages/cli/test/codemode-renderer.test.ts
+  s_0c37a9347cb159::t_aff861598c236f 232-285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "41442540044d3001d37d71bded4b65774ccd1d9f",
+  "prompts": {},
+  "sessions": {
+    "s_0c37a9347cb159": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a19ca1-6fcf-7881-b75c-cbde50c412cf",
+        "model": "unknown"
+      },
+      "human_author": "Raghav Seth <sethraghav12345@gmail.com>"
+    }
+  }
+}
