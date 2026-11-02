@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { AgentTool } from "@knightcode/agent";
 import { fauxAssistantMessage, fauxToolCall } from "@knightcode/ai";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../../src/config.ts";
@@ -19,7 +20,8 @@ describe("undo extension", () => {
 
 	async function setup(answer: string): Promise<Harness> {
 		const harness = await createHarness({
-			tools: [createEditTool(process.cwd()), createWriteTool(process.cwd())],
+			// The built-in tools are typed by TypeBox's Static; the harness takes untyped tools.
+			tools: [createEditTool(process.cwd()), createWriteTool(process.cwd())] as AgentTool<any>[],
 			extensionFactories: [undoExtension],
 		});
 		harnesses.push(harness);

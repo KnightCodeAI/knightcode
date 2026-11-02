@@ -10,7 +10,7 @@
  *   knightcode --extension examples/extensions/desktop-view.ts
  */
 
-import { Type } from "@knightcode/ai";
+import { Type } from "typebox";
 import { defineTool, type ExtensionAPI, type ExtensionContext, type View } from "@knightcodeai/cli";
 
 const WIDGET = "desktop-view:checks";

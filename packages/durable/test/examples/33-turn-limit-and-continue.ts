@@ -2,10 +2,11 @@
 // message, with a fresh budget. A host learns that a run stopped from `knightcode.live.runFailure`.
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/33-turn-limit-and-continue.ts
+
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import { Type } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@knightcode/ai/providers/faux";
+import { num, obj } from "@knightcode/schema";
 import {
 	ConversationBusy,
 	createRegistry,
@@ -21,7 +22,7 @@ const context = BACKGROUND_CONTEXT;
 const step = defineTool({
 	name: "step",
 	description: "Do one step of the work",
-	parameters: Type.Object({ n: Type.Number() }),
+	parameters: obj({ n: num() }),
 	execute: async (args) => ({ output: [{ type: "text", text: `step ${args.n} done` }] }),
 });
 const call = (n: number) => fauxAssistantMessage(fauxToolCall("step", { n }), { stopReason: "toolUse" });

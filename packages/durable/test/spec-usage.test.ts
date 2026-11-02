@@ -3,8 +3,9 @@
  * the names the spec leaves to the application declared below. Keep the two in sync; `test/examples/` runs the same
  * patterns end to end.
  */
+
 import type { Context, Draft } from "@knightcode/chord";
-import { type AssistantMessage, type Models, type ToolCall, Type } from "@knightcode/ai";
+import type { AssistantMessage, Models, ToolCall } from "@knightcode/ai";
 import {
 	type Conversation,
 	type ConversationId,
@@ -34,6 +35,7 @@ import {
 	type UserInput,
 	wrapTool,
 } from "@knightcode/durable";
+import { obj, str } from "@knightcode/schema";
 import { expect, expectTypeOf, it } from "vitest";
 import type { ExecutionEnv } from "../src/env/index.ts";
 import { CodingTools, createBashTool, createEditTool, createReadTool } from "../src/tools/index.ts";
@@ -169,7 +171,7 @@ function examples() {
 			defineTool({
 				name: "subagent",
 				description: "Delegate a self-contained task to a subagent and get its answer back.",
-				parameters: Type.Object({ task: Type.String() }),
+				parameters: obj({ task: str() }),
 				replay: "safe",
 				execute: async (args, api, context) => {
 					const { task } = args;

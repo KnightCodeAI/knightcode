@@ -1,5 +1,4 @@
 import * as bundledKnightAgent from "@knightcode/agent";
-import * as bundledKnightAiCompat from "@knightcode/ai/compat";
 import * as bundledKnightAiModels from "@knightcode/ai/models";
 import * as bundledKnightAiOauth from "@knightcode/ai/oauth";
 import * as bundledKnightAiProviders from "@knightcode/ai/providers/all";
@@ -10,6 +9,7 @@ import * as bundledTypeboxValue from "typebox/value";
 // This import is safe because loader.ts exports are not re-exported from index.ts.
 // Extensions can therefore import from @knightcodeai/cli.
 import * as bundledKnightCli from "../../index.ts";
+import * as bundledKnightAiExtensionView from "./knightcode-ai-extension-view.ts";
 
 /** Modules available to extensions in source and compiled binary runtimes. */
 export const VIRTUAL_MODULES: Record<string, unknown> = {
@@ -21,10 +21,9 @@ export const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@sinclair/typebox/value": bundledTypeboxValue,
 	"@knightcode/agent": bundledKnightAgent,
 	"@knightcode/tui": bundledKnightTui,
-	// Extensions resolve the @knightcode/ai root to the compat entrypoint (a
-	// strict superset of the core entrypoint).
-	"@knightcode/ai": bundledKnightAiCompat,
-	"@knightcode/ai/compat": bundledKnightAiCompat,
+	// Extensions see the compat entrypoint plus TypeBox's Type, Static, TSchema and StringEnum.
+	"@knightcode/ai": bundledKnightAiExtensionView,
+	"@knightcode/ai/compat": bundledKnightAiExtensionView,
 	"@knightcode/ai/models": bundledKnightAiModels,
 	"@knightcode/ai/oauth": bundledKnightAiOauth,
 	"@knightcode/ai/providers/all": bundledKnightAiProviders,

@@ -1,6 +1,6 @@
 import { globSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
-import { Type } from "@knightcode/ai";
+import { Type } from "typebox";
 import { defineTool } from "@knightcodeai/cli";
 import { expect } from "vitest";
 import { describeEval, toolCalls } from "vitest-evals";

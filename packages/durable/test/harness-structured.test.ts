@@ -2,14 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context, JsonValue } from "@knightcode/chord";
-import {
-	fauxAssistantMessage,
-	fauxText,
-	fauxToolCall,
-	type Models,
-	type ToolResultMessage,
-	Type,
-} from "@knightcode/ai";
+import { fauxAssistantMessage, fauxText, fauxToolCall, type Models, type ToolResultMessage } from "@knightcode/ai";
 import {
 	type Conversation,
 	type ConversationId,
@@ -35,6 +28,7 @@ import {
 	ToolResultEntry,
 	type Tx,
 } from "@knightcode/durable";
+import { obj } from "@knightcode/schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import { allEntries, chatSetup, openChat, waitFor } from "./chat-support.ts";
@@ -1185,7 +1179,7 @@ function blockingTool(name: string): { started: Promise<void>; registration: Too
 		registration: defineTool({
 			name,
 			description: `The ${name} tool`,
-			parameters: Type.Object({}),
+			parameters: obj({}),
 			executionMode: "sequential",
 			execute: async (_args, api, callContext) => {
 				api.output("partial");
@@ -1211,7 +1205,7 @@ describe("tool rounds", () => {
 			defineTool({
 				name: "noop",
 				description: "Does nothing",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async () => ({ output: [] }),
 			}),
 		);
@@ -1294,7 +1288,7 @@ describe("tool rounds", () => {
 			defineTool({
 				name: "noop",
 				description: "Does nothing",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async () => ({ output: [] }),
 			}),
 		);
@@ -1816,7 +1810,7 @@ describe("tool rounds as the view shows them", () => {
 			defineTool({
 				name: "noop",
 				description: "Does nothing",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async () => ({ output: [] }),
 			}),
 		);
@@ -1856,7 +1850,7 @@ describe("tool rounds as the view shows them", () => {
 			defineTool({
 				name: "delegate",
 				description: "Starts work in a conversation it owns",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async (_args, api, callContext) => {
 					await api.commit(async (tx) => {
 						const child = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
@@ -1896,7 +1890,7 @@ describe("tool rounds as the view shows them", () => {
 			defineTool({
 				name: "broken",
 				description: "Starts owned work, then returns a result that is not strict JSON",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async (_args, api, callContext) => {
 					await api.commit((tx) => tx.createTask(Node, { name: "held" }, owned(api.taskId)), callContext);
 					return { output: [], details: { fn: (() => 1) as unknown as JsonValue } };

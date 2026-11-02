@@ -8,10 +8,11 @@ const sourceDirectory = resolve(packageDirectory, "src");
 const IMPORT_SPECIFIER = /(?:import|export)\s+(?:type\s+)?(?:[^;]*?\sfrom\s*)?["']([^"']+)["']/gu;
 
 describe("package boundary", () => {
-	// Telemetry is the one allowed KnightCode package: a leaf without dependencies, needed for Context.telemetry.
-	const ALLOWED = new Set(["@knightcode/telemetry"]);
+	// The allowed KnightCode packages are leaves without dependencies: @knightcode/telemetry for Context.telemetry, @knightcode/schema for schemas
+	// (decision "A schema package beneath @knightcode/ai and Chord").
+	const ALLOWED = new Set(["@knightcode/telemetry", "@knightcode/schema"]);
 
-	test("does not depend on KnightCode packages other than telemetry, or on files outside Chord", async () => {
+	test("does not depend on KnightCode packages other than @knightcode/telemetry and @knightcode/schema, or on files outside Chord", async () => {
 		const manifest = JSON.parse(await readFile(resolve(packageDirectory, "package.json"), "utf8")) as {
 			dependencies?: Record<string, string>;
 		};

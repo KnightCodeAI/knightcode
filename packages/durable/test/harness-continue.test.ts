@@ -1,4 +1,5 @@
 // `submit({ type: "continue" })`: a run without a new user message.
+
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +11,6 @@ import {
 	fauxText,
 	fauxToolCall,
 	type Message,
-	Type,
 } from "@knightcode/ai";
 import {
 	AssistantEntry,
@@ -26,6 +26,7 @@ import {
 	type Storage,
 	UserEntry,
 } from "@knightcode/durable";
+import { obj } from "@knightcode/schema";
 import { InMemoryTelemetryContext } from "@knightcode/telemetry";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
@@ -123,7 +124,7 @@ describe("continue", () => {
 			defineTool({
 				name: "wait",
 				description: "Waits until aborted",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async (_args, _api, callContext) => {
 					started.resolve();
 					return aborted(callContext.abortSignal!);
@@ -300,7 +301,7 @@ describe("continue", () => {
 			defineTool({
 				name: "delegate",
 				description: "Delegates",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async (_args, api, callContext) => {
 					const child = await api.commit(async (tx) => {
 						const created = await tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } });
