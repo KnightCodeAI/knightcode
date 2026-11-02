@@ -8,6 +8,7 @@ import type { FileRef } from "@knightcode/bots-protocol";
 import { defineExtension, defineTool, type Extension, GenerationTask, hook, section, type ToolRegistration } from "@knightcode/durable";
 import { createToolSearchExtension } from "@knightcode/durable/tool-search";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@knightcode/durable/tools";
+import { type Gate, sendEmailTool } from "../bot/action-tools.ts";
 import { type ComputerAccess, computerTools } from "../computer/browser-tools.ts";
 import { lit, obj, opt, str, union } from "@knightcode/schema";
 import { shortenOldMessages } from "../memory/context-rules.ts";
@@ -39,6 +40,8 @@ export interface BotToolDeps {
 	settingsChanged?: (settings: BotSettings, before: BotSettings) => Promise<void>;
 	/** What chat may change right now: the outside mark and the user's models. */
 	settingsRules?: () => UpdateRules;
+	/** Decides and records outward actions (send_email and, with Part 3's channels and connectors, the rest). */
+	gate?: Gate;
 	/** Outside-text provenance of the current run. */
 	provenance?: { outside(): boolean; enter(source: "web"): Promise<void> };
 	/** Present only when the owner gave this bot computer access. */
@@ -86,6 +89,7 @@ export function botTools(deps: BotToolDeps): ToolRegistration[] {
 		...historyTools(deps.memory.history),
 		knowledgeTool(deps.knowledge),
 		...webTools(() => deps.provenance?.enter("web") ?? Promise.resolve()),
+		...(deps.gate ? [sendEmailTool(deps.gate)] : []),
 		helpTool(deps.help),
 		...(deps.image && deps.image.available.length > 0 ? [imageTool(deps.image)] : []),
 		// Shell and files run on the bot's computer (the harness's env), the browser and desktop through the bridge.

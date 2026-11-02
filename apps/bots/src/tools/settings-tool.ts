@@ -158,7 +158,7 @@ export function updateBotTool(
 	return defineTool({
 		name: "update_bot",
 		description:
-			"Read your settings (no fields), or change your name, purpose, instructions, model (provider/modelId) or thinking. Powers (computer access, apps, approvals) only go down here.",
+			"Read (no fields) or change your settings. Powers (computer access, approvals) can only go down here.",
 		parameters: obj({
 			name: opt(str()),
 			purpose: opt(str()),

@@ -31,7 +31,10 @@ export function fakeModelProvider(script: FakeTurn[]): Provider {
 }
 
 /** One scripted reply for `fakeModels`: its text or a provider error, and an optional wait before it starts. */
-export type FakeReply = { text: string; delayMs?: number } | { error: string; delayMs?: number };
+export type FakeReply =
+	| { text: string; delayMs?: number }
+	| { error: string; delayMs?: number }
+	| { toolCall: { name: string; args: Parameters<typeof fauxToolCall>[1] }; delayMs?: number };
 
 /**
  * Models with only the fake provider, replying with `replies` in order and streaming each a few characters at a time.
@@ -48,9 +51,9 @@ export function fakeModels(replies: FakeReply[], tokensPerSecond = 40): Models {
 	const step = async () => {
 		const reply = replies[Math.min(calls++, replies.length - 1)]!;
 		if (reply.delayMs) await new Promise((resolve) => setTimeout(resolve, reply.delayMs));
-		return "error" in reply
-			? fauxAssistantMessage([], { stopReason: "error", errorMessage: reply.error })
-			: fauxAssistantMessage(reply.text);
+		if ("error" in reply) return fauxAssistantMessage([], { stopReason: "error", errorMessage: reply.error });
+		if ("toolCall" in reply) return fauxAssistantMessage([fauxToolCall(reply.toolCall.name, reply.toolCall.args)], { stopReason: "toolUse" });
+		return fauxAssistantMessage(reply.text);
 	};
 	fake.setResponses(Array.from({ length: 50 }, () => step));
 	const models = createModels();

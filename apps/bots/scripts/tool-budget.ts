@@ -13,6 +13,7 @@ const { core, toolSearch } = botExtensions({
 	help: {},
 	// The largest set: a bot with computer access.
 	computer: { browser: async () => ({}), desktop: async () => ({}), fillLogin: async () => ({}) },
+	gate: async () => ({ decision: "refuse", reason: "budget" }),
 });
 const tools = [...(core.tools ?? []), ...(toolSearch.tools ?? [])];
 const bytes = visibleToolBytes(tools);

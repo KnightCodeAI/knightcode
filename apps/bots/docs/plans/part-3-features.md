@@ -196,7 +196,7 @@ git commit -m "feat(bots): add the skills library and teaching by showing"
   and commands at most hourly unless the computer is awake; one-off
   reminders.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/routines.test.ts
@@ -221,11 +221,11 @@ it("coalesces missed schedule firings into one catch-up run", async () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/routines.test.ts`)
-- [ ] **Step 3: Implement the routine modules** (the GitHub App events of
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/routines.test.ts`)
+- [x] **Step 3: Implement the routine modules** (the GitHub App events of
   spec section 12, the user filter, comments posted as the app)
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/routines apps/bots/test/routines.test.ts

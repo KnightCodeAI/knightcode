@@ -31,6 +31,14 @@ export interface Env {
 	/** Tests only: the emulated services' base URLs, which replace the providers' own hosts. */
 	EMULATE_GITHUB_URL?: string;
 	EMULATE_GOOGLE_URL?: string;
+	/** The GitHub App (spec section 12): webhook secret, app id and private key (PKCS#8 PEM), all secrets. */
+	GITHUB_APP_WEBHOOK_SECRET?: string;
+	GITHUB_APP_ID?: string;
+	GITHUB_APP_PRIVATE_KEY?: string;
+	/** The Slack app's signing secret. */
+	SLACK_SIGNING_SECRET?: string;
+	/** Composio's webhook signing secret. */
+	COMPOSIO_WEBHOOK_SECRET?: string;
 	/** Composio's API key (a secret) and, in tests, the emulator's base URL. */
 	COMPOSIO_API_KEY?: string;
 	COMPOSIO_BASE_URL?: string;

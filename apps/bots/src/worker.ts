@@ -8,6 +8,12 @@ import { safeNext } from "./auth/util.ts";
 import { verifyScreenToken } from "./computer/screens.ts";
 import { indexPlugins } from "./connectors/plugin-indexer.ts";
 import { consumeOutbound } from "./delivery/queue.ts";
+import { composioAdapter } from "./routines/composio-events.ts";
+import { type InboundMail, mailEvent } from "./routines/email-trigger.ts";
+import { githubAdapter } from "./routines/github-app.ts";
+import { slackAdapter, verifySlack } from "./routines/slack-events.ts";
+import { dispatchEvent, type TriggerAdapter, type TriggerEvent } from "./routines/triggers.ts";
+import { webhookAdapter } from "./routines/webhook.ts";
 import type { Env, OutboundMessage } from "./env.ts";
 import { matchRoute, parse, ProtocolError, queryToRequest, type RouteName, type RouteRequest, type RouteResponse } from "@knightcode/bots-protocol";
 
@@ -116,6 +122,53 @@ async function api(request: Request, env: Env, pathname: string): Promise<Respon
 	}
 }
 
+/** Inbound trigger events (spec section 12): each source's signature is checked before anything is read. */
+async function hooks(request: Request, env: Env, pathname: string): Promise<Response> {
+	if (request.method !== "POST") return json({ error: "not_found" }, 404);
+	const run = async (adapter: Pick<TriggerAdapter<never>, "verify">, prepare?: (event: TriggerEvent) => Promise<TriggerEvent | undefined>) => {
+		const verified = await adapter.verify(request, env);
+		if (verified === undefined) return json({ error: "unauthorized" }, 401);
+		let fired = 0;
+		for (const raw of Array.isArray(verified) ? verified : [verified]) {
+			const event = prepare ? await prepare(raw) : raw;
+			if (event) fired += await dispatchEvent(env, event, event.kind === "slack" ? slackOwner(env, event) : undefined);
+		}
+		return json({ ok: true, fired });
+	};
+	if (pathname === "/hooks/github") return run(githubAdapter);
+	if (pathname === "/hooks/slack") {
+		// Slack's endpoint check is answered only on a correctly signed request.
+		const body = await verifySlack(request.clone(), env.SLACK_SIGNING_SECRET);
+		if (body === undefined) return json({ error: "unauthorized" }, 401);
+		const parsed = JSON.parse(body) as { type?: string; challenge?: string };
+		if (parsed.type === "url_verification") return json({ challenge: parsed.challenge });
+		return run(slackAdapter);
+	}
+	if (pathname === "/hooks/composio")
+		return run(composioAdapter, async (event) => {
+			// The connected account says whose app it is.
+			const owner = await env.DB.prepare("SELECT account_id, app_id FROM composio_accounts WHERE connected_account_id = ?")
+				.bind(event.routeKey)
+				.first<{ account_id: string; app_id: string }>();
+			return owner ? { ...event, routeKey: `${owner.account_id}:${owner.app_id.toLowerCase()}` } : undefined;
+		});
+	if (pathname.startsWith("/hooks/w/")) return run(webhookAdapter);
+	return json({ error: "not_found" }, 404);
+}
+
+/** The account's own Slack user in the event's workspace, for "only my reactions". */
+const slackOwner = (env: Env, event: TriggerEvent) => async (accountId: string) => {
+	const row = await env.DB.prepare("SELECT owner_user_id FROM slack_teams WHERE team_id = ? AND account_id = ?")
+		.bind(event.routeKey, accountId)
+		.first<{ owner_user_id: string | null }>();
+	return { owner: row?.owner_user_id ?? undefined };
+};
+
+/** Mail to a bot's address (Cloudflare Email Routing): fires its email routines. */
+export async function receiveEmail(env: Env, mail: InboundMail): Promise<number> {
+	return dispatchEvent(env, mailEvent(mail));
+}
+
 export default {
 	async fetch(request, env): Promise<Response> {
 		const { pathname } = new URL(request.url);
@@ -124,6 +177,7 @@ export default {
 		const isAuth = pathname.startsWith("/auth/");
 		if ((isApi || isAuth) && crossOrigin(request)) return json({ error: "forbidden_origin" }, 403);
 		if (isAuth) return auth(request, env, pathname);
+		if (pathname.startsWith("/hooks/")) return hooks(request, env, pathname);
 		// A screen: the token in the URL is the capability; its account picks the computer, which checks it fully.
 		const screen = /^\/api\/computer\/screen\/([^/]+)$/.exec(pathname);
 		if (screen && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
@@ -139,6 +193,10 @@ export default {
 		return env.ASSETS.fetch(request);
 	},
 	queue: (batch, env) => consumeOutbound(batch, env),
+	async email(message, env) {
+		const text = await new Response(message.raw).text();
+		await receiveEmail(env, { from: message.from, to: message.to, headers: message.headers, text: text.slice(0, 200_000) });
+	},
 	async scheduled(_controller, env, ctx) {
 		ctx.waitUntil(indexPlugins(env).catch((error: unknown) => console.error("plugin index", error)));
 	},

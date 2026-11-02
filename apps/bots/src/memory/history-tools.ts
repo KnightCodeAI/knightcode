@@ -163,7 +163,7 @@ export function historyTools(history: HistoryIndex) {
 		defineTool({
 			name: "search_history",
 			description:
-				"Search this chat's older messages by keywords. Returns short excerpts with refs, newest first, so later corrections come first. Check them before saying you remember something.",
+				"Search older messages by keyword; newest first (later corrections first). Check before claiming to remember.",
 			parameters: obj({
 				query: str(),
 				from: opt(num({ description: "Earliest time, epoch milliseconds" })),
@@ -174,7 +174,7 @@ export function historyTools(history: HistoryIndex) {
 		}),
 		defineTool({
 			name: "read_history",
-			description: "Read the message a search_history ref points to, with a few messages around it.",
+			description: "Read a search_history ref with the messages around it.",
 			parameters: obj({
 				ref: str(),
 				before: opt(num({ description: "Messages before it, at most 10" })),

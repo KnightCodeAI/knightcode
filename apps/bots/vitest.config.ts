@@ -25,6 +25,9 @@ export default defineConfig({
 					SESSION_SECRET: "test-session-secret",
 					// The pool runs no containers: the computer object uses its fake provider.
 					BOTS_COMPUTER_PROVIDER: "fake",
+					// Trigger sources' signing secrets, for tests that sign events as the sources do.
+					GITHUB_APP_WEBHOOK_SECRET: "test-github-webhook-secret",
+					SLACK_SIGNING_SECRET: "test-slack-signing-secret",
 					// 32 zero bytes, base64.
 					TEST_KEK: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 					TEST_MIGRATIONS: await readD1Migrations(fileURLToPath(new URL("./migrations", import.meta.url))),

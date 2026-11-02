@@ -3,7 +3,18 @@
 // bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner. Its own tables share
 // the database with the harness, so every host write goes through the harness's queue (host-sql.ts).
 import { getSupportedThinkingLevels } from "@knightcode/ai/models";
-import { decodeFrame, encodeFrame, ProtocolError, type ServerFrame, type Skill, type SkillDraft } from "@knightcode/bots-protocol";
+import {
+	type Approval,
+	decodeFrame,
+	encodeFrame,
+	type Grant,
+	ProtocolError,
+	type Routine,
+	type ServerFrame,
+	type Skill,
+	type SkillDraft,
+	type Trigger,
+} from "@knightcode/bots-protocol";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import {
 	AssistantEntry,
@@ -33,15 +44,41 @@ import { extractAfterRun } from "../memory/extract.ts";
 import { BotMemory } from "../memory/memory.ts";
 import { modelHelper } from "../memory/recall.ts";
 import { redactSecrets } from "../memory/redact.ts";
+import { composioAdapter } from "../routines/composio-events.ts";
+import { emailAdapter } from "../routines/email-trigger.ts";
+import { githubAdapter } from "../routines/github-app.ts";
+import { indexRoutine, type RoutineInput, RoutineStore, routineNow } from "../routines/routines.ts";
+import { slackAdapter } from "../routines/slack-events.ts";
+import type { TriggerAdapter, TriggerEvent } from "../routines/triggers.ts";
+import { webhookAdapter } from "../routines/webhook.ts";
 import { type TeachEvent, Teaching } from "../skills/teach.ts";
 import { botExtensions } from "../tools/catalog.ts";
 import { HELP_DOCS } from "../tools/help-docs.ts";
 import { availableImageModels } from "../tools/image-tool.ts";
 import { type BotSettings, SettingsStore, type UpdateRules } from "../tools/settings-tool.ts";
-import { type ActionState, createActionsTable, deliveriesToResume, dispatch, getAction, markApproved } from "./actions.ts";
-import { consumeApproval, type ConsumeResult, createApprovalsTable, denyApproval, digestOf, getApproval } from "./approvals.ts";
+import type { Gate, GateResult } from "./action-tools.ts";
+import {
+	type ActionIntent,
+	type ActionState,
+	createActionsTable,
+	deliveriesToResume,
+	dispatch,
+	getAction,
+	markApproved,
+	recordAction,
+} from "./actions.ts";
+import {
+	consumeApproval,
+	type ConsumeResult,
+	createApproval,
+	createApprovalsTable,
+	denyApproval,
+	digestOf,
+	getApproval,
+} from "./approvals.ts";
 import { type HostWrite, queuedWrite } from "./host-sql.ts";
 import { modelsFor } from "./models.ts";
+import { decide, modelReviewer } from "./policy.ts";
 import { assertOwns, Unauthorized } from "./principal.ts";
 import { createProvenanceTable, isOutside, markOutside, type OutsideSource } from "./provenance.ts";
 import { nextAlarm } from "./scheduler.ts";
@@ -54,6 +91,19 @@ const HEARTBEAT_MS = 60_000;
 const SESSION_RECHECK_MS = 30_000;
 /** Provenance is kept per conversation run; the owner's next new run clears it. */
 const RUN_KEY = "current-run";
+
+/** Which adapter judges a trigger of each kind (schedules and watches are the alarm's). */
+const ADAPTERS: Partial<Record<Trigger["kind"], Pick<TriggerAdapter<never>, "matches">>> = {
+	github: githubAdapter,
+	slack: slackAdapter,
+	email: emailAdapter,
+	composio: composioAdapter,
+	webhook: webhookAdapter,
+};
+/** An approval card stays answerable for a day. */
+const APPROVAL_TTL_MS = 24 * 60 * 60_000;
+/** A scheduled run this late is told so. */
+const LATE_MS = 2 * 60_000;
 
 /** The model a bot runs on, chosen in its settings; nothing here picks one. */
 export type ModelChoice = { provider: string; modelId: string };
@@ -70,6 +120,7 @@ export class BotObject extends DurableObject<Env> {
 	readonly #write: HostWrite;
 	readonly #settings: SettingsStore;
 	readonly #teaching: Teaching;
+	readonly #routines: RoutineStore;
 	readonly #registry: Registry = createRegistry();
 	#extensions: { core: Extension; toolSearch: Extension } | undefined;
 	/** The computer lease held while this bot works on its computer. */
@@ -89,6 +140,7 @@ export class BotObject extends DurableObject<Env> {
 		this.#write = queuedWrite(ctx.storage);
 		this.#settings = new SettingsStore(sql, this.#write);
 		this.#teaching = new Teaching(sql, this.#write);
+		this.#routines = new RoutineStore(sql, this.#id, this.#write);
 		this.memory = new BotMemory({
 			sql,
 			botId: this.#id,
@@ -159,9 +211,12 @@ export class BotObject extends DurableObject<Env> {
 	}
 
 	async #arm(wake: Wake): Promise<void> {
-		const at = nextAlarm({ wake, routineDeadlines: [], now: Date.now(), heartbeatMs: HEARTBEAT_MS });
+		// Deadlines are on the routines' clock; the alarm is set that far from now.
+		const now = routineNow();
+		const deadline = this.#routines.nextDeadline();
+		const at = nextAlarm({ wake, routineDeadlines: deadline === undefined ? [] : [deadline], now, heartbeatMs: HEARTBEAT_MS });
 		if (at === undefined) await this.ctx.storage.deleteAlarm();
-		else await this.ctx.storage.setAlarm(at);
+		else await this.ctx.storage.setAlarm(Date.now() + Math.max(0, at - now));
 	}
 
 	async #conversation(): Promise<Conversation> {
@@ -406,6 +461,7 @@ export class BotObject extends DurableObject<Env> {
 			settingsChanged: (settings, before) => this.#settingsChanged(settings, before),
 			settingsRules: () => this.#settingsRules(),
 			provenance: { outside: () => this.#outside(), enter: (source) => this.#enterOutside(source) },
+			gate: (intent) => this.#gate(intent),
 			image: {
 				models,
 				available: await availableImageModels(models),
@@ -428,7 +484,11 @@ export class BotObject extends DurableObject<Env> {
 		// Armed before the calls that can start work: `onWake` runs after their commits.
 		await this.#arm({ ...this.#harness.wake(), active: true });
 		// A new run the owner starts is the owner's; a steer stays in the run outside text may have touched.
-		if (idle) await this.#write((sql) => void sql.exec("DELETE FROM provenance WHERE run_id = ?", RUN_KEY));
+		if (idle)
+			await this.#write((sql) => {
+				sql.exec("DELETE FROM provenance WHERE run_id = ?", RUN_KEY);
+				sql.exec("DELETE FROM bot_meta WHERE key = 'run_grant'");
+			});
 		// Recall lands just ahead of the input; a failure there never blocks the message.
 		await this.memory.recall(text, requestId).catch((error: unknown) => console.error("recall", error));
 		await root.submit({ type: "input", content: text, requestId, whenBusy: "steer" }, context);
@@ -441,15 +501,164 @@ export class BotObject extends DurableObject<Env> {
 		await root.abort(context);
 	}
 
-	/** A routine's run (Task 3.4 supplies the prompt); one per routine and firing time however often it is called. */
+	// ─── Routines ─────────────────────────────────────────────────────────────
+
+	/** The bot's own email address (unique across the site); routines with email triggers listen on it. */
+	async setAddress(principal: Principal, address: string): Promise<void> {
+		this.#check(principal, this.#id);
+		const normalized = address.trim().toLowerCase();
+		await this.env.DB.prepare("INSERT INTO bot_addresses (address, bot_id, account_id) VALUES (?, ?, ?)")
+			.bind(normalized, this.#id, principal.accountId)
+			.run();
+		await this.#setMeta("address", normalized);
+		for (const routine of this.#routines.list()) await this.#index(routine);
+	}
+
+	async #index(routine: Routine): Promise<void> {
+		await indexRoutine(this.env.DB, { routine, botId: this.#id, accountId: this.#owner!, botAddress: this.#meta("address") });
+	}
+
+	async createRoutine(principal: Principal, input: RoutineInput): Promise<Routine> {
+		this.#check(principal, this.#id);
+		const routine = await this.#routines.create(input);
+		await this.#index(routine);
+		await this.#arm(this.#harness.wake());
+		return routine;
+	}
+
+	async updateRoutine(principal: Principal, id: string, patch: Partial<RoutineInput>): Promise<Routine> {
+		this.#check(principal, this.#id);
+		const routine = await this.#routines.update(id, patch);
+		await this.#index(routine);
+		await this.#arm(this.#harness.wake());
+		return routine;
+	}
+
+	async deleteRoutine(principal: Principal, id: string): Promise<void> {
+		this.#check(principal, this.#id);
+		await this.#routines.delete(id);
+		await this.env.DB.prepare("DELETE FROM routine_triggers WHERE routine_id = ?").bind(id).run();
+		await this.#arm(this.#harness.wake());
+	}
+
+	listRoutines(principal: Principal): Routine[] {
+		this.#check(principal, this.#id);
+		return this.#routines.list();
+	}
+
+	routineRuns(principal: Principal, routineId: string) {
+		this.#check(principal, this.#id);
+		return this.#routines.runs(routineId);
+	}
+
+	/** Runs a routine now (Test run, or the owner's request): the owner's own run, not outside text. */
 	async routineFire(routineId: string, firedAt: number): Promise<void> {
-		if (this.#owner === undefined) return;
+		const routine = this.#routines.get(routineId);
+		if (!routine || this.#owner === undefined) return;
+		await this.#fireRoutine(routine, { firedAt, title: `Run of ${routine.name}`, startedBy: "routine", lateMs: 0 });
+	}
+
+	/**
+	 * An inbound event routed to one of this bot's routines (from the Worker's trigger handlers). It fires when an active
+	 * trigger of the routine matches; the event is outside text, so the run acts only within the routine's grant.
+	 */
+	async routineEvent(routineId: string, event: TriggerEvent): Promise<boolean> {
+		const routine = this.#routines.get(routineId);
+		if (!routine?.active || this.#owner === undefined) return false;
+		const matched = routine.triggers.some((trigger) => {
+			const adapter = ADAPTERS[trigger.kind];
+			return trigger.kind === event.kind && adapter !== undefined && adapter.matches(trigger as never, event);
+		});
+		if (!matched) return false;
+		const startedBy = event.kind === "email" ? "email" : event.kind === "webhook" ? "webhook" : event.kind === "slack" ? "channel" : "routine";
+		await this.#fireRoutine(routine, { firedAt: routineNow(), title: event.title, startedBy, lateMs: 0, event });
+		return true;
+	}
+
+	/** Starts a routine's run: its prompt, the event as outside text, its grant for the run. */
+	async #fireRoutine(
+		routine: Routine,
+		run: { firedAt: number; title: string; startedBy: "routine" | "email" | "webhook" | "channel"; lateMs: number; event?: TriggerEvent },
+	): Promise<void> {
 		const root = await this.#conversation();
+		const idle = !this.#harness.wake().active;
 		await this.#arm({ ...this.#harness.wake(), active: true });
-		await root.submit(
-			{ type: "input", content: `Run routine ${routineId}.`, requestId: `routine:${routineId}:${firedAt}` },
-			context,
-		);
+		const eventDigest = run.event ? await digestOf({ tool: "event", title: run.event.title, args: run.event.text }) : String(run.firedAt);
+		await this.#write((sql) => {
+			if (idle) sql.exec("DELETE FROM provenance WHERE run_id = ?", RUN_KEY);
+			sql.exec("INSERT OR REPLACE INTO bot_meta (key, value) VALUES ('run_grant', ?)", JSON.stringify(routine.grant));
+		});
+		if (run.event) await this.#enterOutside(run.event.kind === "email" ? "email" : run.event.kind === "slack" ? "channel" : "webhook");
+		const late = run.lateMs > LATE_MS ? `\n(This scheduled run is ${Math.round(run.lateMs / 60_000)} minutes late; earlier firings were missed and are covered by this one run.)` : "";
+		const content = `Routine "${routine.name}": ${routine.prompt}${late}${run.event ? `\n\n${run.event.text}` : ""}`;
+		await this.#routines.recordRun(routine, run);
+		await root.submit({ type: "input", content, requestId: `routine:${routine.id}:${eventDigest}`, whenBusy: "followUp" }, context);
+	}
+
+	/** Due scheduled routines: one run each, however many firings were missed. */
+	async #fireDue(): Promise<void> {
+		const now = routineNow();
+		for (const routine of this.#routines.due(now)) {
+			const late = now - (routine.nextRunAt ?? now);
+			await this.#fireRoutine(routine, { firedAt: now, title: `Scheduled run of ${routine.name}`, startedBy: "routine", lateMs: late });
+		}
+	}
+
+	// ─── The approval gate ────────────────────────────────────────────────────
+
+	/**
+	 * Decides one outward action: block refuses; a run outside text touched acts only within its routine's grant; the
+	 * bot's approval mode does the rest (the account's default mode is "ask" until its settings route lands).
+	 */
+	async #gate(intent: ActionIntent): Promise<GateResult> {
+		const settings = this.#settings.read();
+		const mode = settings.approvals === "default" ? "ask" : settings.approvals;
+		const grantValue = this.#meta("run_grant");
+		const grant = grantValue ? (JSON.parse(grantValue) as Grant) : undefined;
+		const owner = this.#owner!;
+		const model = this.#model;
+		const decision = await decide({
+			action: intent,
+			mode,
+			allow: [],
+			block: [],
+			outside: this.#outside(),
+			...(grant ? { grant, used: this.#grantUse(intent.tool) } : {}),
+			...(mode === "auto" && model ? { reviewer: modelReviewer(modelsFor({ env: this.env, accountId: owner }), model, "the owner's latest request") } : {}),
+		});
+		if (decision === "refuse") return { decision, reason: "a block rule covers this action." };
+		const record = await this.#write((sql) => recordAction(sql, this.#id, intent));
+		if (decision === "ask") {
+			const approval = await createApproval(this.ctx.storage.sql, {
+				botId: this.#id,
+				actionId: record.id,
+				action: intent,
+				policyVersion: this.#policyVersion,
+				ttlMs: APPROVAL_TTL_MS,
+			});
+			return { decision, approvalId: approval.id };
+		}
+		await this.#write((sql) => markApproved(sql, record.id));
+		return { decision: "run", actionId: record.id, state: await this.deliverAction(record.id) };
+	}
+
+	/** How often this action ran today and in this run, against a grant's limits. */
+	#grantUse(tool: string): { day: number; run: number } {
+		const midnight = new Date(routineNow()).setUTCHours(0, 0, 0, 0);
+		const day = this.ctx.storage.sql
+			.exec<{ n: number }>("SELECT COUNT(*) AS n FROM actions WHERE json_extract(intent, '$.tool') = ? AND approved_at >= ?", tool, midnight)
+			.one().n;
+		return { day, run: day };
+	}
+
+	/** Approval cards waiting for the owner. */
+	pendingApprovals(principal: Principal): Approval[] {
+		this.#check(principal, this.#id);
+		const ids = this.ctx.storage.sql.exec<{ id: string }>("SELECT id FROM approvals WHERE state = 'pending'").toArray();
+		return ids.flatMap((row) => {
+			const approval = getApproval(this.ctx.storage.sql, row.id);
+			return approval && approval.state === "pending" ? [approval] : [];
+		});
 	}
 
 	/**
@@ -551,6 +760,7 @@ export class BotObject extends DurableObject<Env> {
 	override async alarm(): Promise<void> {
 		await this.#arm({ ...this.#harness.wake(), active: true });
 		this.#harness.resume(); // due sleeps and work a lost instance left
+		if (this.#owner !== undefined) await this.#fireDue();
 		// Approved actions not yet settled are delivered again (a neither adapter's unknown outcome never is).
 		const pending = deliveriesToResume(this.ctx.storage.sql);
 		for (const actionId of pending) await this.deliverAction(actionId).catch(() => undefined);
