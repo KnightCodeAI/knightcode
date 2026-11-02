@@ -11,7 +11,8 @@ import {
 } from "@knightcode/chord/output";
 import type { ImageContent, TextContent, ToolCall, ToolResultMessage } from "@knightcode/ai";
 import { validateToolArguments } from "@knightcode/ai/utils/validation";
-import { Compile } from "typebox/compile";
+import { compile, type Validator } from "@knightcode/schema";
+import { formats } from "@knightcode/schema/formats";
 import { defineDocFamily } from "../documents.ts";
 import { AssistantEntry, ToolResultEntry } from "../entries.ts";
 import type { ExecutionEnv } from "../env/index.ts";
@@ -770,7 +771,7 @@ async function afterHarnessResult(
 	return { ...rest, ...value, output: bounded.content, diagnostics: [...(rest.diagnostics ?? []), ...harness] };
 }
 
-const structuredValidators = new WeakMap<object, ReturnType<typeof Compile>>();
+const structuredValidators = new WeakMap<object, Validator>();
 
 /** Why a result's `structuredOutput` breaks the tool's contract, or `undefined` when it keeps it. */
 function structuredOutputError(tool: ToolRegistration, result: ToolExecutionResult): string | undefined {
@@ -786,12 +787,17 @@ function structuredOutputError(tool: ToolRegistration, result: ToolExecutionResu
 	}
 	let validator = structuredValidators.get(schema);
 	if (validator === undefined) {
-		validator = Compile(schema);
+		validator = compile(schema, { formats, unresolvedRefs: "reject" });
 		structuredValidators.set(schema, validator);
 	}
-	if (validator.Check(value)) return undefined;
-	const [first] = validator.Errors(value);
-	const path = first?.instancePath.replace(/^\//, "").replace(/\//g, ".") || "root";
+	if (validator.check(value)) return undefined;
+	const [first] = validator.errors(value);
+	const path =
+		first?.path
+			.slice(1)
+			.split("/")
+			.map((segment) => segment.replace(/~1/g, "/").replace(/~0/g, "~"))
+			.join(".") || "root";
 	return `Tool ${tool.name} returned structuredOutput that does not match its schema: ${path}: ${first?.message ?? "invalid"}`;
 }
 

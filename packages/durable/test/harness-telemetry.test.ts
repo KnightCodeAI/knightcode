@@ -1,5 +1,5 @@
 import { withTelemetry } from "@knightcode/chord/context";
-import { fauxAssistantMessage, fauxToolCall, Type } from "@knightcode/ai";
+import { fauxAssistantMessage, fauxToolCall } from "@knightcode/ai";
 import { CodemodeSandbox } from "@knightcode/codemode";
 import {
 	CompactionTask,
@@ -11,6 +11,7 @@ import {
 	type Storage,
 	type TaskId,
 } from "@knightcode/durable";
+import { obj, str } from "@knightcode/schema";
 import {
 	InMemoryTelemetryContext,
 	NOOP_TELEMETRY_CONTEXT,
@@ -53,7 +54,7 @@ describe("Durable telemetry", () => {
 			defineTool({
 				name: "inner",
 				description: "inner",
-				parameters: Type.Object({ secret: Type.String() }),
+				parameters: obj({ secret: str() }),
 				execute: async () => ({ output: [{ type: "text", text: "private-result" }] }),
 			}),
 		);
@@ -62,7 +63,7 @@ describe("Durable telemetry", () => {
 			defineTool({
 				name: "outer",
 				description: "outer",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async (_args, api, ctx) => {
 					await api.executeTool("inner", { secret: "private-argument" }, ctx);
 					return { output: [{ type: "text", text: "private-output" }] };
@@ -338,7 +339,7 @@ describe("Durable telemetry", () => {
 			defineTool({
 				name: "hold",
 				description: "hold",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async () => {
 					reached.resolve();
 					await gate.promise;
@@ -411,7 +412,7 @@ describe("Durable telemetry", () => {
 			defineTool({
 				name: "delegate",
 				description: "delegate",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async (_args, api, ctx) => {
 					const child = await api.commit(
 						(tx) => tx.createConversation({ ownership: { kind: "task", taskId: api.taskId } }),
@@ -943,7 +944,7 @@ describe("Durable telemetry", () => {
 			defineTool({
 				name: "once",
 				description: "once",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async () => {
 					runs++;
 					return { output: [] };
@@ -956,7 +957,7 @@ describe("Durable telemetry", () => {
 				name: "hold",
 				description: "hold",
 				replay: "safe",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async (_args, _api, ctx) => {
 					if (!recover) {
 						reached.resolve();

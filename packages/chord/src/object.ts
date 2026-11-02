@@ -1,5 +1,4 @@
-import type { Static, TSchema } from "typebox";
-import { Value } from "typebox/value";
+import type { Schema, Static } from "@knightcode/schema";
 import {
 	Cell,
 	Derived,
@@ -30,7 +29,7 @@ import { asChordError, ChordError, invalid, runAll } from "./errors.ts";
 import { enqueue } from "./publish.ts";
 import type { Registration, Registry } from "./registry.ts";
 import type { RemoteHost } from "./remote.ts";
-import { assertValid, normalize } from "./schema.ts";
+import { assertValid, cleaned, normalize } from "./schema.ts";
 import type { Ctx, Exposed, GetOptions, Readable, RefStatus, Shape, StateEvent } from "./types.ts";
 
 const noop = (): void => {};
@@ -159,7 +158,7 @@ export interface Self<P = unknown> {
 	 * it when its version rises, and refuses a schema change without a version bump. A cell a reload adds runs its `init`
 	 * while the reload prepares.
 	 */
-	state<S extends TSchema>(
+	state<S extends Schema>(
 		name: string,
 		schema: S,
 		initial: Static<S> | StateInit<Static<S>, P>,
@@ -314,7 +313,7 @@ type TaskFn = (ctx: Ctx) => Promise<void>;
 /** Everything one factory run declared, by kind and key. */
 export class Decls {
 	readonly cells = new Map<string, Cell<unknown>>();
-	readonly cellSchemas = new Map<string, TSchema>();
+	readonly cellSchemas = new Map<string, Schema>();
 	readonly cellVersions = new Map<string, number>();
 	readonly cellMigrations = new Map<string, (old: unknown, from: number) => unknown>();
 	readonly refs = new Map<string, RefCore>();
@@ -1292,7 +1291,7 @@ export class ObjectImpl {
 
 	/** Every state source exposed as a remote state member gets that member's schema (checked per write in dev mode). */
 	refreshSchemas(): void {
-		const schemas = new Map<Readable<unknown>, TSchema[]>();
+		const schemas = new Map<Readable<unknown>, Schema[]>();
 		for (const installed of this.implementations.values()) {
 			for (const [source, list] of memberSchemas(installed.service, installed.implementation)) {
 				schemas.set(source, [...(schemas.get(source) ?? []), ...list]);
@@ -1577,8 +1576,8 @@ export class ObjectImpl {
 			// The additive rule assumes a consumer sends only what its own schema knows, and a provider sees only what its
 			// schema knows: strip with both before validating.
 			const own = ref.contract.scope === "remote" && wanted?.kind === "method" ? wanted.args : undefined;
-			const sent = own === undefined ? args : Value.Clean(own, Value.Clone(args));
-			input = validated?.args ? Value.Clean(validated.args, Value.Clone(sent)) : sent;
+			const sent = own === undefined ? args : cleaned(own, args);
+			input = validated?.args ? cleaned(validated.args, sent) : sent;
 			if (validated?.args) assertValid("args", `${this.address}.${name} args`, validated.args, input);
 		}
 		this.lease(ctx);
@@ -1714,8 +1713,8 @@ const isReadableLike = (value: unknown): boolean =>
 export function memberSchemas(
 	service: Service,
 	implementation: Record<string, unknown>,
-): Map<Readable<unknown>, TSchema[]> {
-	const schemas = new Map<Readable<unknown>, TSchema[]>();
+): Map<Readable<unknown>, Schema[]> {
+	const schemas = new Map<Readable<unknown>, Schema[]>();
 	const contract = service.contract;
 	if (contract.scope !== "remote") return schemas;
 	const members = contract.description.variants[variantOf(implementation) ?? ""] ?? {};
@@ -1777,7 +1776,7 @@ class SelfImpl implements Self {
 		if (map.has(name)) throw invalid("duplicate", `${this.#object.typeName}: duplicate ${kind} name ${name}`);
 	}
 
-	state<S extends TSchema>(
+	state<S extends Schema>(
 		name: string,
 		schema: S,
 		initial: Static<S> | StateInit<Static<S>>,

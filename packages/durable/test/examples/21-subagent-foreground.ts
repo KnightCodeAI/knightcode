@@ -4,12 +4,14 @@
 // Uses OpenAI when OPENAI_API_KEY is set, and a scripted faux model otherwise.
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/21-subagent-foreground.ts
+
 import type { Context } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import { type AssistantMessage, type FauxResponseStep, Type } from "@knightcode/ai";
+import type { AssistantMessage, FauxResponseStep } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@knightcode/ai/providers/faux";
 import { openaiProvider } from "@knightcode/ai/providers/openai";
+import { obj, str } from "@knightcode/schema";
 import {
 	AssistantEntry,
 	type ConversationId,
@@ -42,7 +44,7 @@ const Subagent: Extension = defineExtension({
 		defineTool({
 			name: "subagent",
 			description: "Delegate a self-contained task to a subagent and get its answer back.",
-			parameters: Type.Object({ task: Type.String({ description: "What the subagent should do" }) }),
+			parameters: obj({ task: str({ description: "What the subagent should do" }) }),
 			// Safe to rerun after a crash: a rerun finds the child it already created and the submission it already made.
 			replay: "safe",
 			execute: async (args, api, callContext) => {

@@ -11,7 +11,6 @@ import {
 	fauxText,
 	fauxThinking,
 	fauxToolCall,
-	Type,
 } from "@knightcode/ai";
 import {
 	type Conversation,
@@ -22,6 +21,7 @@ import {
 	type LiveState,
 	MemoryStorage,
 } from "@knightcode/durable";
+import { num, obj } from "@knightcode/schema";
 import { describe, expect, it } from "vitest";
 import { type ChatSetup, chatSetup, openChat, textOf, waitFor } from "./chat-support.ts";
 import { addTool } from "./harness-support.ts";
@@ -126,7 +126,7 @@ describe("a run as the conversation view shows it", () => {
 			defineTool({
 				name: "print",
 				description: "Prints",
-				parameters: Type.Object({ n: Type.Number() }),
+				parameters: obj({ n: num() }),
 				execute: async (_args, api) => {
 					api.output("one\n");
 					await new Promise((resolve) => setTimeout(resolve, 150));
@@ -259,7 +259,7 @@ describe("a run as the conversation view shows it", () => {
 			defineTool({
 				name: "tail",
 				description: "Prints lines",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				outputLimits: { maxLines: 3, retain: "tail" },
 				execute: async (_args, api) => {
 					for (let line = 0; line < 6; line++) {
@@ -339,7 +339,7 @@ describe("a run as the conversation view shows it", () => {
 			defineTool({
 				name: "wait",
 				description: "Waits until aborted",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: (_args, _api, callContext) => aborted(callContext.abortSignal!),
 			}),
 		);
@@ -380,7 +380,7 @@ describe("a run as the conversation view shows it", () => {
 			defineTool({
 				name: "hold",
 				description: "Waits",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async () => {
 					await gate.promise;
 					return {};

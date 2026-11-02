@@ -170,8 +170,6 @@ deleted (the slice's spec and code are the record). Moved here from `carry-over.
   slice 3b.)
 - **The park deadline's per-type override** is not built: a parked call waits the reference's `readyTimeout`. Build
   it only if a real case needs it. (Slice 3b spec.)
-- Failed-check paths are TypeBox's instance paths (ambiguous for keys containing `/` or `~`); documented, not fixed.
-  (L1.)
 - No CBOR; revisit only if benchmarks show encoding as a bottleneck (slice 3a's and 4a's do not). (L2 decisions.)
 - **One N on every host:** a relay forwards calls at once, so a worker announcing a smaller N than the relay's could
   see more running calls of one origin than it accepts (a protocol error). Every host announces 256; per-link N, if

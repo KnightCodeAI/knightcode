@@ -1,9 +1,10 @@
 // Per-conversation agent choices and Harness-wide settings.
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/06-configuration.ts
+
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import { Type } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";
+import { obj, str } from "@knightcode/schema";
 import {
 	AgentDoc,
 	createRegistry,
@@ -25,7 +26,7 @@ function exampleTool(name: string, description: string): AppTool {
 	const tool = defineTool({
 		name,
 		description,
-		parameters: Type.Object({ path: Type.String() }),
+		parameters: obj({ path: str() }),
 		execute: async (args) => ({ output: [{ type: "text", text: `${name} ${args.path}` }] }),
 	});
 	return { ...tool, snippet: `Use ${name} for files.` };

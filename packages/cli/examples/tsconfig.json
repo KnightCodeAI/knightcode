@@ -1,0 +1,177 @@
+// Type-checks the example extensions against the modules extensions see at run time (core/extensions/virtual-modules.ts):
+// "@knightcode/ai" is the extension view, which adds TypeBox's Type, Static and TSchema to the compat entry (the
+// view imports "@knightcode/ai/compat", so that path stays the package's own).
+// The other paths repeat the root tsconfig.json; keep them in sync.
+// Also the test that imports the subagent example: it type-checks only against the extension view.
+{
+	"extends": "../../../tsconfig.json",
+	"compilerOptions": {
+		"paths": {
+			"@knightcode/chord": [
+				"../../../packages/chord/src/index.ts"
+			],
+			"@knightcode/chord/context": [
+				"../../../packages/chord/src/context/index.ts"
+			],
+			"@knightcode/chord/delta": [
+				"../../../packages/chord/src/delta/index.ts"
+			],
+			"@knightcode/chord/next": [
+				"../../../packages/chord/src/next/index.ts"
+			],
+			"@knightcode/chord/next/plugins": [
+				"../../../packages/chord/src/next-node/plugins/index.ts"
+			],
+			"@knightcode/chord/next/plugins/runtime": [
+				"../../../packages/chord/src/next-node/plugins/runtime.ts"
+			],
+			"@test/contracts/*": [
+				"../../../packages/chord/test/next-node/fixtures/plugins/contracts/*.ts"
+			],
+			"@example/contracts/*": [
+				"../../../packages/chord/test/next/examples/35-plugins/plugins/contracts/*.ts"
+			],
+			"@example/weather/*": [
+				"../../../packages/chord/test/next/examples/36-plugin-failures/plugins/weather/*.ts"
+			],
+			"@example/prices/*": [
+				"../../../packages/chord/test/next/examples/36-plugin-failures/plugins/prices/*.ts"
+			],
+			"@example/shapes/*": [
+				"../../../packages/chord/test/next/examples/37-plugin-imports/plugins/shapes/*.ts"
+			],
+			"@example/shared/*": [
+				"../../../packages/chord/test/next/examples/38-watch-and-rollout/plugins/contracts/*.ts"
+			],
+			"@knightcode/chord/next/http": [
+				"../../../packages/chord/src/next-node/http/index.ts"
+			],
+			"@knightcode/chord/next/workers": [
+				"../../../packages/chord/src/next-node/workers/index.ts"
+			],
+			"@knightcode/chord/node": [
+				"../../../packages/chord/src/node.ts"
+			],
+			"@knightcode/chord/output": [
+				"../../../packages/chord/src/output.ts"
+			],
+			"@knightcode/chord/telemetry-sqlite": [
+				"../../../packages/chord/src/telemetry-sqlite/index.ts"
+			],
+			"@knightcode/chord/sqlite": [
+				"../../../packages/chord/src/sqlite/index.ts"
+			],
+			"@knightcode/chord/sqlite/node": [
+				"../../../packages/chord/src/sqlite/node.ts"
+			],
+			"@knightcode/chord/sqlite/cloudflare": [
+				"../../../packages/chord/src/sqlite/cloudflare.ts"
+			],
+			"@knightcode/telemetry": [
+				"../../../packages/telemetry/src/index.ts"
+			],
+			"@knightcode/telemetry/testing": [
+				"../../../packages/telemetry/src/testing/index.ts"
+			],
+			"@knightcode/telemetry/render": [
+				"../../../packages/telemetry/src/render.ts"
+			],
+			"@knightcode/codemode": [
+				"../../../packages/codemode/src/index.ts"
+			],
+			"@knightcode/codemode/cloudflare": [
+				"../../../packages/codemode/src/cloudflare.ts"
+			],
+			"@knightcode/codemode/declarations": [
+				"../../../packages/codemode/src/declarations.ts"
+			],
+			"@knightcode/codemode/portable": [
+				"../../../packages/codemode/src/portable.ts"
+			],
+			"@knightcode/codemode/source": [
+				"../../../packages/codemode/src/source.ts"
+			],
+			"@knightcode/codemode/worker": [
+				"../../../packages/codemode/src/runtime/worker.ts"
+			],
+			"@knightcode/schema": [
+				"../../../packages/schema/src/index.ts"
+			],
+			"@knightcode/schema/formats": [
+				"../../../packages/schema/src/formats/index.ts"
+			],
+			"@knightcode/mcp": [
+				"../../../packages/mcp/src/index.ts"
+			],
+			"@knightcode/mcp/oauth": [
+				"../../../packages/mcp/src/oauth/index.ts"
+			],
+			"@knightcode/mcp/testing": [
+				"../../../packages/mcp/src/testing/index.ts"
+			],
+			"@knightcode/ai": [
+				"../../../packages/cli/src/core/extensions/knightcode-ai-extension-view.ts"
+			],
+			"@knightcode/ai/oauth": [
+				"../../../packages/ai/src/oauth.ts"
+			],
+			"@knightcode/ai/*": [
+				"../../../packages/ai/src/*.ts",
+				"../../../packages/ai/src/providers/*.ts"
+			],
+			"@knightcode/ai/dist/*": [
+				"../../../packages/ai/src/*"
+			],
+			"@knightcode/durable": [
+				"../../../packages/durable/src/index.ts"
+			],
+			"@knightcode/durable/testing": [
+				"../../../packages/durable/src/testing/index.ts"
+			],
+			"@knightcode/durable/*": [
+				"../../../packages/durable/src/*.ts",
+				"../../../packages/durable/src/*/index.ts",
+				"../../../packages/durable/src/*"
+			],
+			"@knightcode/env": [
+				"../../../packages/env/src/index.ts"
+			],
+			"@knightcode/agent": [
+				"../../../packages/agent/src/index.ts"
+			],
+			"@knightcodeai/cli": [
+				"../../../packages/cli/src/index.ts"
+			],
+			"@knightcodeai/cli/hooks": [
+				"../../../packages/cli/src/core/hooks/index.ts"
+			],
+			"@knightcodeai/cli/*": [
+				"../../../packages/cli/src/*"
+			],
+			"typebox": [
+				"../../../node_modules/typebox"
+			],
+			"@knightcode/tui": [
+				"../../../packages/tui/src/index.ts"
+			],
+			"@knightcode/tui/*": [
+				"../../../packages/tui/src/*"
+			],
+			"@knightcode/agent-old": [
+				"../../../packages/agent-old/src/index.ts"
+			],
+			"@knightcode/agent-old/*": [
+				"../../../packages/agent-old/src/*"
+			]
+		}
+	},
+	"include": [
+		"./extensions/**/*",
+		"../../*/src/**/*.d.ts",
+		"../test/suite/regressions/8261-subagent-project-trust.test.ts"
+	],
+	"exclude": [
+		"**/node_modules/**",
+		"./extensions/gondolin/**"
+	]
+}
