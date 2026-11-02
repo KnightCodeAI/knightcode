@@ -1,5 +1,17 @@
 # @knightcodeai/cli
 
+## 0.23.4
+
+### Changed
+
+- Changed tool argument validation to use the built-in schema validator while retaining TypeBox schemas for extensions.
+
+### Fixed
+
+- Fixed repeated syntax highlighting and Markdown layout work during tool updates, streamed answers, and resizing by reusing unchanged code and rendered blocks.
+
+- Fixed web fetch TLS failures under Node while preserving private-network protections, and showed fetch errors instead of invalid size and line summaries.
+
 ## 0.23.3
 
 ### Added
