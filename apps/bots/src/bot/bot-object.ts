@@ -60,15 +60,19 @@ import { webhookAdapter } from "../routines/webhook.ts";
 import { type TeachEvent, Teaching } from "../skills/teach.ts";
 import { FLEET_TOOL_NAMES, type FleetDeps, fleetTools } from "../team/fleet.ts";
 import { createSuggestionTables, maySuggest, recordSuggestion } from "../inbox/suggestions.ts";
+import { financeAvailable, PlaidClient } from "../finance/plaid.ts";
+import { CardsUnavailable, type PaymentCredential, paymentsAvailable, type PaymentsProvider, type Purchase, StripeLinkProvider } from "../payments/link.ts";
+import { verifySpendAssertion } from "../payments/spend-approvals.ts";
+import { vaultTools } from "../vault/tools.ts";
 import { defineTool } from "@knightcode/durable";
-import { arr, obj, opt, str, unknown as anyJson } from "@knightcode/schema";
+import { arr, bool, num, obj, opt, str, union, lit, unknown as anyJson } from "@knightcode/schema";
 import { startHelperTool } from "../team/helpers.ts";
 import { type BotMessage, MESSAGE_MAX, messageBotTool } from "../team/message-bot.ts";
 import { botExtensions } from "../tools/catalog.ts";
 import { HELP_DOCS } from "../tools/help-docs.ts";
 import { availableImageModels } from "../tools/image-tool.ts";
 import { type BotSettings, SettingsStore, type UpdateRules } from "../tools/settings-tool.ts";
-import type { Gate, GateResult } from "./action-tools.ts";
+import { type Gate, type GateResult, gateMessage } from "./action-tools.ts";
 import {
 	type ActionIntent,
 	type ActionState,
@@ -104,6 +108,19 @@ const HEARTBEAT_MS = 60_000;
 const SESSION_RECHECK_MS = 30_000;
 /** Provenance is kept per conversation run; the owner's next new run clears it. */
 const RUN_KEY = "current-run";
+
+let paymentsFactory: (env: Env) => PaymentsProvider | undefined = (env) =>
+	env.STRIPE_SECRET_KEY ? new StripeLinkProvider({ secretKey: env.STRIPE_SECRET_KEY, apiUrl: env.STRIPE_API_URL }) : undefined;
+/** Tests only: the payments provider (`undefined` restores Stripe's). */
+export function setPaymentsProvider(next: ((env: Env) => PaymentsProvider | undefined) | undefined): void {
+	paymentsFactory = next ?? ((env) => (env.STRIPE_SECRET_KEY ? new StripeLinkProvider({ secretKey: env.STRIPE_SECRET_KEY, apiUrl: env.STRIPE_API_URL }) : undefined));
+}
+
+let spendVerifier: typeof verifySpendAssertion = verifySpendAssertion;
+/** Tests only: how a spending passkey is verified (`undefined` restores WebAuthn). */
+export function setSpendVerifier(next: typeof verifySpendAssertion | undefined): void {
+	spendVerifier = next ?? verifySpendAssertion;
+}
 
 /** Which adapter judges a trigger of each kind (schedules and watches are the alarm's). */
 const ADAPTERS: Partial<Record<Trigger["kind"], Pick<TriggerAdapter<never>, "matches">>> = {
@@ -144,6 +161,10 @@ export class BotObject extends DurableObject<Env> {
 	/** One delivery of an action at a time, so a check and a send never overlap another of the same action. */
 	readonly #deliveries = new Map<string, Promise<ActionState>>();
 	#afterRunning: Promise<void> | undefined;
+	/** Credentials of approved purchases, by approval: in memory only, never stored (KnightCode stores no card numbers). */
+	readonly #purchaseCredentials = new Map<string, PaymentCredential>();
+	/** The owner's country, for what is offered there (payments, finance). */
+	#country: string | undefined;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -560,6 +581,7 @@ export class BotObject extends DurableObject<Env> {
 	async #installTools(): Promise<{ core: Extension; toolSearch: Extension }> {
 		const owner = this.#owner!;
 		this.#botUser = await botUserFor(this.#id);
+		this.#country = await this.env.USER.get(this.env.USER.idFromName(owner)).country();
 		const models = modelsFor({ env: this.env, accountId: owner });
 		const user = this.env.USER.get(this.env.USER.idFromName(owner));
 		const botId = this.#id;
@@ -589,6 +611,16 @@ export class BotObject extends DurableObject<Env> {
 				{ ...startHelperTool({ tools: () => this.tools(), inherit: async () => {} }), deferred: true as const },
 				...(this.#settings.read().manager ? fleetTools(this.#fleet()) : []),
 				...this.#libraryTools(),
+				...vaultTools({
+					list: () => this.#user().vaultList(),
+					reveal: (id) => this.#user().vaultReveal(id, "inject"),
+					forget: (id) => this.#user().vaultDelete(id),
+					request: async (input) => {
+						await this.#user().inboxAdd({ kind: "question", botId: this.#id, title: `Add ${input.name} for ${input.origin}`, detail: `kind: ${input.kind}` });
+					},
+				}),
+				...(paymentsAvailable(this.env, this.#country) ? this.#paymentTools() : []),
+				...(financeAvailable(this.#country) ? this.#financeTools() : []),
 			],
 			image: {
 				models,
@@ -985,6 +1017,77 @@ export class BotObject extends DurableObject<Env> {
 		};
 	}
 
+	/** Buying: limits first, then a spending card confirmed with the passkey; cards are filled masked. */
+	#paymentTools(): ToolRegistration[] {
+		const text = (value: string, isError = false) => ({ output: [{ type: "text" as const, text: value }], ...(isError ? { isError } : {}) });
+		return [
+			defineTool({
+				name: "buy",
+				description: "Ask to buy something: merchant, amount in cents, currency and item. The owner confirms with their passkey.",
+				deferred: true,
+				parameters: obj({ merchant: str(), amount: num(), currency: str(), item: str(), acceptsSharedTokens: opt(bool()) }),
+				execute: async (args) => {
+					const purchase = { merchant: args.merchant, amount: Math.round(args.amount), currency: args.currency.toUpperCase(), item: args.item };
+					// Above the bot's limits: refused here, with no card and no approval.
+					const limits = await this.#user().spendCheck(this.#id, purchase.amount);
+					if (!limits.ok) return text(`Not bought: ${limits.reason}`, true);
+					const result = await this.#gate(
+						{
+							tool: "payments.purchase",
+							title: `Buy ${purchase.item} from ${purchase.merchant}`,
+							target: purchase.merchant,
+							args: { ...purchase, acceptsSharedTokens: args.acceptsSharedTokens ?? false },
+							spend: { merchant: purchase.merchant, amount: purchase.amount / 100, currency: purchase.currency, item: purchase.item },
+						},
+						{ alwaysAsk: true },
+					);
+					if (result.decision === "ask")
+						return text(`Waiting for the owner to confirm with their passkey (approval ${result.approvalId}). Then use fill_card or the shared token.`);
+					return text(gateMessage(result).text, true);
+				},
+			}) as ToolRegistration,
+			defineTool({
+				name: "fill_card",
+				description: "Fill an approved purchase's card into the checkout page: number, expiry or cvc, by element ref. You never see it.",
+				deferred: true,
+				parameters: obj({ approvalId: str(), ref: str(), field: union([lit("number"), lit("expiry"), lit("cvc")]) }),
+				execute: async (args) => {
+					const credential = this.#purchaseCredentials.get(args.approvalId);
+					if (!credential) return text("No approved purchase with that id here; ask with buy.", true);
+					if (credential.kind !== "card") return text(`This purchase uses a shared payment token: ${credential.token}`);
+					const value =
+						args.field === "number"
+							? credential.number
+							: args.field === "cvc"
+								? credential.cvc
+								: `${String(credential.expMonth).padStart(2, "0")}/${String(credential.expYear).slice(-2)}`;
+					await this.#holdComputer();
+					const result = await this.#computer().fillCard(this.#id, args.ref, value, `card's ${args.field} for ${credential.limitedTo.merchant}`);
+					return result.error ? text(result.error, true) : text(result.snapshot ?? "Filled.");
+				},
+			}) as ToolRegistration,
+		];
+	}
+
+	/** Read-only bank data, before opening a bank's website. */
+	#financeTools(): ToolRegistration[] {
+		return [
+			defineTool({
+				name: "bank_accounts",
+				description: "List the owner's linked bank, card, loan and brokerage accounts with balances (read-only).",
+				deferred: true,
+				parameters: obj({}),
+				execute: async () => ({ output: [{ type: "text" as const, text: JSON.stringify(await this.#user().bankAccounts()) }] }),
+			}) as ToolRegistration,
+		];
+	}
+
+	/** The wallet this bot's purchases draw on (the owner links it once). */
+	async setWallet(principal: Principal, customerId: string): Promise<void> {
+		this.#check(principal, this.#id);
+		await this.#setMeta("wallet_customer", customerId);
+	}
+
 	/** Pages the bot keeps (its own only) and suggestions it may offer; both loaded through tool_search. */
 	#libraryTools(): ToolRegistration[] {
 		const text = (value: unknown, isError = false) => ({
@@ -1075,6 +1178,7 @@ export class BotObject extends DurableObject<Env> {
 				policyVersion: this.#policyVersion,
 				ttlMs: APPROVAL_TTL_MS,
 			});
+			await this.#write((sql) => void sql.exec("UPDATE actions SET approval_id = ? WHERE id = ?", approval.id, record.id));
 			await this.#user()
 				.inboxAdd({ kind: "approval", botId: this.#id, title: intent.title, approvalId: approval.id })
 				.catch((error: unknown) => console.error("inbox", error));
@@ -1150,7 +1254,7 @@ export class BotObject extends DurableObject<Env> {
 	 * many devices answer; the action is then marked approved, published to the delivery queue and delivered. Until it
 	 * settles, the queue and this object's alarm keep delivering it.
 	 */
-	async answerApproval(principal: Principal, approvalId: string, decision: "allow" | "deny"): Promise<ConsumeResult> {
+	async answerApproval(principal: Principal, approvalId: string, decision: "allow" | "deny", passkey?: unknown): Promise<ConsumeResult> {
 		this.#check(principal, this.#id);
 		const sql = this.ctx.storage.sql;
 		const approval = getApproval(sql, approvalId);
@@ -1163,6 +1267,9 @@ export class BotObject extends DurableObject<Env> {
 			return "revoked";
 		}
 		const digest = await digestOf(record.intent);
+		// A purchase is confirmed with the owner's passkey, whose challenge is this approval's digest.
+		if (record.intent.spend && !(await spendVerifier(this.env, { accountId: principal.accountId, digest: approval.digest, assertion: passkey })))
+			return "revoked";
 		const policyVersion = this.#policyVersion;
 		const result = await this.#write((db) => {
 			const consumed = consumeApproval(db, approvalId, digest, policyVersion);
@@ -1201,6 +1308,26 @@ export class BotObject extends DurableObject<Env> {
 	/** Adapters for actions only this object can carry out (its own mail, and approved fleet changes). */
 	#builtinAdapter(tool: string): WriteAdapter | undefined {
 		if (tool === "email.send") return emailWriteAdapter(this.env, { accountId: this.#owner!, botId: this.#id });
+		if (tool === "payments.purchase")
+			return {
+				id: tool,
+				// A credential limited to this merchant and amount: asking twice yields one more limited credential, never a charge.
+				kind: "idempotent",
+				send: async (action) => {
+					const provider = paymentsFactory(this.env);
+					const wallet = this.#meta("wallet_customer");
+					if (!provider || !wallet) return { ok: false, error: "The owner has not linked a wallet." };
+					const args = action.intent.args as Purchase & { acceptsSharedTokens: boolean };
+					try {
+						const credential = await provider.requestCredential({ ...args, customerId: wallet });
+						this.#purchaseCredentials.set(action.approvalId ?? action.id, credential);
+						await this.#user().recordPurchase(this.#id, args, action.approvalId ?? action.id);
+						return { ok: true, confirmed: true };
+					} catch (error) {
+						return { ok: false, error: error instanceof CardsUnavailable ? error.message : "The payment provider refused." };
+					}
+				},
+			};
 		if (tool === "fleet.replace_instructions" || tool === "fleet.set_model")
 			return {
 				id: tool,

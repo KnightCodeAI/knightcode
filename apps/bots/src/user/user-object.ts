@@ -12,7 +12,10 @@ import * as balance from "./balance.ts";
 import type { Balance, MeteredKind, Reservation } from "./balance.ts";
 import { createCredentialsTable, SealedCredentialStore } from "./credentials.ts";
 import { beginEnrollment, createEnrollmentTable, spendEnrollment } from "./enrollment.ts";
+import { type BankAccount, linkBank, PlaidClient } from "../finance/plaid.ts";
 import { Inbox } from "../inbox/inbox.ts";
+import type { Purchase } from "../payments/link.ts";
+import { checkLimits, createSpendTables, recordPurchase, setLimit } from "../payments/spend-approvals.ts";
 import { type Editor, PageStore } from "../pages/pages.ts";
 import { addSkill, createSkillsTable, deleteSkill, listSkills, shareSkill, type SkillInput, updateSkill } from "../skills/library.ts";
 import { createFilesTable, type FileMeta, getFile, listFiles, putFile } from "./files.ts";
@@ -52,6 +55,7 @@ export class UserObject extends DurableObject<Env> {
 			createOutboxTable(this.#sql);
 			createFilesTable(this.#sql);
 			createSkillsTable(this.#sql);
+			createSpendTables(this.#sql);
 			this.#sql.exec("CREATE TABLE IF NOT EXISTS user_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
 			// Entries an earlier instance could not copy are copied soon.
 			if (this.#sql.exec("SELECT 1 FROM journal_outbox LIMIT 1").toArray().length > 0)
@@ -262,6 +266,61 @@ export class UserObject extends DurableObject<Env> {
 		const previous = Number(this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'last_activity'").toArray()[0]?.value ?? now);
 		this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('last_activity', ?)", String(now));
 		return previous;
+	}
+
+	// ─── Country, payments and bank data ───────────────────────────────────────
+
+	/** The account's country (ISO alpha-2), which decides whether payments and finance are offered. */
+	country(): string | undefined {
+		return this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'country'").toArray()[0]?.value;
+	}
+	setCountry(country: string): void {
+		this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('country', ?)", country.toUpperCase().slice(0, 2));
+	}
+
+	setSpendLimit(botId: string, limit: { perPurchase: number; perMonth: number }): void {
+		setLimit(this.#sql, botId, limit);
+	}
+	spendCheck(botId: string, amount: number) {
+		return checkLimits(this.#sql, botId, amount);
+	}
+	recordPurchase(botId: string, purchase: Purchase, approvalId: string): string {
+		const id = recordPurchase(this.#sql, botId, purchase, approvalId);
+		this.inbox.add({ kind: "review", botId, title: `Bought ${purchase.item} from ${purchase.merchant}`, detail: `${purchase.amount / 100} ${purchase.currency}` });
+		return id;
+	}
+
+	#plaid(): PlaidClient {
+		if (!this.env.PLAID_CLIENT_ID || !this.env.PLAID_SECRET) throw new Error("bank data is not set up");
+		return new PlaidClient({ clientId: this.env.PLAID_CLIENT_ID, secret: this.env.PLAID_SECRET, apiUrl: this.env.PLAID_API_URL });
+	}
+
+	/** Links a bank: the month's fee is reserved first, so too little balance refuses it. */
+	async linkBank(publicToken: string): Promise<BankAccount[] | "insufficient"> {
+		const result = await linkBank({
+			plaid: this.#plaid(),
+			publicToken,
+			reserve: async () => {
+				const reservation = await this.reserve("bank", 1);
+				return reservation === "insufficient" ? "insufficient" : { id: reservation.id };
+			},
+			settle: (reservationId) => this.settle(reservationId, 1),
+			store: async (itemId, accessToken) => {
+				await this.credentials().modify(`plaid:${itemId}`, async () => ({ type: "api_key", key: accessToken }));
+			},
+		});
+		return result;
+	}
+
+	/** Every linked bank account, read-only, across the account's Plaid items. */
+	async bankAccounts(): Promise<BankAccount[]> {
+		const items = (await this.credentials().list()).filter((item) => item.providerId.startsWith("plaid:"));
+		const accounts: BankAccount[] = [];
+		for (const item of items) {
+			const credential = (await this.credentials().read(item.providerId)) as { key?: string } | undefined;
+			if (credential?.key) accounts.push(...(await this.#plaid().accounts(credential.key)));
+		}
+		return accounts;
 	}
 
 	// ─── Computer workspaces ──────────────────────────────────────────────────

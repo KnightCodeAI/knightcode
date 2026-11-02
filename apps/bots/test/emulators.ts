@@ -4,11 +4,12 @@ import { createEmulator, type Emulator, type ServiceName } from "emulate";
 import config, { TEST_OAUTH } from "../emulate.config.ts";
 import { COMPOSIO_TEST_KEY, startComposio } from "./emulators/composio.ts";
 import { startMcpServer } from "./emulators/mcp-server.ts";
+import { PLAID_TEST, startPlaid } from "./emulators/plaid.ts";
 import { startTelegram, TELEGRAM_TEST_SECRET, TELEGRAM_TEST_TOKEN } from "./emulators/telegram.ts";
 
 const RUNNING = Symbol.for("knightcode-bots.emulators");
 type Closer = { url: string; close(): Promise<void> };
-type Running = Promise<Partial<Record<ServiceName, Emulator>> & { mcp?: Closer; composio?: Closer; telegram?: Closer }>;
+type Running = Promise<Partial<Record<ServiceName, Emulator>> & { mcp?: Closer; composio?: Closer; telegram?: Closer; plaid?: Closer }>;
 const registry = globalThis as { [RUNNING]?: Running };
 
 async function start(): Running {
@@ -21,6 +22,7 @@ async function start(): Running {
 	out.mcp = await startMcpServer();
 	out.composio = await startComposio();
 	out.telegram = await startTelegram();
+	out.plaid = await startPlaid();
 	return out;
 }
 
@@ -41,6 +43,11 @@ export async function emulatorBindings(): Promise<Record<string, string>> {
 		TELEGRAM_API_URL: running.telegram!.url,
 		TELEGRAM_BOT_TOKEN: TELEGRAM_TEST_TOKEN,
 		TELEGRAM_WEBHOOK_SECRET: TELEGRAM_TEST_SECRET,
+		STRIPE_API_URL: running.stripe!.url,
+		STRIPE_SECRET_KEY: "sk_test_knightcode_bots",
+		PLAID_API_URL: running.plaid!.url,
+		PLAID_CLIENT_ID: PLAID_TEST.clientId,
+		PLAID_SECRET: PLAID_TEST.secret,
 	};
 }
 

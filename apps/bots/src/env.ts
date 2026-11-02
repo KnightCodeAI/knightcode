@@ -39,6 +39,16 @@ export interface Env {
 	SLACK_SIGNING_SECRET?: string;
 	/** Composio's webhook signing secret. */
 	COMPOSIO_WEBHOOK_SECRET?: string;
+	/** Stripe (agent payments): secret key, and (tests) the emulator's base URL. Payments are offered in PAYMENTS_COUNTRIES. */
+	STRIPE_SECRET_KEY?: string;
+	STRIPE_API_URL?: string;
+	PAYMENTS_COUNTRIES?: string;
+	/** Plaid (bank data): client id and secret, and (tests) the emulator's base URL. */
+	PLAID_CLIENT_ID?: string;
+	PLAID_SECRET?: string;
+	PLAID_API_URL?: string;
+	/** "on" once 1Password's agent sign-in route is built (a human task settles it first). */
+	ONEPASSWORD_AGENT_SIGNIN?: string;
 	/** Composio's API key (a secret) and, in tests, the emulator's base URL. */
 	COMPOSIO_API_KEY?: string;
 	COMPOSIO_BASE_URL?: string;

@@ -354,17 +354,17 @@ git commit -m "feat(bots): add pages, the inbox, suggestions and catch-up"
   monthly limits; the read-only Finance connector over Plaid with the
   monthly fee reserved at link time; payments and Finance hidden by country.
 
-- [ ] **Step 1: Write the failing tests**: a secret value echoed by the
+- [x] **Step 1: Write the failing tests**: a secret value echoed by the
   target server never appears in the tool result, in any encoding; a
   passkey assertion for a different digest is refused; a purchase above the
   bot's limit is refused without a card; a filled card number never appears
   in the transcript, logs or screenshot metadata; linking a bank with too
   little balance is refused; Finance lists accounts from the Plaid
   emulator.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/vault-tools.test.ts test/payments.test.ts`)
-- [ ] **Step 3: Implement the vault, payments and finance modules**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/vault-tools.test.ts test/payments.test.ts`)
+- [x] **Step 3: Implement the vault, payments and finance modules**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/vault apps/bots/src/payments apps/bots/src/finance apps/bots/test/emulators/plaid.ts apps/bots/test/vault-tools.test.ts apps/bots/test/payments.test.ts

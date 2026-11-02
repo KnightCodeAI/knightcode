@@ -171,6 +171,13 @@ export class FakeComputerProvider implements ComputerProvider {
 		this.calls.push(`restore-snapshot:${id}:${handle.generation}`);
 		this.running = true;
 	}
+	/** The browser requests the bridge would get, for tests to inspect. */
+	readonly browserRequests: BrowserRequest[] = [];
+	async browser(_id: string, _botUser: string, request: BrowserRequest): Promise<BrowserResult> {
+		this.browserRequests.push(request);
+		return { url: "https://shop.example/checkout", title: "Checkout" };
+	}
+
 	async runSetup(id: string, script: string) {
 		this.calls.push(`setup:${id}:${script.length}`);
 		return { code: 0, output: "" };

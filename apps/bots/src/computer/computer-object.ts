@@ -301,6 +301,18 @@ export class ComputerObject extends DurableObject<Env> {
 		return { ...result, snapshot: `Filled the ${field} from the vault item "${item.name}".` };
 	}
 
+	/**
+	 * Fills one card field from a payment credential the bot object holds (never stored): masked like a login, into the
+	 * bot's checkout page. The value never comes back.
+	 */
+	async fillCard(botId: string, ref: string, value: string, label: string): Promise<BrowserResult> {
+		if (!this.#holds(botId)) return { error: "The computer is not running for this bot." };
+		if (!this.#provider.browser) return { error: "This computer has no browser." };
+		const result = await this.#provider.browser(this.#account, await botUserFor(botId), { action: "fill", ref, secret: value });
+		if (result.error) return { error: result.error };
+		return { ...(result.url ? { url: result.url } : {}), snapshot: `Filled the ${label}.` };
+	}
+
 	/** The bot's desktop; a screenshot identical to the bot's previous one comes back as `unchanged`. */
 	async desktop(botId: string, request: DesktopRequest): Promise<DesktopResult> {
 		if (!this.#holds(botId)) return { error: "The computer is not running for this bot." };

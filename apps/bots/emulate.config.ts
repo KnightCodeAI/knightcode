@@ -24,6 +24,8 @@ export default defineConfig({
 				],
 			},
 		},
+		// Agent payments' wallet link and payment intents (test mode).
+		stripe: { emulator: "stripe", seed: {} },
 		google: {
 			emulator: "google",
 			seed: {
