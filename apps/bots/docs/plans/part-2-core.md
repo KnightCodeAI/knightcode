@@ -224,7 +224,7 @@ git commit -m "feat(env): run a remote environment over any transport"
     `getFile(ref)`, `listFiles({ botId?, kind? })`, objects in R2 sealed with
     the user's data key, kinds `attachment`, `bot-output`, `knowledge`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/user.test.ts
@@ -262,10 +262,10 @@ it("refuses to reserve past the spending limit", async () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/user.test.ts`)
-- [ ] **Step 3: Implement the user object in the listed files**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/user.test.ts`)
+- [x] **Step 3: Implement the user object in the listed files**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/user apps/bots/migrations/0003_journal.sql apps/bots/test/user.test.ts

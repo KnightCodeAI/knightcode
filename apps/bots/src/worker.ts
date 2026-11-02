@@ -4,12 +4,15 @@ import { sendEmailCode, verifyEmailCode } from "./auth/email-code.ts";
 import { completeOAuth, startOAuth } from "./auth/oauth.ts";
 import { beginPasskey, finishPasskey } from "./auth/passkeys.ts";
 import { issueTicket } from "./auth/tickets.ts";
+import type { Principal } from "./auth/session.ts";
 import { safeNext } from "./auth/util.ts";
 import type { Env } from "./env.ts";
+import { matchRoute, parse, ProtocolError, queryToRequest, type RouteName, type RouteRequest, type RouteResponse } from "@knightcode/bots-protocol";
+
+export { UserObject } from "./user/user-object.ts";
 
 // Empty shells; Parts 2 and 3 fill them in.
 export class BotObject extends DurableObject<Env> {}
-export class UserObject extends DurableObject<Env> {}
 export class ComputerObject extends DurableObject<Env> {}
 
 const json = (body: unknown, status = 200, headers?: HeadersInit) => Response.json(body, { status, headers });
@@ -68,16 +71,47 @@ async function auth(request: Request, env: Env, pathname: string): Promise<Respo
 	return json({ error: "not_found" }, 404);
 }
 
-async function api(request: Request, env: Env, pathname: string): Promise<Response> {
-	if (request.method === "POST" && pathname === "/api/tickets") {
-		const principal = await readSession(env, request);
-		if (!principal) return json({ error: "unauthorized" }, 401);
-		const { scope } = (await request.json().catch(() => ({}))) as { scope?: string };
-		if (scope !== "socket" && scope !== "screen") return json({ error: "bad_request" }, 400);
+/** The signed-in account's user object. */
+const userOf = (env: Env, principal: Principal) => env.USER.get(env.USER.idFromName(principal.accountId));
+
+type Handler<N extends RouteName> = (env: Env, principal: Principal, request: RouteRequest<N>) => Promise<RouteResponse<N>>;
+
+/** The API routes served so far; the rest of the contract answers 404 until its task lands. */
+const HANDLERS: { [N in RouteName]?: Handler<N> } = {
+	issueTicket: async (env, principal, { scope }) => {
 		const ttlMs = 60_000;
-		return json({ ticket: await issueTicket(env, principal, scope, ttlMs), expiresAt: Date.now() + ttlMs });
+		return { ticket: await issueTicket(env, principal, scope, ttlMs), expiresAt: Date.now() + ttlMs };
+	},
+	listVault: async (env, principal) => ({ items: await userOf(env, principal).vaultList() }),
+	putVault: async (env, principal, item) => userOf(env, principal).vaultPut(item),
+	deleteVault: async (env, principal, { id }) => {
+		await userOf(env, principal).vaultDelete(id);
+		return { ok: true as const };
+	},
+};
+
+async function api(request: Request, env: Env, pathname: string): Promise<Response> {
+	const match = matchRoute(request.method, pathname);
+	const handler = match && (HANDLERS[match.route.name] as Handler<RouteName> | undefined);
+	if (!match || !handler) return json({ error: "not_found" }, 404);
+	const principal = await readSession(env, request);
+	if (!principal) return json({ error: "unauthorized" }, 401);
+	const body =
+		request.method === "GET" || request.method === "DELETE"
+			? queryToRequest(match.route, new URL(request.url).searchParams)
+			: ((await request.json().catch(() => ({}))) as Record<string, unknown>);
+	let input: RouteRequest<RouteName>;
+	try {
+		input = parse(match.route.request, { ...body, ...match.params }) as RouteRequest<RouteName>;
+	} catch (error) {
+		return json({ error: "bad_request", path: error instanceof ProtocolError ? error.path : "" }, 400);
 	}
-	return json({ error: "not_found" }, 404);
+	try {
+		return json(await handler(env, principal, input));
+	} catch (error) {
+		console.error("api", match.route.name, error);
+		return json({ error: "failed" }, 500);
+	}
 }
 
 export default {
