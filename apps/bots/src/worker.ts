@@ -2,6 +2,7 @@ import { CLEAR_SESSION_COOKIE, issueSession, readSession, revokeSession, session
 import { sendEmailCode, TooManyCodes, verifyEmailCode } from "./auth/email-code.ts";
 import { completeOAuth, startOAuth } from "./auth/oauth.ts";
 import { beginPasskey, finishPasskey } from "./auth/passkeys.ts";
+import { isDeleted } from "./account/deletion.ts";
 import { issueTicket } from "./auth/tickets.ts";
 import { StripeBilling } from "./billing/stripe.ts";
 import { billingChanges, type StripeEvent, verifyStripeSignature } from "./billing/webhooks.ts";
@@ -157,7 +158,8 @@ async function hooks(request: Request, env: Env, pathname: string): Promise<Resp
 			return json({ error: "unauthorized" }, 401);
 		const stripe = new StripeBilling({ secretKey: env.STRIPE_SECRET_KEY ?? "", apiUrl: env.STRIPE_API_URL });
 		const result = await billingChanges(JSON.parse(body) as StripeEvent, { fee: (intent) => stripe.fee(intent) });
-		if (result) await env.USER.get(env.USER.idFromName(result.accountId)).applyBilling(result.changes);
+		// A deleted account stays deleted, whatever Stripe sends late.
+		if (result && !(await isDeleted(env.DB, result.accountId))) await env.USER.get(env.USER.idFromName(result.accountId)).applyBilling(result.changes);
 		return json({ ok: true });
 	}
 	if (pathname === "/hooks/github") return run(githubAdapter);

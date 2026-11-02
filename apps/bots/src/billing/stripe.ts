@@ -71,6 +71,15 @@ export class StripeBilling {
 		});
 	}
 
+	/** Deletes a customer, which cancels their subscriptions and detaches their payment methods. */
+	async deleteCustomer(id: string): Promise<boolean> {
+		const response = await fetch(`${this.#base}/v1/customers/${encodeURIComponent(id)}`, {
+			method: "DELETE",
+			headers: { authorization: `Bearer ${this.#key}` },
+		});
+		return response.ok || response.status === 404;
+	}
+
 	/** The actual fee Stripe took on a payment, in cents. */
 	async fee(paymentIntentId: string): Promise<number> {
 		const intent = await this.#call<{ latest_charge?: { balance_transaction?: { fee?: number } } }>(

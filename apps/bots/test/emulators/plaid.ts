@@ -16,6 +16,8 @@ const ACCOUNTS = [
 ];
 
 export async function startPlaid(): Promise<{ url: string; close(): Promise<void> }> {
+	/** Access tokens whose item was removed: they no longer work. */
+	const removed = new Set<string>();
 	const server = createServer(async (request, response) => {
 		const json = (status: number, body: unknown) => response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
 		const body = JSON.parse((await read(request)) || "{}") as Record<string, string>;
@@ -26,8 +28,13 @@ export async function startPlaid(): Promise<{ url: string; close(): Promise<void
 			case "/item/public_token/exchange":
 				if (!body.public_token?.startsWith("public-")) return json(400, { error_code: "INVALID_PUBLIC_TOKEN" });
 				return json(200, { access_token: `access-${body.public_token.slice(7)}`, item_id: `item-${body.public_token.slice(7)}` });
+			case "/item/remove":
+				if (!body.access_token?.startsWith("access-") || removed.has(body.access_token)) return json(400, { error_code: "ITEM_NOT_FOUND" });
+				removed.add(body.access_token);
+				return json(200, { removed: true });
 			case "/accounts/get":
 				if (!body.access_token?.startsWith("access-")) return json(400, { error_code: "INVALID_ACCESS_TOKEN" });
+				if (removed.has(body.access_token)) return json(400, { error_code: "ITEM_NOT_FOUND" });
 				return json(200, { accounts: ACCOUNTS });
 			default:
 				return json(404, { error_code: "NOT_FOUND" });

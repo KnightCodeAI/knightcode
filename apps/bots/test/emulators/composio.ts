@@ -18,6 +18,7 @@ const read = (request: IncomingMessage) =>
 
 export async function startComposio(): Promise<{ url: string; close(): Promise<void> }> {
 	let connections = 0;
+	const deleted = new Set<string>();
 	const server = createServer(async (request, response) => {
 		const json = (status: number, body: unknown) => response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
 		if (request.headers["x-api-key"] !== COMPOSIO_TEST_KEY) return json(401, { error: "bad key" });
@@ -31,6 +32,16 @@ export async function startComposio(): Promise<{ url: string; close(): Promise<v
 			const body = JSON.parse(await read(request)) as { connection: { callback_url: string } };
 			const id = `ca_${++connections}`;
 			return json(201, { id, redirect_url: `https://connect.composio.example/${id}?next=${encodeURIComponent(body.connection.callback_url)}` });
+		}
+		const account = /^\/api\/v3\/connected_accounts\/([^/]+)$/.exec(url.pathname);
+		if (account) {
+			const id = decodeURIComponent(account[1]!);
+			if (deleted.has(id) || !/^ca_\d+$/.test(id) || Number(id.slice(3)) > connections) return json(404, { error: "not found" });
+			if (request.method === "DELETE") {
+				deleted.add(id);
+				return json(200, { success: true });
+			}
+			if (request.method === "GET") return json(200, { id, status: "ACTIVE" });
 		}
 		const tool = /^\/api\/v3\/tools\/execute\/([^/]+)$/.exec(url.pathname);
 		if (request.method === "POST" && tool) {

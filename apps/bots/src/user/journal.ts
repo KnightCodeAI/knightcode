@@ -40,6 +40,11 @@ export async function flushJournal(sql: SqlStorage, db: D1Database, accountId: s
 		)
 		.toArray();
 	if (pending.length === 0) return;
+	// A deleted account's journal is never written again (a late instance must not recreate its rows).
+	if (await db.prepare("SELECT 1 AS hit FROM deleted_accounts WHERE account_id = ?").bind(accountId).first()) {
+		sql.exec("DELETE FROM journal_outbox");
+		return;
+	}
 	await db.batch(
 		pending.map((entry) =>
 			db

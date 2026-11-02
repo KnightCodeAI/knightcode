@@ -62,6 +62,8 @@ export class UserObject extends DurableObject<Env> {
 	#dataKey: Promise<CryptoKey> | undefined;
 	#credentials: SealedCredentialStore | undefined;
 	readonly #desktop: DesktopLink;
+	/** Purged: this instance writes nothing more. */
+	#deleted = false;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -241,8 +243,44 @@ export class UserObject extends DurableObject<Env> {
 	}
 
 	override async alarm(): Promise<void> {
+		if (this.#deleted) return;
 		await this.#flush();
 		await this.flushPushes();
+	}
+
+	// ─── Export and deletion ──────────────────────────────────────────────────
+
+	/** Pages (with their blocks) and files (with their contents, base64) for the account export. */
+	async exportData(): Promise<{ pages: unknown[]; files: { ref: FileRef; base64: string }[] }> {
+		const pages = this.pages.list().map((summary) => this.pages.get(summary.id));
+		const files = [];
+		for (const ref of this.listFiles()) {
+			const file = await this.getFile(ref.id);
+			if (file) files.push({ ref, base64: btoa(Array.from(file.body, (byte) => String.fromCharCode(byte)).join("")) });
+		}
+		return { pages, files };
+	}
+
+	/**
+	 * Revokes the account's bank links, then deletes everything this object holds (the data key with it) and its alarm.
+	 * Returns the Stripe customer for the caller to delete.
+	 */
+	async purge(): Promise<{ plaidItems: number; stripeCustomer?: string }> {
+		let plaidItems = 0;
+		for (const item of (await this.credentials().list()).filter((entry) => entry.providerId.startsWith("plaid:"))) {
+			const credential = (await this.credentials().read(item.providerId)) as { key?: string } | undefined;
+			if (!credential?.key) continue;
+			await this.#plaid()
+				.removeItem(credential.key)
+				.then(() => plaidItems++)
+				.catch((error: unknown) => console.error("plaid revoke", error));
+		}
+		const stripeCustomer = this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'stripe_customer'").toArray()[0]?.value;
+		for (const socket of this.ctx.getWebSockets()) socket.close(4410, "account deleted");
+		await this.ctx.storage.deleteAlarm();
+		await this.ctx.storage.deleteAll();
+		this.#deleted = true;
+		return { plaidItems, ...(stripeCustomer ? { stripeCustomer } : {}) };
 	}
 
 	// ─── Notifications ────────────────────────────────────────────────────────
@@ -382,6 +420,7 @@ export class UserObject extends DurableObject<Env> {
 	applyBilling(changes: BillingChange[]): void {
 		for (const change of changes) {
 			if (change.type === "plan") this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('plan', ?)", change.status);
+			else if (change.type === "customer") this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('stripe_customer', ?)", change.id);
 			else if (change.type === "grant") balance.grantCredits(this.#sql, change.cents, change.key, this.#journal);
 			else balance.revokeCredits(this.#sql, change.cents, change.key, this.#journal);
 		}

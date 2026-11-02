@@ -486,15 +486,15 @@ git commit -m "feat(bots): add push notifications that respect presence"
   objects, snapshots, pending jobs, Composio, Plaid, Stripe and 1Password
   connections, analytics records) and writing a tombstone.
 
-- [ ] **Step 1: Write the failing tests**: after deletion no D1 row,
+- [x] **Step 1: Write the failing tests**: after deletion no D1 row,
   Durable Object storage key or R2 object for the account remains; a
   recovery alarm firing after deletion does not recreate the account; the
   emulators show the connections revoked; export contains every listed
   class.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/deletion.test.ts`)
-- [ ] **Step 3: Implement export and deletion**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/deletion.test.ts`)
+- [x] **Step 3: Implement export and deletion**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/account apps/bots/test/deletion.test.ts

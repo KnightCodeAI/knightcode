@@ -49,6 +49,15 @@ export class ComposioClient {
 		return (await response.json()) as T;
 	}
 
+	/** Revokes one connected account; true when Composio no longer has it. */
+	async deleteConnection(id: string): Promise<boolean> {
+		const response = await (this.#options.fetch ?? fetch)(
+			`${this.#options.baseUrl ?? "https://backend.composio.dev/api/v3"}/connected_accounts/${encodeURIComponent(id)}`,
+			{ method: "DELETE", headers: { "x-api-key": this.#options.apiKey } },
+		);
+		return response.ok || response.status === 404;
+	}
+
 	/** Every toolkit, as catalog entries (Composio is the last source, so overlaps lose to the others). */
 	async catalog(): Promise<CatalogEntry[]> {
 		const entries: CatalogEntry[] = [];

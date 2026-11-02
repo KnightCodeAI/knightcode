@@ -19,7 +19,8 @@ export async function verifyStripeSignature(secret: string, header: string | nul
 export type BillingChange =
 	| { type: "grant"; cents: number; key: string }
 	| { type: "refund"; cents: number; key: string }
-	| { type: "plan"; status: PlanStatus };
+	| { type: "plan"; status: PlanStatus }
+	| { type: "customer"; id: string };
 
 type StripeObject = Record<string, unknown> & { id: string; metadata?: Record<string, string> };
 export type StripeEvent = { id: string; type: string; data: { object: StripeObject } };
@@ -52,7 +53,7 @@ export async function billingChanges(
 		case "customer.subscription.created":
 		case "customer.subscription.updated": {
 			const status = planStatus(object.status);
-			const changes: BillingChange[] = [{ type: "plan", status }];
+			const changes: BillingChange[] = [{ type: "plan", status }, ...(typeof object.customer === "string" ? [{ type: "customer" as const, id: object.customer }] : [])];
 			// The trial's capped computer time, once per subscription.
 			if (status === "trialing") changes.push({ type: "grant", cents: computerHoursCredits(PLAN.trialComputerHours), key: `trial:${object.id}` });
 			return { accountId, changes };

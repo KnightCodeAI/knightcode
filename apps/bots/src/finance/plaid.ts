@@ -57,6 +57,11 @@ export class PlaidClient {
 		return { accessToken: body.access_token, itemId: body.item_id };
 	}
 
+	/** Ends a link: Plaid forgets the item and the token stops working. */
+	async removeItem(accessToken: string): Promise<void> {
+		await this.#post("/item/remove", { access_token: accessToken });
+	}
+
 	async accounts(accessToken: string): Promise<BankAccount[]> {
 		const body = await this.#post<{
 			accounts: { account_id: string; name: string; mask: string | null; type: string; balances: { current: number | null; iso_currency_code: string | null } }[];

@@ -245,7 +245,17 @@ export class ComputerObject extends DurableObject<Env> {
 		await this.ctx.storage.setAlarm(Date.now() + Math.max(0, Math.min(...times) - clock()));
 	}
 
+	/** Account deletion: the computer (and its snapshots) destroyed, then its storage and alarm. */
+	async purge(): Promise<void> {
+		await this.#provider.destroy(this.#account).catch((error: unknown) => console.error("computer destroy", error));
+		await this.ctx.storage.deleteAlarm();
+		await this.ctx.storage.deleteAll();
+		this.#deleted = true;
+	}
+	#deleted = false;
+
 	override async alarm(): Promise<void> {
+		if (this.#deleted) return;
 		const now = clock();
 		this.#sql.exec("DELETE FROM leases WHERE expires_at <= ?", now);
 		if (this.#state === "running") {

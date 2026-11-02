@@ -66,6 +66,7 @@ import { verifySpendAssertion } from "../payments/spend-approvals.ts";
 import { vaultTools } from "../vault/tools.ts";
 import { ACCOUNT_LIMITS } from "../billing/limits.ts";
 import { usageByModel } from "../billing/usage.ts";
+import { exportRecipe } from "../recipes/recipes.ts";
 import { defineTool } from "@knightcode/durable";
 import { arr, bool, num, obj, opt, str, union, lit, unknown as anyJson } from "@knightcode/schema";
 import { startHelperTool } from "../team/helpers.ts";
@@ -1137,6 +1138,50 @@ export class BotObject extends DurableObject<Env> {
 		];
 	}
 
+	/** This bot's part of the account export: its chat, its notes and itself as a recipe. */
+	async exportData(principal: Principal) {
+		this.#check(principal, this.#id);
+		const root = await this.#conversation();
+		const chat: { role: string; text: string }[] = [];
+		let cursor: EntryId | undefined;
+		for (let page = 0; page < 1_000; page++) {
+			const result = await root.entries({ ...(cursor === undefined ? {} : { minEntryId: (Number(cursor) + 1) as EntryId }), order: "ascending" }, 500, undefined, context);
+			for (const entry of result.items) {
+				const message = entry.model?.[0] as { content?: unknown } | undefined;
+				const content = Array.isArray(message?.content) ? (message.content as { type: string; text?: string }[]) : [];
+				const text = typeof message?.content === "string" ? message.content : content.filter((block) => block.type === "text").map((block) => block.text).join("");
+				const role = UserEntry.is(entry) ? "user" : AssistantEntry.is(entry) ? "assistant" : undefined;
+				if (role && text) chat.push({ role, text });
+			}
+			if (result.items.length < 500) break;
+			cursor = result.items.at(-1)!.id;
+		}
+		const settings = this.#settings.read();
+		const notes = this.memory.notes.list().map((note) => ({ name: note.name, description: note.description, body: note.body, type: note.type, updatedAt: note.updatedAt }));
+		const recipe = exportRecipe({
+			name: settings.name,
+			instructions: settings.instructions,
+			notes: notes.map((note) => ({ body: note.body, type: note.type ?? "fact", updatedAt: note.updatedAt ?? 0 })),
+			skills: [],
+			routines: this.#routines.list().map((routine) => ({ name: routine.name, prompt: routine.prompt })),
+			appIds: [],
+		});
+		return { id: this.#id, name: settings.name, chat, notes, recipe };
+	}
+
+	/** Account deletion: the run stopped, sockets closed, then all storage and the alarm deleted. */
+	async purge(principal: Principal): Promise<{ walletCustomer?: string }> {
+		this.#check(principal, this.#id);
+		const walletCustomer = this.#meta("wallet_customer");
+		await this.stop(principal).catch(() => undefined);
+		for (const socket of this.ctx.getWebSockets()) socket.close(4410, "account deleted");
+		this.#deleted = true;
+		await this.ctx.storage.deleteAlarm();
+		await this.ctx.storage.deleteAll();
+		return walletCustomer ? { walletCustomer } : {};
+	}
+	#deleted = false;
+
 	/** The wallet this bot's purchases draw on (the owner links it once). */
 	async setWallet(principal: Principal, customerId: string): Promise<void> {
 		this.#check(principal, this.#id);
@@ -1415,6 +1460,7 @@ export class BotObject extends DurableObject<Env> {
 	}
 
 	override async alarm(): Promise<void> {
+		if (this.#deleted) return;
 		await this.#arm({ ...this.#harness.wake(), active: true });
 		this.#harness.resume(); // due sleeps and work a lost instance left
 		if (this.#owner !== undefined) await this.#fireDue();
