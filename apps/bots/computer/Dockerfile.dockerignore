@@ -1,0 +1,10 @@
+# The build context is the repository root; send only what the Dockerfile copies.
+*
+!packages/env/package.json
+!packages/env/daemon
+packages/env/daemon/target
+!apps/bots/src/computer/abuse.ts
+!apps/bots/computer/bridge
+!apps/bots/computer/desktop
+!apps/bots/computer/netguard
+!apps/bots/computer/setup.sh

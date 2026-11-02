@@ -23,6 +23,8 @@ export default defineConfig({
 					// The emulated GitHub, Google and the rest, started here in Node; test/global-setup.ts stops them.
 					...(await emulatorBindings()),
 					SESSION_SECRET: "test-session-secret",
+					// The pool runs no containers: the computer object uses its fake provider.
+					BOTS_COMPUTER_PROVIDER: "fake",
 					// 32 zero bytes, base64.
 					TEST_KEK: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 					TEST_MIGRATIONS: await readD1Migrations(fileURLToPath(new URL("./migrations", import.meta.url))),

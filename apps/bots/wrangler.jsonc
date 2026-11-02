@@ -19,6 +19,16 @@
 			{ "name": "COMPUTER", "class_name": "ComputerObject" }
 		]
 	},
+	// The user's computer: one container per ComputerObject (one per user). Built from the repository root.
+	"containers": [
+		{
+			"class_name": "ComputerObject",
+			"image": "./computer/Dockerfile",
+			"image_build_context": "../..",
+			"instance_type": { "vcpu": 2, "memory_mib": 6144, "disk_mb": 16000 },
+			"max_instances": 100
+		}
+	],
 	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["BotObject", "UserObject", "ComputerObject"] }],
 	"d1_databases": [{ "binding": "DB", "database_name": "knightcode-bots", "database_id": "00000000-0000-0000-0000-000000000000" }],
 	"r2_buckets": [{ "binding": "FILES", "bucket_name": "knightcode-bots-files" }],
@@ -28,5 +38,7 @@
 	},
 	// The key-encryption key. SESSION_SECRET is a plain Worker secret (wrangler secret put).
 	"secrets_store_secrets": [{ "binding": "KEK", "store_id": "00000000000000000000000000000000", "secret_name": "bots-kek" }],
+	// Daily: re-index the plugin marketplaces for the connector catalog.
+	"triggers": { "crons": ["17 4 * * *"] },
 	"observability": { "enabled": true }
 }

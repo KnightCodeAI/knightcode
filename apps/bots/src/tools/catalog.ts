@@ -4,6 +4,8 @@
 import type { FileRef } from "@knightcode/bots-protocol";
 import { defineExtension, defineTool, type Extension, section, type ToolRegistration } from "@knightcode/durable";
 import { createToolSearchExtension } from "@knightcode/durable/tool-search";
+import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@knightcode/durable/tools";
+import { type ComputerAccess, computerTools } from "../computer/browser-tools.ts";
 import { lit, obj, opt, str, union } from "@knightcode/schema";
 import { historyTools } from "../memory/history-tools.ts";
 import { memoryText } from "../memory/index-file.ts";
@@ -30,6 +32,10 @@ export interface BotToolDeps {
 	help: HelpDocs;
 	/** Present only when one of the user's providers has an image model. */
 	image?: Parameters<typeof imageTool>[0];
+	/** Runs after update_bot changes a setting. */
+	settingsChanged?: () => Promise<void>;
+	/** Present only when the owner gave this bot computer access. */
+	computer?: ComputerAccess;
 }
 
 const KNOWLEDGE_MAX = 50_000;
@@ -67,13 +73,24 @@ function knowledgeTool(knowledge: Knowledge) {
 /** Every tool of the bot, the visible ones first. */
 export function botTools(deps: BotToolDeps): ToolRegistration[] {
 	return [
-		updateBotTool(deps.settings),
+		updateBotTool(deps.settings, deps.settingsChanged && (() => deps.settingsChanged!())),
 		...memoryTools(deps.memory),
 		...historyTools(deps.memory.history),
 		knowledgeTool(deps.knowledge),
 		...webTools(),
 		helpTool(deps.help),
 		...(deps.image && deps.image.available.length > 0 ? [imageTool(deps.image)] : []),
+		// Shell and files run on the bot's computer (the harness's env), the browser and desktop through the bridge.
+		...(deps.computer
+			? [
+					createBashTool(),
+					createReadTool(),
+					createWriteTool(),
+					// The largest definition; bots that edit code load it through tool_search.
+					{ ...createEditTool(), deferred: true as const },
+					...computerTools(deps.computer),
+				]
+			: []),
 	] as ToolRegistration[];
 }
 

@@ -14,10 +14,13 @@ import { type ActionState, createActionsTable, dispatch, getAction } from "./act
 import { consumeApproval, type ConsumeResult, createApprovalsTable, denyApproval, digestOf, getApproval } from "./approvals.ts";
 import { BotMemory } from "../memory/memory.ts";
 import { modelHelper } from "../memory/recall.ts";
+import { Connection, RemoteExecutionEnv, webSocketTransport } from "@knightcode/env";
+import type { ComputerAccess } from "../computer/browser-tools.ts";
+import { botUserFor } from "../computer/provider.ts";
 import { botExtensions } from "../tools/catalog.ts";
 import { HELP_DOCS } from "../tools/help-docs.ts";
 import { availableImageModels } from "../tools/image-tool.ts";
-import { SettingsStore } from "../tools/settings-tool.ts";
+import { type BotSettings, SettingsStore } from "../tools/settings-tool.ts";
 import { modelsFor } from "./models.ts";
 import { createProvenanceTable } from "./provenance.ts";
 import { assertOwns, Unauthorized } from "./principal.ts";
@@ -43,6 +46,9 @@ export class BotObject extends DurableObject<Env> {
 	readonly #settings: SettingsStore;
 	readonly #registry: Registry = createRegistry();
 	#extensions: { core: Extension; toolSearch: Extension } | undefined;
+	/** The computer lease held while this bot works on its computer. */
+	#lease: Promise<string> | undefined;
+	#computerEnv: RemoteExecutionEnv | undefined;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -74,8 +80,14 @@ export class BotObject extends DurableObject<Env> {
 				{
 					models: () => modelsFor({ env: this.env, accountId: this.#owner ?? "" }),
 					registry: this.#registry,
+					// Shell and file tools run on the user's computer, as this bot's own OS user, when it has access.
+					env: () => (this.#settings.read().computerAccess ? this.#computerEnvFor() : undefined),
 					// A failed alarm write resets the object; it arms again when it next starts.
-					onWake: (wake) => void this.#arm(wake).catch(() => ctx.abort("Alarm write failed")),
+					onWake: (wake) => {
+						void this.#arm(wake).catch(() => ctx.abort("Alarm write failed"));
+						// Work done: the computer may sleep once nothing else holds it.
+						if (!wake.active) void this.#releaseComputer();
+					},
 				},
 				context,
 			);
@@ -132,6 +144,99 @@ export class BotObject extends DurableObject<Env> {
 		this.#root ??= await this.#harness.root(context, { agent: { model, extensions: [core, toolSearch] } });
 	}
 
+	#computer() {
+		return this.env.COMPUTER.get(this.env.COMPUTER.idFromName(this.#owner!));
+	}
+
+	/** Holds the user's computer for this bot, starting it if it sleeps; renewed on every use. */
+	async #holdComputer(): Promise<string> {
+		const held = this.#lease;
+		if (held) {
+			const leaseId = await held;
+			if (await this.#computer().heartbeat(leaseId)) return leaseId;
+		}
+		this.#lease = this.#computer()
+			.acquire(this.#id, "run")
+			.then((result) => {
+				if ("leaseId" in result) return result.leaseId;
+				throw new Error(
+					result.refused === "spending_limit"
+						? "The computer is stopped: the spending limit is reached. Chat still works; the owner can raise the limit in Usage & Billing."
+						: "The computer is under maintenance; try again shortly.",
+				);
+			});
+		this.#lease.catch(() => (this.#lease = undefined));
+		return this.#lease;
+	}
+
+	async #releaseComputer(): Promise<void> {
+		const held = this.#lease;
+		this.#lease = undefined;
+		if (!held) return;
+		try {
+			await this.#computer().release(await held);
+		} catch {
+			// Never held, or already dropped.
+		}
+	}
+
+	#computerEnvFor(): RemoteExecutionEnv {
+		this.#computerEnv ??= (() => {
+			const botId = this.#id;
+			const connection = new Connection({
+				transport: async () => {
+					await this.#holdComputer();
+					const response = await this.#computer().fetch(`https://computer/env/${encodeURIComponent(botId)}`, {
+						headers: { upgrade: "websocket" },
+					});
+					const socket = response.webSocket;
+					if (!socket) throw new Error(`The computer refused the shell (${response.status}).`);
+					socket.accept();
+					return webSocketTransport(socket as unknown as Parameters<typeof webSocketTransport>[0]);
+				},
+			});
+			// The cwd is fixed when the env is made; the bot user is a stable hash of the bot id.
+			return new RemoteExecutionEnv({ connection, id: `computer:${this.#owner}`, cwd: `/home/${this.#botUser}` });
+		})();
+		return this.#computerEnv;
+	}
+
+	/** This bot's OS user on the computer, computed once at start. */
+	#botUser = "";
+
+	#computerAccess(): ComputerAccess {
+		const computer = () => this.#computer();
+		return {
+			browser: async (request) => {
+				await this.#holdComputer();
+				return computer().browser(this.#id, request);
+			},
+			desktop: async (request) => {
+				await this.#holdComputer();
+				return computer().desktop(this.#id, request);
+			},
+			fillLogin: async (ref, item, field) => {
+				await this.#holdComputer();
+				return computer().fillLogin(this.#id, ref, item, field);
+			},
+		};
+	}
+
+	/**
+	 * The owner's change to the bot's settings (from the settings screen, never from chat): it may grant powers, such as
+	 * computer access. The tools are rebuilt to match.
+	 */
+	async updateSettings(principal: Principal, patch: Partial<BotSettings>): Promise<BotSettings> {
+		this.#check(principal, this.#id);
+		const current = this.#settings.read();
+		const next = { ...current, ...patch };
+		if (patch.instructions !== undefined && patch.instructions !== current.instructions)
+			next.instructionsVersion = current.instructionsVersion + 1;
+		this.#settings.write(next);
+		await this.#installTools();
+		return next;
+	}
+
 	/** The bot's tools as installed now (its own and tool search). */
 	tools(): ToolRegistration[] {
 		const extensions = this.#extensions;
@@ -144,6 +249,7 @@ export class BotObject extends DurableObject<Env> {
 	 */
 	async #installTools(): Promise<{ core: Extension; toolSearch: Extension }> {
 		const owner = this.#owner!;
+		this.#botUser = await botUserFor(this.#id);
 		const models = modelsFor({ env: this.env, accountId: owner });
 		const user = this.env.USER.get(this.env.USER.idFromName(owner));
 		const botId = this.#id;
@@ -159,6 +265,8 @@ export class BotObject extends DurableObject<Env> {
 					return found ? new TextDecoder().decode(found.body) : undefined;
 				},
 			},
+			...(this.#settings.read().computerAccess ? { computer: this.#computerAccess() } : {}),
+			settingsChanged: async () => void (await this.#installTools()),
 			image: {
 				models,
 				available: await availableImageModels(models),

@@ -19,6 +19,8 @@ export interface Env {
 	KEK: SecretsStoreSecret;
 	/** Tests supply the key as a plain binding because the pool does not emulate Secrets Store. */
 	TEST_KEK?: string;
+	/** "fake" in the Workers test pool, which runs no containers; the computer is a Cloudflare container otherwise. */
+	BOTS_COMPUTER_PROVIDER?: string;
 	/** This site's origin; https://bots.knightcode.dev unless set (local development). */
 	APP_ORIGIN?: string;
 	/** OAuth apps for sign-in (secrets). */
@@ -29,6 +31,11 @@ export interface Env {
 	/** Tests only: the emulated services' base URLs, which replace the providers' own hosts. */
 	EMULATE_GITHUB_URL?: string;
 	EMULATE_GOOGLE_URL?: string;
+	/** Composio's API key (a secret) and, in tests, the emulator's base URL. */
+	COMPOSIO_API_KEY?: string;
+	COMPOSIO_BASE_URL?: string;
+	/** Tests only: the emulated remote MCP server. */
+	EMULATE_MCP_URL?: string;
 	/** Outbound mail (Email Service), set up with the email channel in Task 3.5. */
 	EMAIL?: { send(message: { to: string; from: string; subject: string; text: string }): Promise<unknown> };
 }

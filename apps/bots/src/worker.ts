@@ -1,4 +1,3 @@
-import { DurableObject } from "cloudflare:workers";
 import { CLEAR_SESSION_COOKIE, issueSession, readSession, revokeSession, sessionCookie } from "./auth/session.ts";
 import { sendEmailCode, verifyEmailCode } from "./auth/email-code.ts";
 import { completeOAuth, startOAuth } from "./auth/oauth.ts";
@@ -6,15 +5,15 @@ import { beginPasskey, finishPasskey } from "./auth/passkeys.ts";
 import { issueTicket } from "./auth/tickets.ts";
 import type { Principal } from "./auth/session.ts";
 import { safeNext } from "./auth/util.ts";
+import { verifyScreenToken } from "./computer/screens.ts";
+import { indexPlugins } from "./connectors/plugin-indexer.ts";
 import { consumeOutbound } from "./delivery/queue.ts";
 import type { Env, OutboundMessage } from "./env.ts";
 import { matchRoute, parse, ProtocolError, queryToRequest, type RouteName, type RouteRequest, type RouteResponse } from "@knightcode/bots-protocol";
 
 export { BotObject } from "./bot/bot-object.ts";
+export { ComputerObject } from "./computer/computer-object.ts";
 export { UserObject } from "./user/user-object.ts";
-
-// An empty shell; Part 3 fills it in.
-export class ComputerObject extends DurableObject<Env> {}
 
 const json = (body: unknown, status = 200, headers?: HeadersInit) => Response.json(body, { status, headers });
 
@@ -123,6 +122,13 @@ export default {
 		const isAuth = pathname.startsWith("/auth/");
 		if ((isApi || isAuth) && crossOrigin(request)) return json({ error: "forbidden_origin" }, 403);
 		if (isAuth) return auth(request, env, pathname);
+		// A screen: the token in the URL is the capability; its account picks the computer, which checks it fully.
+		const screen = /^\/api\/computer\/screen\/([^/]+)$/.exec(pathname);
+		if (screen && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+			const grant = await verifyScreenToken(env.SESSION_SECRET, screen[1]!);
+			if (!grant) return json({ error: "expired" }, 403);
+			return env.COMPUTER.get(env.COMPUTER.idFromName(grant.accountId)).fetch(request);
+		}
 		// A bot's live socket: the bot object checks the ticket in its first frame.
 		const socket = /^\/api\/bots\/([^/]+)\/socket$/.exec(pathname);
 		if (socket && request.headers.get("upgrade")?.toLowerCase() === "websocket")
@@ -131,4 +137,7 @@ export default {
 		return env.ASSETS.fetch(request);
 	},
 	queue: (batch, env) => consumeOutbound(batch, env),
+	async scheduled(_controller, env, ctx) {
+		ctx.waitUntil(indexPlugins(env).catch((error: unknown) => console.error("plugin index", error)));
+	},
 } satisfies ExportedHandler<Env, OutboundMessage>;

@@ -41,18 +41,18 @@ does not run containers, so `vitest.config.ts` sets
 `BOTS_COMPUTER_PROVIDER=fake` and these unit tests use the fake provider;
 the image test below and Task 4.2 exercise the real container.
 
-- [ ] **Step 1: Write the failing tests** (`test/computer.test.ts` with a
+- [x] **Step 1: Write the failing tests** (`test/computer.test.ts` with a
   fake `ComputerProvider` and the real `ComputerObject`): the computer
   sleeps after 10 idle minutes and reserves computer time in 5-minute
   blocks; a run past the spending limit stops the computer and keeps chat
   working; screen capability URLs expire and view cannot send input; one
   bot's shell cannot read another bot's Chrome profile directory.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/computer.test.ts`)
-- [ ] **Step 3: Implement the provider, the computer object and the image**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/computer.test.ts`)
+- [x] **Step 3: Implement the provider, the computer object and the image**
   (build `knightcode-env` for Linux inside the Dockerfile; Chrome flags
   give one fingerprint per profile, WebRTC through the proxy only, QUIC off
   when proxied, time zone and language matched to the exit address)
-- [ ] **Step 4: Run them to verify they pass, and run the image test**
+- [x] **Step 4: Run them to verify they pass, and run the image test**
 
 Run: `bunx vitest --run test/computer.test.ts`; `bash computer/test/image.test.sh`
 (builds the image with Docker, starts it, checks `knightcode-env` answers
@@ -61,7 +61,7 @@ is blocked).
 Expected: all pass. If Docker is unavailable, mark only the image test
 `Blocked:` and continue.
 
-- [ ] **Step 5: Write the save coordinator test, then implement it**
+- [x] **Step 5: Write the save coordinator test, then implement it**
 
 ```ts
 // apps/bots/test/save-coordinator.test.ts
@@ -84,7 +84,7 @@ it("restores a snapshot only when its generation matches the latest save", async
 Run: `bunx vitest --run test/save-coordinator.test.ts` (fail, implement,
 pass).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/bots/computer apps/bots/src/computer apps/bots/test/computer.test.ts apps/bots/test/save-coordinator.test.ts

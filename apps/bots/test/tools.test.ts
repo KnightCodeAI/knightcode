@@ -44,6 +44,18 @@ it("offers image generation, deferred, when a provider has an image model", asyn
 	// Deferred: behind tool_search, so it costs nothing until loaded.
 	expect(await toolNames("b1-with-image", { visibleOnly: true })).not.toContain("generate_image");
 });
+it("offers computer tools only once the owner grants computer access, within budget", async () => {
+	await claim("b1-computer");
+	expect(await toolNames("b1-computer")).not.toContain("bash");
+	await botStub("b1-computer").updateSettings(principal, { computerAccess: true });
+	const names = await toolNames("b1-computer");
+	expect(names).toEqual(expect.arrayContaining(["bash", "read", "write", "edit", "browser_snapshot", "browser_act", "computer_observe"]));
+	expect(await visibleToolBytes("b1-computer")).toBeLessThan(6 * 1024);
+	// Chat can turn it back off, never on.
+	await callTool("b1-computer", "update_bot", { computerAccess: false });
+	expect(await toolNames("b1-computer")).not.toContain("bash");
+	await expect(callTool("b1-computer", "update_bot", { computerAccess: true })).rejects.toThrow(/settings/);
+});
 it("answers product questions from the bundled help documents", async () => {
 	await claim("b1");
 	expect(Object.keys(HELP_DOCS)).toContain("approvals");

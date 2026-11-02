@@ -1,0 +1,8 @@
+{
+	// The typecheck. Only here does @knightcode/env map to src/types/knightcode-env.d.ts (its source is written
+	// against Node's Buffer); bundlers and Bun read tsconfig.json, so the real module is what runs and deploys.
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"paths": { "@knightcode/env": ["./src/types/knightcode-env.d.ts"] }
+	}
+}

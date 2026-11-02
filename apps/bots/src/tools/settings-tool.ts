@@ -85,7 +85,8 @@ export function updateBot(store: SettingsStore, input: UpdateBotInput): BotSetti
 	return next;
 }
 
-export function updateBotTool(store: SettingsStore) {
+/** `changed` runs after a change, so powers turned off take their tools with them. */
+export function updateBotTool(store: SettingsStore, changed?: (settings: BotSettings) => Promise<void>) {
 	return defineTool({
 		name: "update_bot",
 		description:
@@ -99,7 +100,10 @@ export function updateBotTool(store: SettingsStore) {
 		}),
 		execute: async (args) => {
 			try {
-				return { output: [{ type: "text" as const, text: JSON.stringify(updateBot(store, args)) }] };
+				const before = JSON.stringify(store.read());
+				const settings = updateBot(store, args);
+				if (JSON.stringify(settings) !== before) await changed?.(settings);
+				return { output: [{ type: "text" as const, text: JSON.stringify(settings) }] };
 			} catch (error) {
 				return { output: [{ type: "text" as const, text: error instanceof Error ? error.message : String(error) }], isError: true };
 			}

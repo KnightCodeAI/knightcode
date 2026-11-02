@@ -5,6 +5,7 @@ import type { Credential, CredentialInfo, CredentialStore } from "@knightcode/ai
 import { builtinModels } from "@knightcode/ai/providers/all";
 import type { FileKind, FileRef, VaultItem } from "@knightcode/bots-protocol";
 import { DurableObject } from "cloudflare:workers";
+import { type ArchiveManifest, openArchive, sealArchive } from "../crypto/archive.ts";
 import { createDataKey, unwrapDataKey } from "../crypto/envelope.ts";
 import { type Env, getKek } from "../env.ts";
 import * as balance from "./balance.ts";
@@ -14,6 +15,17 @@ import { beginEnrollment, createEnrollmentTable, spendEnrollment } from "./enrol
 import { createFilesTable, type FileMeta, getFile, listFiles, putFile } from "./files.ts";
 import { createOutboxTable, flushJournal, type JournalEntry, recordJournal } from "./journal.ts";
 import { createVaultTable, type RevealPurpose, type VaultInput, vaultDelete, vaultList, vaultPut, vaultReveal } from "./vault.ts";
+
+const workspacePrefix = (accountId: string, generation: number) => `computers/${accountId}/${String(generation).padStart(8, "0")}/`;
+
+async function* streamChunks(stream: ReadableStream<Uint8Array>): AsyncIterable<Uint8Array> {
+	const reader = stream.getReader();
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) return;
+		yield value;
+	}
+}
 
 export class UserObject extends DurableObject<Env> {
 	readonly #sql: SqlStorage;
@@ -163,5 +175,51 @@ export class UserObject extends DurableObject<Env> {
 
 	listFiles(filter: { botId?: string; kind?: FileKind } = {}): FileRef[] {
 		return listFiles(this.#sql, filter);
+	}
+
+	// ─── Computer workspaces ──────────────────────────────────────────────────
+	// Sealed here with the account's data key, which never leaves this object: 64 KiB segments and a manifest, stored
+	// in R2 under the save's generation, which is never overwritten.
+
+	/** Seals and stores the workspace `source` as generation `generation`; resolves with its manifest once complete. */
+	async saveWorkspace(generation: number, source: ReadableStream<Uint8Array>): Promise<ArchiveManifest> {
+		const storageId = `workspace:${this.#accountId}`;
+		const prefix = workspacePrefix(this.#accountId, generation);
+		if (await this.env.FILES.head(`${prefix}manifest`)) throw new Error(`workspace generation ${generation} already exists`);
+		const sealed = sealArchive(await this.#key(), streamChunks(source), { storageId, generation });
+		let index = 0;
+		for await (const segment of sealed.segments) await this.env.FILES.put(`${prefix}${String(index++).padStart(8, "0")}`, segment);
+		const manifest = await sealed.manifest;
+		// The manifest goes last: a generation without one never finished and is never read.
+		await this.env.FILES.put(`${prefix}manifest`, JSON.stringify(manifest));
+		return manifest;
+	}
+
+	/** The plaintext of a stored workspace generation; the stream errors on any missing, reordered or altered segment. */
+	async openWorkspace(generation: number): Promise<ReadableStream<Uint8Array>> {
+		const prefix = workspacePrefix(this.#accountId, generation);
+		const stored = await this.env.FILES.get(`${prefix}manifest`);
+		if (!stored) throw new Error(`no workspace generation ${generation}`);
+		const manifest = JSON.parse(await stored.text()) as ArchiveManifest;
+		const bucket = this.env.FILES;
+		async function* segments(): AsyncIterable<Uint8Array> {
+			for (let index = 0; ; index++) {
+				const object = await bucket.get(`${prefix}${String(index).padStart(8, "0")}`);
+				if (!object) return;
+				yield new Uint8Array(await object.arrayBuffer());
+			}
+		}
+		const plaintext = openArchive(await this.#key(), segments(), manifest)[Symbol.asyncIterator]();
+		return new ReadableStream<Uint8Array>({
+			async pull(controller) {
+				try {
+					const next = await plaintext.next();
+					if (next.done) controller.close();
+					else controller.enqueue(next.value);
+				} catch (error) {
+					controller.error(error);
+				}
+			},
+		});
 	}
 }

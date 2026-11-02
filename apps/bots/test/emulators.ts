@@ -2,17 +2,23 @@
 // teardown. The two load this file separately, so the running set lives on a global symbol.
 import { createEmulator, type Emulator, type ServiceName } from "emulate";
 import config, { TEST_OAUTH } from "../emulate.config.ts";
+import { COMPOSIO_TEST_KEY, startComposio } from "./emulators/composio.ts";
+import { startMcpServer } from "./emulators/mcp-server.ts";
 
 const RUNNING = Symbol.for("knightcode-bots.emulators");
-type Running = Promise<Partial<Record<ServiceName, Emulator>>>;
+type Closer = { url: string; close(): Promise<void> };
+type Running = Promise<Partial<Record<ServiceName, Emulator>> & { mcp?: Closer; composio?: Closer }>;
 const registry = globalThis as { [RUNNING]?: Running };
 
 async function start(): Running {
-	const out: Partial<Record<ServiceName, Emulator>> = {};
+	const out: Awaited<Running> = {};
 	for (const [name, service] of Object.entries(config.services)) {
 		const id = name as ServiceName;
 		out[id] = await createEmulator({ service: id, port: 0, seed: { [id]: service.seed } });
 	}
+	// Our own stand-ins: a remote MCP server and Composio's API.
+	out.mcp = await startMcpServer();
+	out.composio = await startComposio();
 	return out;
 }
 
@@ -27,6 +33,9 @@ export async function emulatorBindings(): Promise<Record<string, string>> {
 		GITHUB_CLIENT_SECRET: TEST_OAUTH.github.clientSecret,
 		GOOGLE_CLIENT_ID: TEST_OAUTH.google.clientId,
 		GOOGLE_CLIENT_SECRET: TEST_OAUTH.google.clientSecret,
+		EMULATE_MCP_URL: running.mcp!.url,
+		COMPOSIO_BASE_URL: running.composio!.url,
+		COMPOSIO_API_KEY: COMPOSIO_TEST_KEY,
 	};
 }
 
