@@ -1,0 +1,20 @@
+.changeset/agentrouter-gpt-responses.md
+  h_e5035a1409c1b0 1-5
+packages/cli/docs/providers.md
+  h_e5035a1409c1b0 173
+packages/cli/src/core/model-resolver.ts
+  h_e5035a1409c1b0 58
+packages/cli/test/model-resolver.test.ts
+  h_e5035a1409c1b0 729-746
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bd6b4aa2650a82004572412021e34bf7835dc65d",
+  "prompts": {},
+  "humans": {
+    "h_e5035a1409c1b0": {
+      "author": "Raghav Seth <sethraghav12345@gmail.com>"
+    }
+  }
+}
