@@ -475,7 +475,7 @@ type IsAny<T> = boolean extends (T extends never ? true : false) ? true : false;
  * Tool definition used by the agent runtime. `parameters` is any JSON Schema object; see {@link AgentToolParams} for
  * the type `execute` receives.
  */
-export interface AgentTool<TParameters extends object = any, TDetails = any> extends Tool<TParameters> {
+export interface AgentTool<TParameters extends object = object, TDetails = any> extends Tool<TParameters> {
 	/** Human-readable label for UI display. */
 	label: string;
 	/**
