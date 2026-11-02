@@ -318,15 +318,15 @@ git commit -m "feat(bots): add bot messages, group turns, fleet tools and recipe
   suggestions off per bot by default and capped per day; the catch-up
   summary after 4 hours away, written only when something happened.
 
-- [ ] **Step 1: Write the failing tests**: a page rejects a block carrying
+- [x] **Step 1: Write the failing tests**: a page rejects a block carrying
   HTML or script; a widget refresh makes no model call; answering an
   approval in chat clears its inbox item; suggestions stay silent until
   enabled and stop at the daily cap; no catch-up is written when nothing
   happened.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/pages.test.ts test/inbox.test.ts`)
-- [ ] **Step 3: Implement the pages and inbox modules**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/pages.test.ts test/inbox.test.ts`)
+- [x] **Step 3: Implement the pages and inbox modules**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/pages apps/bots/src/inbox apps/bots/test/pages.test.ts apps/bots/test/inbox.test.ts

@@ -59,6 +59,9 @@ import type { TriggerAdapter, TriggerEvent } from "../routines/triggers.ts";
 import { webhookAdapter } from "../routines/webhook.ts";
 import { type TeachEvent, Teaching } from "../skills/teach.ts";
 import { FLEET_TOOL_NAMES, type FleetDeps, fleetTools } from "../team/fleet.ts";
+import { createSuggestionTables, maySuggest, recordSuggestion } from "../inbox/suggestions.ts";
+import { defineTool } from "@knightcode/durable";
+import { arr, obj, opt, str, unknown as anyJson } from "@knightcode/schema";
 import { startHelperTool } from "../team/helpers.ts";
 import { type BotMessage, MESSAGE_MAX, messageBotTool } from "../team/message-bot.ts";
 import { botExtensions } from "../tools/catalog.ts";
@@ -158,6 +161,7 @@ export class BotObject extends DurableObject<Env> {
 		createActionsTable(sql);
 		createApprovalsTable(sql);
 		createProvenanceTable(sql);
+		createSuggestionTables(sql);
 		this.#write = queuedWrite(ctx.storage);
 		this.#settings = new SettingsStore(sql, this.#write);
 		this.#teaching = new Teaching(sql, this.#write);
@@ -227,6 +231,10 @@ export class BotObject extends DurableObject<Env> {
 	get #model(): ModelChoice | undefined {
 		const value = this.#meta("model");
 		return value ? (JSON.parse(value) as ModelChoice) : undefined;
+	}
+
+	#user() {
+		return this.env.USER.get(this.env.USER.idFromName(this.#owner!));
 	}
 
 	#check(principal: Principal | undefined, botId: string): void {
@@ -580,6 +588,7 @@ export class BotObject extends DurableObject<Env> {
 				}),
 				{ ...startHelperTool({ tools: () => this.tools(), inherit: async () => {} }), deferred: true as const },
 				...(this.#settings.read().manager ? fleetTools(this.#fleet()) : []),
+				...this.#libraryTools(),
 			],
 			image: {
 				models,
@@ -976,6 +985,47 @@ export class BotObject extends DurableObject<Env> {
 		};
 	}
 
+	/** Pages the bot keeps (its own only) and suggestions it may offer; both loaded through tool_search. */
+	#libraryTools(): ToolRegistration[] {
+		const text = (value: unknown, isError = false) => ({
+			output: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value) }],
+			...(isError ? { isError } : {}),
+		});
+		return [
+			defineTool({
+				name: "save_page",
+				description: "Create a page, or update one of yours by id: blocks of Markdown text, tables, charts, images, files, widgets and buttons.",
+				deferred: true,
+				parameters: obj({ pageId: opt(str()), title: str(), blocks: arr(anyJson()) }),
+				execute: async (args) => {
+					try {
+						// RPC types cannot describe a page's free-form widget data; the id and version are all this needs.
+						const page = (args.pageId
+							? await this.#user().pageUpdate(args.pageId, { kind: "bot", botId: this.#id }, { title: args.title, blocks: args.blocks })
+							: await this.#user().pageCreate(this.#id, args.title, args.blocks, this.#id)) as unknown as { id: string; version: number };
+						return text({ id: page.id, version: page.version });
+					} catch (error) {
+						return text(error instanceof Error ? error.message : String(error), true);
+					}
+				},
+			}) as ToolRegistration,
+			defineTool({
+				name: "suggest_work",
+				description: "Propose work you noticed to the owner (a card); never do it yourself unless they accept.",
+				deferred: true,
+				parameters: obj({ title: str(), kind: str({ description: "A short category, e.g. invoices" }), detail: opt(str()) }),
+				execute: async (args) => {
+					const allowed = maySuggest(this.ctx.storage.sql, { enabled: this.#settings.read().suggestions === true, kind: args.kind });
+					// Silent when not allowed: the owner sees nothing, and the bot is told not to retry.
+					if (!allowed.ok) return text(`Not shown: ${allowed.reason}`);
+					await this.#write((sql) => void recordSuggestion(sql, { kind: args.kind, title: args.title }));
+					await this.#user().inboxAdd({ kind: "suggestion", botId: this.#id, title: args.title, ...(args.detail ? { detail: args.detail } : {}) });
+					return text("Shown to the owner as a suggestion.");
+				},
+			}) as ToolRegistration,
+		];
+	}
+
 	/** The settings another of the owner's bots reads (its manager): never credentials. */
 	currentSettings(): BotSettings {
 		return this.#settings.read();
@@ -1025,6 +1075,9 @@ export class BotObject extends DurableObject<Env> {
 				policyVersion: this.#policyVersion,
 				ttlMs: APPROVAL_TTL_MS,
 			});
+			await this.#user()
+				.inboxAdd({ kind: "approval", botId: this.#id, title: intent.title, approvalId: approval.id })
+				.catch((error: unknown) => console.error("inbox", error));
 			return { decision: "ask", approvalId: approval.id };
 		}
 		await this.#write((sql) => markApproved(sql, record.id));
@@ -1103,6 +1156,8 @@ export class BotObject extends DurableObject<Env> {
 		const approval = getApproval(sql, approvalId);
 		const record = approval && getAction(sql, approval.actionId);
 		if (!approval || !record) return "revoked";
+		// Answered here (chat, inbox or phone): its inbox item is done either way.
+		await this.#user().inboxResolveApproval(approvalId).catch(() => undefined);
 		if (decision === "deny") {
 			await this.#write((db) => denyApproval(db, approvalId));
 			return "revoked";

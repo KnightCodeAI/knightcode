@@ -13,6 +13,8 @@ export interface BotSettings {
 	instructionsVersion: number;
 	computerAccess: boolean;
 	approvals: "never" | "auto" | "ask" | "default";
+	/** Proactive suggestions: off until the owner turns them on. */
+	suggestions?: boolean;
 	/** A Chief of Staff: it gets the management tools (in runs the owner started). */
 	manager?: boolean;
 	/** Who made the newest change, when another bot did ("Updated by <bot>"). */

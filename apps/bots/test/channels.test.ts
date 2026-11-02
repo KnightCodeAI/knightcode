@@ -95,7 +95,8 @@ it("refuses the 51st new recipient in a day, never caps replies, and pauses afte
 	// Bounces past the threshold pause sending.
 	for (let i = 0; i < 4; i++) await recordBounce(env.DB, account);
 	expect(await send("friend@example.com")).toMatchObject({ ok: false, error: expect.stringMatching(/paused/) });
-});
+	// Fifty-odd sends, each a few D1 round trips: slower than the default timeout under a full run.
+}, 30_000);
 
 it("refuses reserved and taken bot addresses, never numbering them", async () => {
 	expect(botAddress("Reviewer", "Raghav")).toBe("reviewer.raghav@bots.knightcode.dev");

@@ -12,6 +12,8 @@ import * as balance from "./balance.ts";
 import type { Balance, MeteredKind, Reservation } from "./balance.ts";
 import { createCredentialsTable, SealedCredentialStore } from "./credentials.ts";
 import { beginEnrollment, createEnrollmentTable, spendEnrollment } from "./enrollment.ts";
+import { Inbox } from "../inbox/inbox.ts";
+import { type Editor, PageStore } from "../pages/pages.ts";
 import { addSkill, createSkillsTable, deleteSkill, listSkills, shareSkill, type SkillInput, updateSkill } from "../skills/library.ts";
 import { createFilesTable, type FileMeta, getFile, listFiles, putFile } from "./files.ts";
 import { createOutboxTable, flushJournal, type JournalEntry, recordJournal } from "./journal.ts";
@@ -33,6 +35,8 @@ const JOURNAL_RETRY_MS = 30_000;
 
 export class UserObject extends DurableObject<Env> {
 	readonly #sql: SqlStorage;
+	#pages: PageStore | undefined;
+	#inbox: Inbox | undefined;
 	#dataKey: Promise<CryptoKey> | undefined;
 	#credentials: SealedCredentialStore | undefined;
 
@@ -48,6 +52,7 @@ export class UserObject extends DurableObject<Env> {
 			createOutboxTable(this.#sql);
 			createFilesTable(this.#sql);
 			createSkillsTable(this.#sql);
+			this.#sql.exec("CREATE TABLE IF NOT EXISTS user_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
 			// Entries an earlier instance could not copy are copied soon.
 			if (this.#sql.exec("SELECT 1 FROM journal_outbox LIMIT 1").toArray().length > 0)
 				await ctx.storage.setAlarm(Date.now() + JOURNAL_RETRY_MS);
@@ -214,6 +219,49 @@ export class UserObject extends DurableObject<Env> {
 	}
 	skillDelete(id: string): void {
 		deleteSkill(this.#sql, id);
+	}
+
+	// ─── Pages and the inbox ──────────────────────────────────────────────────
+	// The library and the inbox span all of the user's bots, so they live here.
+
+	get pages(): PageStore {
+		this.#pages ??= new PageStore(this.#sql);
+		return this.#pages;
+	}
+
+	get inbox(): Inbox {
+		this.#inbox ??= new Inbox(this.#sql);
+		return this.#inbox;
+	}
+
+	pageCreate(ownerBotId: string, title: string, blocks: unknown, author: string) {
+		return this.pages.create(ownerBotId, title, blocks, author);
+	}
+	pageUpdate(id: string, editor: Editor, change: { title?: string; blocks?: unknown; baseVersion?: number }) {
+		return this.pages.update(id, editor, change);
+	}
+	pageGet(id: string) {
+		return this.pages.get(id);
+	}
+	pageList(query?: string) {
+		return this.pages.list(query);
+	}
+
+	inboxAdd(item: Parameters<Inbox["add"]>[0]) {
+		return this.inbox.add(item);
+	}
+	inboxList(options?: { includeDone?: boolean }) {
+		return this.inbox.list(options);
+	}
+	inboxResolveApproval(approvalId: string): void {
+		this.inbox.resolveApproval(approvalId);
+	}
+
+	/** The user was active in some app now (for the catch-up's 4 hours away). */
+	touch(now = Date.now()): number {
+		const previous = Number(this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'last_activity'").toArray()[0]?.value ?? now);
+		this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('last_activity', ?)", String(now));
+		return previous;
 	}
 
 	// ─── Computer workspaces ──────────────────────────────────────────────────
