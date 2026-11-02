@@ -47,5 +47,7 @@ export async function extractAfterRun(run: {
 			`${new Date(run.now ?? Date.now()).toISOString().slice(0, 10)}. Reuse an existing name to correct a note. ${NOTE_FORMAT}`,
 		`Existing notes:\n${existing || "(none)"}\n\nConversation:\n${run.transcript}`,
 	);
-	return parseNotes(reply).map((note) => run.notes.write({ ...note, outside: run.outside }, run.now).name);
+	const saved: string[] = [];
+	for (const note of parseNotes(reply)) saved.push((await run.notes.write({ ...note, outside: run.outside }, run.now)).name);
+	return saved;
 }

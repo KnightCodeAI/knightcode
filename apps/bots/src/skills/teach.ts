@@ -3,6 +3,7 @@
 // (passwords) is never recorded: such events are dropped before anything is stored. Stopping drafts a skill with the
 // bot's model; the recording is deleted once that draft is saved or discarded.
 import type { SkillDraft } from "@knightcode/bots-protocol";
+import { type HostWrite, immediateWrite } from "../bot/host-sql.ts";
 import type { Helper } from "../memory/recall.ts";
 import { DRAFT_FORMAT, parseDraft } from "./save-as-skill.ts";
 
@@ -36,19 +37,23 @@ export function createTeachingTables(sql: SqlStorage): void {
 
 export class Teaching {
 	readonly #sql: SqlStorage;
+	readonly #write: HostWrite;
 
-	constructor(sql: SqlStorage) {
+	constructor(sql: SqlStorage, write: HostWrite = immediateWrite(sql)) {
 		this.#sql = sql;
+		this.#write = write;
 		createTeachingTables(sql);
 	}
 
 	/** Starts recording a demonstration of `goal`; one session at a time per bot. */
-	startTeaching(goal: string): { sessionId: string } {
+	async startTeaching(goal: string): Promise<{ sessionId: string }> {
 		if (!goal.trim()) throw new Error("Say what result you will show.");
-		this.#sql.exec("DELETE FROM teach_steps WHERE session_id IN (SELECT id FROM teach_sessions WHERE stopped = 0)");
-		this.#sql.exec("DELETE FROM teach_sessions WHERE stopped = 0");
 		const sessionId = `teach_${crypto.randomUUID()}`;
-		this.#sql.exec("INSERT INTO teach_sessions (id, goal, started_at) VALUES (?, ?, ?)", sessionId, goal.trim().slice(0, 500), Date.now());
+		await this.#write((sql) => {
+			sql.exec("DELETE FROM teach_steps WHERE session_id IN (SELECT id FROM teach_sessions WHERE stopped = 0)");
+			sql.exec("DELETE FROM teach_sessions WHERE stopped = 0");
+			sql.exec("INSERT INTO teach_sessions (id, goal, started_at) VALUES (?, ?, ?)", sessionId, goal.trim().slice(0, 500), Date.now());
+		});
 		return { sessionId };
 	}
 
@@ -61,22 +66,24 @@ export class Teaching {
 	}
 
 	/** Records one step. Protected input is dropped here and never stored. */
-	recordStep(sessionId: string, event: TeachEvent, screenshot?: string, snapshot?: string): boolean {
+	async recordStep(sessionId: string, event: TeachEvent, screenshot?: string, snapshot?: string): Promise<boolean> {
 		const session = this.#active(sessionId);
 		if (session.stopped) throw new Error("This teaching session has stopped.");
 		if (event.kind === "protected-input") return false;
-		const count = this.#sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM teach_steps WHERE session_id = ?", sessionId).one().n;
-		if (count >= MAX_STEPS) return false;
-		this.#sql.exec(
-			"INSERT INTO teach_steps (session_id, idx, event, screenshot, snapshot, at) VALUES (?, ?, ?, ?, ?, ?)",
-			sessionId,
-			count,
-			JSON.stringify(event),
-			screenshot ?? null,
-			snapshot?.slice(0, 20_000) ?? null,
-			Date.now(),
-		);
-		return true;
+		return this.#write((sql) => {
+			const count = sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM teach_steps WHERE session_id = ?", sessionId).one().n;
+			if (count >= MAX_STEPS) return false;
+			sql.exec(
+				"INSERT INTO teach_steps (session_id, idx, event, screenshot, snapshot, at) VALUES (?, ?, ?, ?, ?, ?)",
+				sessionId,
+				count,
+				JSON.stringify(event),
+				screenshot ?? null,
+				snapshot?.slice(0, 20_000) ?? null,
+				Date.now(),
+			);
+			return true;
+		});
 	}
 
 	steps(sessionId: string): TeachStep[] {
@@ -98,7 +105,7 @@ export class Teaching {
 	/** Stops recording and drafts the skill from the demonstrated steps; the recording stays until save or discard. */
 	async stopTeaching(sessionId: string, helper: Helper): Promise<SkillDraft> {
 		const session = this.#active(sessionId);
-		this.#sql.exec("UPDATE teach_sessions SET stopped = 1 WHERE id = ?", sessionId);
+		await this.#write((sql) => void sql.exec("UPDATE teach_sessions SET stopped = 1 WHERE id = ?", sessionId));
 		const steps = this.steps(sessionId);
 		const reply = await helper(
 			`The owner demonstrated a task so you can do it yourself later. Write a skill from the steps: the general steps, ` +
@@ -109,9 +116,11 @@ export class Teaching {
 	}
 
 	/** Deletes the recording: after the draft is saved or discarded, or when the user cancels. */
-	discard(sessionId: string): void {
-		this.#sql.exec("DELETE FROM teach_steps WHERE session_id = ?", sessionId);
-		this.#sql.exec("DELETE FROM teach_sessions WHERE id = ?", sessionId);
+	discard(sessionId: string): Promise<void> {
+		return this.#write((sql) => {
+			sql.exec("DELETE FROM teach_steps WHERE session_id = ?", sessionId);
+			sql.exec("DELETE FROM teach_sessions WHERE id = ?", sessionId);
+		});
 	}
 }
 

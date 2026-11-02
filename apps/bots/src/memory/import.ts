@@ -16,5 +16,7 @@ export async function importNotes(input: { notes: NotesStore; helper: Helper; an
 		`Turn this list of facts about a person into notes, one fact each. ${NOTE_FORMAT}`,
 		input.answer.slice(0, 50_000),
 	);
-	return parseNotes(reply).map((note) => input.notes.write(note, input.now).name);
+	const saved: string[] = [];
+	for (const note of parseNotes(reply)) saved.push((await input.notes.write(note, input.now)).name);
+	return saved;
 }

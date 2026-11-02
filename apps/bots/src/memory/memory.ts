@@ -1,6 +1,7 @@
 // One bot's memory, as its bot object uses it: notes, open work, history search, and recall before each input.
 import type { Conversation } from "@knightcode/durable";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
+import { type HostWrite, immediateWrite } from "../bot/host-sql.ts";
 import { createDreamTable } from "./dream.ts";
 import { HistoryIndex } from "./history-tools.ts";
 import { NotesStore } from "./notes.ts";
@@ -26,6 +27,8 @@ export class BotMemory {
 	readonly notes: NotesStore;
 	readonly openWork: OpenWork;
 	readonly history: HistoryIndex;
+	/** Host writes, queued behind the harness's transactions. */
+	readonly write: HostWrite;
 	/** The bot's conversation. */
 	readonly conversation: () => Promise<Conversation>;
 	readonly #owner: () => string | undefined;
@@ -37,10 +40,13 @@ export class BotMemory {
 		conversation: () => Promise<Conversation>;
 		owner: () => string | undefined;
 		helper: () => Helper | undefined;
+		write?: HostWrite;
 	}) {
-		this.notes = new NotesStore(input.sql);
-		this.openWork = new OpenWork(input.sql);
-		this.history = new HistoryIndex(input.sql, input.botId, input.conversation);
+		const write = input.write ?? immediateWrite(input.sql);
+		this.write = write;
+		this.notes = new NotesStore(input.sql, write);
+		this.openWork = new OpenWork(input.sql, write);
+		this.history = new HistoryIndex(input.sql, input.botId, input.conversation, write);
 		createDreamTable(input.sql);
 		this.conversation = input.conversation;
 		this.#owner = input.owner;

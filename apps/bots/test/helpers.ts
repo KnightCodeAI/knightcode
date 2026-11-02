@@ -1,7 +1,8 @@
 // Test helpers: driving an emulator's sign-in page, and a signed-in session without one.
 import { env, SELF } from "cloudflare:test";
 import { createAccount } from "../src/auth/accounts.ts";
-import { issueSession, SESSION_COOKIE } from "../src/auth/session.ts";
+import { issueSession, type Principal, SESSION_COOKIE } from "../src/auth/session.ts";
+import { sha256 } from "../src/auth/util.ts";
 
 /** The `name=value` pairs a response sets, joined as a request's Cookie header. */
 export function cookiesOf(response: Response): string {
@@ -37,4 +38,11 @@ export async function sessionCookie(): Promise<string> {
 	const account = await createAccount(env.DB, { email: `${crypto.randomUUID()}@example.com`, name: "Test" });
 	const token = await issueSession(env, account.accountId);
 	return `${SESSION_COOKIE}=${token}`;
+}
+
+/** A fresh account signed in on the web: its principal, with the live session tickets are tied to. */
+export async function signedInPrincipal(): Promise<Principal> {
+	const account = await createAccount(env.DB, { email: `${crypto.randomUUID()}@example.com`, name: "Test" });
+	const token = await issueSession(env, account.accountId);
+	return { accountId: account.accountId, workspaceId: account.workspaceId, client: "web", sessionId: await sha256(token) };
 }

@@ -1,5 +1,6 @@
 // apps/bots/test/memory.test.ts
 import { beforeEach, expect, it } from "vitest";
+import { immediateWrite } from "../src/bot/host-sql.ts";
 import { countRun, dream } from "../src/memory/dream.ts";
 import { extractAfterRun } from "../src/memory/extract.ts";
 import { memoryText } from "../src/memory/index-file.ts";
@@ -58,8 +59,8 @@ it("search_history refuses a message id from another bot", async () => {
 });
 it("shows the index and open work, never note content", async () => {
 	await writeNote("b1", { name: "tea", description: "likes tea", body: "Prefers green tea" });
-	const text = await withMemory("b1", (memory) => {
-		memory.openWork.add("Finish the quarterly report");
+	const text = await withMemory("b1", async (memory) => {
+		await memory.openWork.add("Finish the quarterly report");
 		return memoryText(memory.notes, memory.openWork);
 	});
 	expect(text).toContain("- tea: likes tea");
@@ -84,12 +85,12 @@ it("consolidates once enough has changed: dates, duplicates, contradictions", as
 	// A bot of its own: other tests' notes would count here.
 	await claim("dreamer");
 	const result = await withMemory("dreamer", async (memory, sql) => {
-		memory.notes.write({ name: "trip", description: "trip date", body: "Flying out tomorrow" }, now - 10 * DAY);
-		memory.notes.write({ name: "trip-copy", description: "trip date", body: "Flying out tomorrow" }, now - 10 * DAY - 1_000);
-		memory.notes.write({ name: "db-old", description: "database", body: "Uses Postgres" }, now - 5 * DAY);
-		memory.notes.write({ name: "db", description: "database", body: "Switched to SQLite" }, now - DAY);
+		await memory.notes.write({ name: "trip", description: "trip date", body: "Flying out tomorrow" }, now - 10 * DAY);
+		await memory.notes.write({ name: "trip-copy", description: "trip date", body: "Flying out tomorrow" }, now - 10 * DAY - 1_000);
+		await memory.notes.write({ name: "db-old", description: "database", body: "Uses Postgres" }, now - 5 * DAY);
+		await memory.notes.write({ name: "db", description: "database", body: "Switched to SQLite" }, now - DAY);
 		const early = await dream({ sql, notes: memory.notes, helper }, { minHours: 24, minRuns: 5, now });
-		for (let run = 0; run < 5; run++) countRun(sql);
+		for (let run = 0; run < 5; run++) await countRun(immediateWrite(sql));
 		const ran = await dream({ sql, notes: memory.notes, helper }, { minHours: 24, minRuns: 5, now });
 		return { early, ran, names: memory.notes.list().map((note) => note.name), trip: memory.notes.get("trip")?.body };
 	});
@@ -100,10 +101,10 @@ it("consolidates once enough has changed: dates, duplicates, contradictions", as
 });
 it("shares only notes that do not look private, and asks before sharing outside-written ones", async () => {
 	const put: string[] = [];
-	const result = await withMemory("b1", (memory) => {
-		memory.notes.write({ name: "company", description: "where they work", body: "Works at Acme" });
-		memory.notes.write({ name: "email", description: "contact", body: "Personal mail is jo@example.com" });
-		memory.notes.write({ name: "from-mail", description: "vendor", body: "Vendor is Globex", outside: true });
+	const result = await withMemory("b1", async (memory) => {
+		await memory.notes.write({ name: "company", description: "where they work", body: "Works at Acme" });
+		await memory.notes.write({ name: "email", description: "contact", body: "Personal mail is jo@example.com" });
+		await memory.notes.write({ name: "from-mail", description: "vendor", body: "Vendor is Globex", outside: true });
 		return shareNotes({
 			notes: memory.notes,
 			names: ["company", "email", "from-mail"],
@@ -134,8 +135,8 @@ async function withEmbeddings(fn: () => Promise<void>): Promise<void> {
 }
 
 const renderAged = (botId: string, options: { ageDays: number }) =>
-	withMemory(botId, (memory) => {
-		const note = memory.notes.write(
+	withMemory(botId, async (memory) => {
+		const note = await memory.notes.write(
 			{ name: `aged-${options.ageDays}`, description: "an old fact", body: "Lives in Lisbon" },
 			Date.now() - options.ageDays * DAY,
 		);

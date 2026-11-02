@@ -1,19 +1,22 @@
 // The bot's tools as one durable extension, "bots-core" (spec section 5): a short core list the model always sees,
 // everything else deferred behind tool_search (connectors and skills join that set in Part 3). Its prompt sections
-// carry what changes, the knowledge files and the memory index with open work, last, after the stable parts.
+// carry the owner's instructions first (stable), then the knowledge files, and the memory index with open work last.
+// A beforeRequest hook shortens old exchanges by rule before any paid summary (spec section 6). Outside text (web
+// pages here; email, webhooks and other bots in Part 3) marks the run, and a marked run's notes are labelled and its
+// settings changes refused (spec section 24).
 import type { FileRef } from "@knightcode/bots-protocol";
-import { defineExtension, defineTool, type Extension, section, type ToolRegistration } from "@knightcode/durable";
+import { defineExtension, defineTool, type Extension, GenerationTask, hook, section, type ToolRegistration } from "@knightcode/durable";
 import { createToolSearchExtension } from "@knightcode/durable/tool-search";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@knightcode/durable/tools";
 import { type ComputerAccess, computerTools } from "../computer/browser-tools.ts";
 import { lit, obj, opt, str, union } from "@knightcode/schema";
+import { shortenOldMessages } from "../memory/context-rules.ts";
 import { historyTools } from "../memory/history-tools.ts";
 import { memoryText } from "../memory/index-file.ts";
 import type { BotMemory } from "../memory/memory.ts";
 import { type HelpDocs, helpTool } from "./help-skill.ts";
 import { imageTool } from "./image-tool.ts";
-import type { SettingsStore } from "./settings-tool.ts";
-import { updateBotTool } from "./settings-tool.ts";
+import { type BotSettings, type SettingsStore, type UpdateRules, updateBotTool } from "./settings-tool.ts";
 import { webTools } from "./web-fetch.ts";
 
 /** The visible tool definitions may take at most this much of every request. */
@@ -33,7 +36,11 @@ export interface BotToolDeps {
 	/** Present only when one of the user's providers has an image model. */
 	image?: Parameters<typeof imageTool>[0];
 	/** Runs after update_bot changes a setting. */
-	settingsChanged?: () => Promise<void>;
+	settingsChanged?: (settings: BotSettings, before: BotSettings) => Promise<void>;
+	/** What chat may change right now: the outside mark and the user's models. */
+	settingsRules?: () => UpdateRules;
+	/** Outside-text provenance of the current run. */
+	provenance?: { outside(): boolean; enter(source: "web"): Promise<void> };
 	/** Present only when the owner gave this bot computer access. */
 	computer?: ComputerAccess;
 }
@@ -41,7 +48,7 @@ export interface BotToolDeps {
 const KNOWLEDGE_MAX = 50_000;
 const text = (value: string, isError = false) => ({ output: [{ type: "text" as const, text: value }], ...(isError ? { isError } : {}) });
 
-function memoryTools(memory: BotMemory) {
+function memoryTools(memory: BotMemory, outside: () => boolean) {
 	return [
 		defineTool({
 			name: "save_note",
@@ -52,7 +59,8 @@ function memoryTools(memory: BotMemory) {
 				body: str(),
 				type: opt(union([lit("fact"), lit("preference"), lit("decision"), lit("reference")])),
 			}),
-			execute: async (args) => text(`Saved ${memory.notes.write(args).name}.`),
+			// A note written while outside text is in play is labelled, and needs approval to be shared.
+			execute: async (args) => text(`Saved ${(await memory.notes.write({ ...args, outside: outside() })).name}.`),
 		}),
 	];
 }
@@ -73,11 +81,11 @@ function knowledgeTool(knowledge: Knowledge) {
 /** Every tool of the bot, the visible ones first. */
 export function botTools(deps: BotToolDeps): ToolRegistration[] {
 	return [
-		updateBotTool(deps.settings, deps.settingsChanged && (() => deps.settingsChanged!())),
-		...memoryTools(deps.memory),
+		updateBotTool(deps.settings, deps.settingsChanged, () => deps.settingsRules?.() ?? {}),
+		...memoryTools(deps.memory, () => deps.provenance?.outside() ?? false),
 		...historyTools(deps.memory.history),
 		knowledgeTool(deps.knowledge),
-		...webTools(),
+		...webTools(() => deps.provenance?.enter("web") ?? Promise.resolve()),
 		helpTool(deps.help),
 		...(deps.image && deps.image.available.length > 0 ? [imageTool(deps.image)] : []),
 		// Shell and files run on the bot's computer (the harness's env), the browser and desktop through the bridge.
@@ -100,7 +108,17 @@ export function botExtensions(deps: BotToolDeps): { core: Extension; toolSearch:
 		core: defineExtension({
 			name: "bots-core",
 			tools: botTools(deps),
+			hooks: [hook(GenerationTask, { beforeRequest: (request) => ({ messages: shortenOldMessages(request.messages) }) })],
 			sections: [
+				// First and stable: the owner's instructions, as the bot's settings hold them now.
+				section("bot", () => {
+					const settings = deps.settings.read();
+					const lines = [
+						`You are ${settings.name}${settings.purpose ? `, ${settings.purpose}` : ""}.`,
+						...(settings.instructions ? ["", settings.instructions] : []),
+					];
+					return lines.join("\n");
+				}),
 				section("knowledge", async () => {
 					const files = await deps.knowledge.list().catch(() => []);
 					return files.length > 0

@@ -14,8 +14,15 @@ it("refreshes a shared OAuth credential once for two concurrent callers", async 
 	expect(refreshes()).toBe(1);
 });
 it("never returns a vault value through the API", async () => {
-	await apiPost("/api/vault", { kind: "api", name: "x", origin: "https://api.example", value: "s3cret" });
-	const body = await (await apiGet("/api/vault")).text();
+	const created = await apiPost("/api/vault", { kind: "api", name: "x", origin: "https://api.example", value: "s3cret" });
+	expect(created.status).toBe(200);
+	const createdBody = await created.text();
+	expect(createdBody).not.toContain("s3cret");
+	expect(JSON.parse(createdBody)).toMatchObject({ kind: "api", name: "x", origin: "https://api.example" });
+	const listed = await apiGet("/api/vault");
+	expect(listed.status).toBe(200);
+	const body = await listed.text();
+	expect((JSON.parse(body) as { items: { name: string }[] }).items.map((item) => item.name)).toContain("x");
 	expect(body).not.toContain("s3cret");
 });
 it("reserves before spending and settles once", async () => {

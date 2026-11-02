@@ -30,10 +30,10 @@ describe.each([100, 1_000, 10_000])("a chat of %i messages", (size) => {
 		async () => {
 			await claim(bot);
 			await seedMessages(bot, chat(size));
-			await withMemory(bot, (memory) => {
-				memory.notes.write({ name: "dog-name", description: "the owner's dog", body: "The dog is called Biscuit", type: "fact" });
-				memory.notes.write({ name: "drink", description: "beverage preference", body: "Prefers green tea", type: "preference" });
-				memory.openWork.add("Finish the quarterly report");
+			await withMemory(bot, async (memory) => {
+				await memory.notes.write({ name: "dog-name", description: "the owner's dog", body: "The dog is called Biscuit", type: "fact" });
+				await memory.notes.write({ name: "drink", description: "beverage preference", body: "Prefers green tea", type: "preference" });
+				await memory.openWork.add("Finish the quarterly report");
 			});
 
 			// A fact, by keyword.

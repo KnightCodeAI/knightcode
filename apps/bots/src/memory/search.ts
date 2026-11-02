@@ -47,12 +47,12 @@ async function vectorsFor(store: NotesStore, notes: StoredNote[], embedder: Embe
 	}
 	if (missing.length > 0) {
 		const embedded = await embedder.embed(missing.map((note) => `${note.name}: ${note.description}\n${note.body}`));
-		missing.forEach((note, index) => {
+		for (const [index, note] of missing.entries()) {
 			const vector = embedded[index];
-			if (!vector) return;
-			store.setVector(note.name, note.version, embedder.model, vector);
+			if (!vector) continue;
+			await store.setVector(note.name, note.version, embedder.model, vector);
 			vectors.set(note.name, vector);
-		});
+		}
 	}
 	return vectors;
 }

@@ -28,6 +28,9 @@ async function* streamChunks(stream: ReadableStream<Uint8Array>): AsyncIterable<
 	}
 }
 
+/** How soon a journal copy that failed is tried again. */
+const JOURNAL_RETRY_MS = 30_000;
+
 export class UserObject extends DurableObject<Env> {
 	readonly #sql: SqlStorage;
 	#dataKey: Promise<CryptoKey> | undefined;
@@ -45,6 +48,9 @@ export class UserObject extends DurableObject<Env> {
 			createOutboxTable(this.#sql);
 			createFilesTable(this.#sql);
 			createSkillsTable(this.#sql);
+			// Entries an earlier instance could not copy are copied soon.
+			if (this.#sql.exec("SELECT 1 FROM journal_outbox LIMIT 1").toArray().length > 0)
+				await ctx.storage.setAlarm(Date.now() + JOURNAL_RETRY_MS);
 		});
 	}
 
@@ -161,8 +167,21 @@ export class UserObject extends DurableObject<Env> {
 
 	readonly #journal = (entry: JournalEntry) => recordJournal(this.#sql, entry);
 
+	/**
+	 * Copies the journal outbox to D1. A failure never fails the change it records (that is already stored, and the
+	 * caller holds its result); the outbox keeps the entries and this object's alarm copies them later.
+	 */
 	async #flush(): Promise<void> {
-		await flushJournal(this.#sql, this.env.DB, this.#accountId);
+		try {
+			await flushJournal(this.#sql, this.env.DB, this.#accountId);
+		} catch (error) {
+			console.error("journal copy", error);
+			await this.ctx.storage.setAlarm(Date.now() + JOURNAL_RETRY_MS);
+		}
+	}
+
+	override async alarm(): Promise<void> {
+		await this.#flush();
 	}
 
 	// ─── Files ────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { CLEAR_SESSION_COOKIE, issueSession, readSession, revokeSession, sessionCookie } from "./auth/session.ts";
-import { sendEmailCode, verifyEmailCode } from "./auth/email-code.ts";
+import { sendEmailCode, TooManyCodes, verifyEmailCode } from "./auth/email-code.ts";
 import { completeOAuth, startOAuth } from "./auth/oauth.ts";
 import { beginPasskey, finishPasskey } from "./auth/passkeys.ts";
 import { issueTicket } from "./auth/tickets.ts";
@@ -18,13 +18,14 @@ export { UserObject } from "./user/user-object.ts";
 const json = (body: unknown, status = 200, headers?: HeadersInit) => Response.json(body, { status, headers });
 
 /**
- * Cookie-authenticated state changes and WebSocket upgrades must come from this site (spec section 15): a page on
- * another origin can make the browser send our cookie, but not forge its Origin header.
+ * Cookie-authenticated state changes must come from this site (spec section 15): a page on another origin can make the
+ * browser send our cookie, but not forge its Origin header.
  */
 function crossOrigin(request: Request): boolean {
-	const stateChanging = !["GET", "HEAD", "OPTIONS"].includes(request.method);
-	const upgrade = request.headers.get("upgrade")?.toLowerCase() === "websocket";
-	if (!stateChanging && !upgrade) return false;
+	// Sockets authenticate in band (a ticket in the first frame, or a screen capability), never with the cookie, so
+	// the desktop app's renderer and native clients, whose Origin is not this site, can open them.
+	if (request.headers.get("upgrade")?.toLowerCase() === "websocket") return false;
+	if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return false;
 	return request.headers.get("origin") !== new URL(request.url).origin;
 }
 
@@ -46,7 +47,8 @@ async function auth(request: Request, env: Env, pathname: string): Promise<Respo
 		if (typeof email !== "string") return json({ error: "bad_request" }, 400);
 		try {
 			await sendEmailCode(env, email);
-		} catch {
+		} catch (error) {
+			if (error instanceof TooManyCodes) return json({ error: "too_many_codes" }, 429);
 			return json({ error: "email_unavailable" }, 400);
 		}
 		return json({ ok: true });

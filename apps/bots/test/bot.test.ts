@@ -2,15 +2,20 @@
 import { applyImmutable, type Op } from "@knightcode/chord/delta";
 import type { ConversationView, ServerFrame } from "@knightcode/bots-protocol";
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from "cloudflare:test";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import type { Principal } from "../src/auth/session.ts";
 import { issueTicket } from "../src/auth/tickets.ts";
 import type { BotObject } from "../src/bot/bot-object.ts";
 import { setModelsFactory } from "../src/bot/models.ts";
 import { fakeModels } from "./fake-model.ts";
+import { signedInPrincipal } from "./helpers.ts";
 
-const principal: Principal = { accountId: "acct-a", workspaceId: "acct-a", client: "web" };
-const other: Principal = { accountId: "acct-b", workspaceId: "acct-b", client: "web" };
+let principal: Principal;
+let other: Principal;
+beforeAll(async () => {
+	principal = await signedInPrincipal();
+	other = await signedInPrincipal();
+});
 
 beforeEach(async () => {
 	await botStub("b1").claim(principal, { provider: "fake", modelId: "fake-model" });

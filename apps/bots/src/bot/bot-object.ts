@@ -1,42 +1,65 @@
-// The bot object (spec sections 5, 6 and 12): one per bot, named by the bot's id. It runs the bot's conversation on the
-// durable harness over its own SQLite, keeps its alarm armed so work survives eviction and deploys, and serves the
-// bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner.
-import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
+// The bot object (spec sections 5, 6, 12 and 24): one per bot, named by the bot's id. It runs the bot's conversation on
+// the durable harness over its own SQLite, keeps its alarm armed so work survives eviction and deploys, and serves the
+// bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner. Its own tables share
+// the database with the harness, so every host write goes through the harness's queue (host-sql.ts).
+import { getSupportedThinkingLevels } from "@knightcode/ai/models";
 import { decodeFrame, encodeFrame, ProtocolError, type ServerFrame, type Skill, type SkillDraft } from "@knightcode/bots-protocol";
-import { type Conversation, createRegistry, type Extension, Harness, type Registry, type ToolRegistration, type Wake } from "@knightcode/durable";
+import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
+import {
+	AssistantEntry,
+	type Conversation,
+	configure,
+	createRegistry,
+	type EntryId,
+	type Extension,
+	Harness,
+	type Registry,
+	ToolResultEntry,
+	type ToolRegistration,
+	UserEntry,
+	type Wake,
+} from "@knightcode/durable";
 import { openDurableObjectSqliteStorage } from "@knightcode/durable/storage/sqlite/cloudflare";
-import { DurableObject } from "cloudflare:workers";
-import type { Principal } from "../auth/session.ts";
-import { verifyTicket } from "../auth/tickets.ts";
-import type { Env } from "../env.ts";
-import { adapterFor } from "../delivery/queue.ts";
-import { type ActionState, createActionsTable, dispatch, getAction } from "./actions.ts";
-import { consumeApproval, type ConsumeResult, createApprovalsTable, denyApproval, digestOf, getApproval } from "./approvals.ts";
-import { BotMemory } from "../memory/memory.ts";
-import { type TeachEvent, Teaching } from "../skills/teach.ts";
-import { modelHelper } from "../memory/recall.ts";
 import { Connection, RemoteExecutionEnv, webSocketTransport } from "@knightcode/env";
+import { DurableObject } from "cloudflare:workers";
+import { type Principal, sessionLive } from "../auth/session.ts";
+import { verifyTicket } from "../auth/tickets.ts";
 import type { ComputerAccess } from "../computer/browser-tools.ts";
 import { botUserFor } from "../computer/provider.ts";
+import { adapterFor } from "../delivery/queue.ts";
+import type { Env } from "../env.ts";
+import { countRun, dream } from "../memory/dream.ts";
+import { extractAfterRun } from "../memory/extract.ts";
+import { BotMemory } from "../memory/memory.ts";
+import { modelHelper } from "../memory/recall.ts";
+import { redactSecrets } from "../memory/redact.ts";
+import { type TeachEvent, Teaching } from "../skills/teach.ts";
 import { botExtensions } from "../tools/catalog.ts";
 import { HELP_DOCS } from "../tools/help-docs.ts";
 import { availableImageModels } from "../tools/image-tool.ts";
-import { type BotSettings, SettingsStore } from "../tools/settings-tool.ts";
+import { type BotSettings, SettingsStore, type UpdateRules } from "../tools/settings-tool.ts";
+import { type ActionState, createActionsTable, deliveriesToResume, dispatch, getAction, markApproved } from "./actions.ts";
+import { consumeApproval, type ConsumeResult, createApprovalsTable, denyApproval, digestOf, getApproval } from "./approvals.ts";
+import { type HostWrite, queuedWrite } from "./host-sql.ts";
 import { modelsFor } from "./models.ts";
-import { createProvenanceTable } from "./provenance.ts";
 import { assertOwns, Unauthorized } from "./principal.ts";
+import { createProvenanceTable, isOutside, markOutside, type OutsideSource } from "./provenance.ts";
 import { nextAlarm } from "./scheduler.ts";
 import { type Delivery, LiveView } from "./socket.ts";
 
 const context = BACKGROUND_CONTEXT;
 /** A recovery wakeup while work runs: an instance lost mid-run is started again within this. */
 const HEARTBEAT_MS = 60_000;
+/** How long a socket trusts its session's last check before asking D1 again (revocation reaches it within this). */
+const SESSION_RECHECK_MS = 30_000;
+/** Provenance is kept per conversation run; the owner's next new run clears it. */
+const RUN_KEY = "current-run";
 
 /** The model a bot runs on, chosen in its settings; nothing here picks one. */
 export type ModelChoice = { provider: string; modelId: string };
 
 /** What each hibernatable socket remembers across hibernation. */
-type Attachment = { principal?: Principal; subscribed?: boolean };
+type Attachment = { principal?: Principal; subscribed?: boolean; checkedAt?: number };
 
 export class BotObject extends DurableObject<Env> {
 	#harness!: Harness;
@@ -44,6 +67,7 @@ export class BotObject extends DurableObject<Env> {
 	#live: Promise<LiveView> | undefined;
 	/** Notes, open work, history and recall. */
 	readonly memory: BotMemory;
+	readonly #write: HostWrite;
 	readonly #settings: SettingsStore;
 	readonly #teaching: Teaching;
 	readonly #registry: Registry = createRegistry();
@@ -51,26 +75,28 @@ export class BotObject extends DurableObject<Env> {
 	/** The computer lease held while this bot works on its computer. */
 	#lease: Promise<string> | undefined;
 	#computerEnv: RemoteExecutionEnv | undefined;
+	/** One delivery of an action at a time, so a check and a send never overlap another of the same action. */
+	readonly #deliveries = new Map<string, Promise<ActionState>>();
+	#afterRunning: Promise<void> | undefined;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
-		ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS bot_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
-		createActionsTable(ctx.storage.sql);
-		createApprovalsTable(ctx.storage.sql);
-		createProvenanceTable(ctx.storage.sql);
-		this.#settings = new SettingsStore(ctx.storage.sql);
-		this.#teaching = new Teaching(ctx.storage.sql);
+		const sql = ctx.storage.sql;
+		sql.exec("CREATE TABLE IF NOT EXISTS bot_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
+		createActionsTable(sql);
+		createApprovalsTable(sql);
+		createProvenanceTable(sql);
+		this.#write = queuedWrite(ctx.storage);
+		this.#settings = new SettingsStore(sql, this.#write);
+		this.#teaching = new Teaching(sql, this.#write);
 		this.memory = new BotMemory({
-			sql: ctx.storage.sql,
+			sql,
 			botId: this.#id,
 			conversation: () => this.#conversation(),
 			owner: () => this.#owner,
 			// The memory helper is the user's pick; until settings carry one it is the bot's own model.
-			helper: () => {
-				const owner = this.#owner;
-				const model = this.#model;
-				return owner && model ? modelHelper(modelsFor({ env: this.env, accountId: owner }), model) : undefined;
-			},
+			helper: () => this.#helper(),
+			write: this.#write,
 		});
 		void ctx.blockConcurrencyWhile(async () => {
 			// A fallback before anything can throw: an object whose open or recovery fails is started again.
@@ -88,8 +114,11 @@ export class BotObject extends DurableObject<Env> {
 					// A failed alarm write resets the object; it arms again when it next starts.
 					onWake: (wake) => {
 						void this.#arm(wake).catch(() => ctx.abort("Alarm write failed"));
-						// Work done: the computer may sleep once nothing else holds it.
-						if (!wake.active) void this.#releaseComputer();
+						if (!wake.active) {
+							// Work done: the computer may sleep once nothing else holds it, and memory learns from the run.
+							void this.#releaseComputer();
+							ctx.waitUntil(this.#afterRun());
+						}
 					},
 				},
 				context,
@@ -108,14 +137,21 @@ export class BotObject extends DurableObject<Env> {
 		return this.ctx.id.name ?? this.ctx.id.toString();
 	}
 
+	#meta(key: string): string | undefined {
+		return this.ctx.storage.sql.exec<{ value: string }>("SELECT value FROM bot_meta WHERE key = ?", key).toArray()[0]?.value;
+	}
+
+	#setMeta(key: string, value: string): Promise<void> {
+		return this.#write((sql) => void sql.exec("INSERT OR REPLACE INTO bot_meta (key, value) VALUES (?, ?)", key, value));
+	}
+
 	get #owner(): string | undefined {
-		return this.ctx.storage.sql.exec<{ value: string }>("SELECT value FROM bot_meta WHERE key = 'owner'").toArray()[0]
-			?.value;
+		return this.#meta("owner");
 	}
 
 	get #model(): ModelChoice | undefined {
-		const row = this.ctx.storage.sql.exec<{ value: string }>("SELECT value FROM bot_meta WHERE key = 'model'").toArray()[0];
-		return row ? (JSON.parse(row.value) as ModelChoice) : undefined;
+		const value = this.#meta("model");
+		return value ? (JSON.parse(value) as ModelChoice) : undefined;
 	}
 
 	#check(principal: Principal | undefined, botId: string): void {
@@ -133,19 +169,94 @@ export class BotObject extends DurableObject<Env> {
 		return this.#root;
 	}
 
-	// ─── RPC ──────────────────────────────────────────────────────────────────
+	#helper() {
+		const owner = this.#owner;
+		const model = this.#model;
+		return owner && model ? modelHelper(modelsFor({ env: this.env, accountId: owner }), model) : undefined;
+	}
+
+	// ─── Ownership and settings ───────────────────────────────────────────────
 
 	/** Makes `principal`'s account the bot's owner and starts its conversation on `model`. Once only. */
 	async claim(principal: Principal, model: ModelChoice): Promise<void> {
 		const owner = this.#owner;
 		if (owner !== undefined && owner !== principal.accountId) throw new Unauthorized();
-		if (owner === undefined) {
-			this.ctx.storage.sql.exec("INSERT INTO bot_meta (key, value) VALUES ('owner', ?)", principal.accountId);
-			this.ctx.storage.sql.exec("INSERT OR REPLACE INTO bot_meta (key, value) VALUES ('model', ?)", JSON.stringify(model));
-		}
+		if (owner === undefined)
+			await this.#write((sql) => {
+				sql.exec("INSERT INTO bot_meta (key, value) VALUES ('owner', ?)", principal.accountId);
+				sql.exec("INSERT OR REPLACE INTO bot_meta (key, value) VALUES ('model', ?)", JSON.stringify(model));
+			});
 		const { core, toolSearch } = await this.#installTools();
 		this.#root ??= await this.#harness.root(context, { agent: { model, extensions: [core, toolSearch] } });
 	}
+
+	/**
+	 * The owner's change to the bot's settings (from the settings screen, never from chat): it may grant powers, such as
+	 * computer access. The tools are rebuilt to match, and a model change reaches the conversation.
+	 */
+	async updateSettings(principal: Principal, patch: Partial<BotSettings>): Promise<BotSettings> {
+		this.#check(principal, this.#id);
+		const before = this.#settings.read();
+		const next = { ...before, ...patch };
+		if (patch.instructions !== undefined && patch.instructions !== before.instructions)
+			next.instructionsVersion = before.instructionsVersion + 1;
+		await this.#settings.write(next);
+		await this.#settingsChanged(next, before);
+		return next;
+	}
+
+	/** Undoes the newest settings change (from chat or the settings screen). */
+	async undoSettings(principal: Principal): Promise<BotSettings | undefined> {
+		this.#check(principal, this.#id);
+		const before = this.#settings.read();
+		const restored = await this.#settings.undo();
+		if (restored) await this.#settingsChanged(restored, before);
+		return restored;
+	}
+
+	/** Applies a settings change: the agent's model and thinking, and the tools (powers on or off). */
+	async #settingsChanged(settings: BotSettings, before: BotSettings): Promise<void> {
+		const modelChanged = JSON.stringify(settings.model) !== JSON.stringify(before.model) || settings.thinking !== before.thinking;
+		if (modelChanged && settings.model) {
+			const root = await this.#conversation();
+			const model = settings.model;
+			await root.commit(
+				(tx) =>
+					configure(tx, root.id, {
+						model,
+						...(settings.thinking ? { thinkingLevel: settings.thinking as never } : {}),
+					}),
+				context,
+			);
+			await this.#setMeta("model", JSON.stringify(model));
+		}
+		await this.#installTools();
+	}
+
+	/** What chat may change now: nothing but powers going down while outside text is in play; only the user's models. */
+	#settingsRules(): UpdateRules {
+		const owner = this.#owner;
+		return {
+			outside: this.#outside(),
+			model: (provider, modelId) => {
+				const model = owner ? modelsFor({ env: this.env, accountId: owner }).getModel(provider, modelId) : undefined;
+				return model ? { thinking: getSupportedThinkingLevels(model) } : undefined;
+			},
+		};
+	}
+
+	// ─── Provenance ───────────────────────────────────────────────────────────
+
+	#outside(): boolean {
+		return isOutside(this.ctx.storage.sql, RUN_KEY);
+	}
+
+	/** Outside text entered the current run: the mark stays through steers, retries and runs that continue the work. */
+	#enterOutside(source: OutsideSource): Promise<void> {
+		return this.#write((sql) => markOutside(sql, RUN_KEY, source));
+	}
+
+	// ─── The computer ─────────────────────────────────────────────────────────
 
 	#computer() {
 		return this.env.COMPUTER.get(this.env.COMPUTER.idFromName(this.#owner!));
@@ -183,6 +294,9 @@ export class BotObject extends DurableObject<Env> {
 		}
 	}
 
+	/** This bot's OS user on the computer, computed when the tools are installed. */
+	#botUser = "";
+
 	#computerEnvFor(): RemoteExecutionEnv {
 		this.#computerEnv ??= (() => {
 			const botId = this.#id;
@@ -198,20 +312,18 @@ export class BotObject extends DurableObject<Env> {
 					return webSocketTransport(socket as unknown as Parameters<typeof webSocketTransport>[0]);
 				},
 			});
-			// The cwd is fixed when the env is made; the bot user is a stable hash of the bot id.
 			return new RemoteExecutionEnv({ connection, id: `computer:${this.#owner}`, cwd: `/home/${this.#botUser}` });
 		})();
 		return this.#computerEnv;
 	}
-
-	/** This bot's OS user on the computer, computed once at start. */
-	#botUser = "";
 
 	#computerAccess(): ComputerAccess {
 		const computer = () => this.#computer();
 		return {
 			browser: async (request) => {
 				await this.#holdComputer();
+				// A page the bot reads is outside text.
+				if (request.action === "snapshot" || request.action === "navigate") await this.#enterOutside("web");
 				return computer().browser(this.#id, request);
 			},
 			desktop: async (request) => {
@@ -225,30 +337,15 @@ export class BotObject extends DurableObject<Env> {
 		};
 	}
 
-	/**
-	 * The owner's change to the bot's settings (from the settings screen, never from chat): it may grant powers, such as
-	 * computer access. The tools are rebuilt to match.
-	 */
-	async updateSettings(principal: Principal, patch: Partial<BotSettings>): Promise<BotSettings> {
-		this.#check(principal, this.#id);
-		const current = this.#settings.read();
-		const next = { ...current, ...patch };
-		if (patch.instructions !== undefined && patch.instructions !== current.instructions)
-			next.instructionsVersion = current.instructionsVersion + 1;
-		this.#settings.write(next);
-		await this.#installTools();
-		return next;
-	}
-
 	// ─── Teaching by showing ──────────────────────────────────────────────────
 
-	startTeaching(principal: Principal, goal: string): { sessionId: string } {
+	startTeaching(principal: Principal, goal: string): Promise<{ sessionId: string }> {
 		this.#check(principal, this.#id);
 		return this.#teaching.startTeaching(goal);
 	}
 
 	/** One demonstrated step (the client sends the event, the screen's screenshot and the page snapshot). */
-	recordTeachStep(principal: Principal, sessionId: string, event: TeachEvent, screenshot?: string, snapshot?: string): boolean {
+	recordTeachStep(principal: Principal, sessionId: string, event: TeachEvent, screenshot?: string, snapshot?: string): Promise<boolean> {
 		this.#check(principal, this.#id);
 		return this.#teaching.recordStep(sessionId, event, screenshot, snapshot);
 	}
@@ -266,20 +363,16 @@ export class BotObject extends DurableObject<Env> {
 		this.#check(principal, this.#id);
 		const user = this.env.USER.get(this.env.USER.idFromName(this.#owner!));
 		const skill = await user.skillAdd({ ...draft, scope: "bot", botId: this.#id });
-		this.#teaching.discard(sessionId);
+		await this.#teaching.discard(sessionId);
 		return skill;
 	}
 
-	discardTeaching(principal: Principal, sessionId: string): void {
+	async discardTeaching(principal: Principal, sessionId: string): Promise<void> {
 		this.#check(principal, this.#id);
-		this.#teaching.discard(sessionId);
+		await this.#teaching.discard(sessionId);
 	}
 
-	#helper() {
-		const owner = this.#owner;
-		const model = this.#model;
-		return owner && model ? modelHelper(modelsFor({ env: this.env, accountId: owner }), model) : undefined;
-	}
+	// ─── Tools ────────────────────────────────────────────────────────────────
 
 	/** The bot's tools as installed now (its own and tool search). */
 	tools(): ToolRegistration[] {
@@ -310,7 +403,9 @@ export class BotObject extends DurableObject<Env> {
 				},
 			},
 			...(this.#settings.read().computerAccess ? { computer: this.#computerAccess() } : {}),
-			settingsChanged: async () => void (await this.#installTools()),
+			settingsChanged: (settings, before) => this.#settingsChanged(settings, before),
+			settingsRules: () => this.#settingsRules(),
+			provenance: { outside: () => this.#outside(), enter: (source) => this.#enterOutside(source) },
 			image: {
 				models,
 				available: await availableImageModels(models),
@@ -323,14 +418,20 @@ export class BotObject extends DurableObject<Env> {
 		return extensions;
 	}
 
+	// ─── Chat ─────────────────────────────────────────────────────────────────
+
+	/** The owner's message. While a run is going it steers that run; otherwise it starts one, clearing the outside mark. */
 	async submit(principal: Principal, text: string, requestId: string): Promise<void> {
 		this.#check(principal, this.#id);
 		const root = await this.#conversation();
+		const idle = !this.#harness.wake().active;
 		// Armed before the calls that can start work: `onWake` runs after their commits.
 		await this.#arm({ ...this.#harness.wake(), active: true });
+		// A new run the owner starts is the owner's; a steer stays in the run outside text may have touched.
+		if (idle) await this.#write((sql) => void sql.exec("DELETE FROM provenance WHERE run_id = ?", RUN_KEY));
 		// Recall lands just ahead of the input; a failure there never blocks the message.
 		await this.memory.recall(text, requestId).catch((error: unknown) => console.error("recall", error));
-		await root.submit({ type: "input", content: text, requestId }, context);
+		await root.submit({ type: "input", content: text, requestId, whenBusy: "steer" }, context);
 	}
 
 	async stop(principal: Principal): Promise<void> {
@@ -352,8 +453,51 @@ export class BotObject extends DurableObject<Env> {
 	}
 
 	/**
+	 * After a run: memory saves what it learned (unless it wrote notes itself), and consolidation runs once a day after
+	 * enough runs. Entries already processed are tracked, so each run is handled once even across restarts.
+	 */
+	#afterRun(): Promise<void> {
+		// One pass at a time; the guard is released only after it is stored, even when the pass ends at once.
+		if (this.#afterRunning) return this.#afterRunning;
+		const pass = this.#learnFromRun().catch((error: unknown) => console.error("after run", error));
+		this.#afterRunning = pass;
+		void pass.finally(() => {
+			if (this.#afterRunning === pass) this.#afterRunning = undefined;
+		});
+		return pass;
+	}
+
+	async #learnFromRun(): Promise<void> {
+			const helper = this.#helper();
+			if (!helper || this.#owner === undefined) return;
+			const root = await this.#conversation();
+			const through = Number(this.#meta("extracted_through") ?? -1);
+			const page = await root.entries({ minEntryId: (through + 1) as EntryId, order: "ascending" }, 500, undefined, context);
+			if (page.items.length === 0) return;
+			let wroteNotes = false;
+			const lines: string[] = [];
+			for (const entry of page.items) {
+				const message = entry.model?.[0] as { content?: unknown } | undefined;
+				const content = Array.isArray(message?.content) ? (message.content as { type: string; text?: string; name?: string }[]) : [];
+				if (AssistantEntry.is(entry) && content.some((block) => block.type === "toolCall" && block.name === "save_note")) wroteNotes = true;
+				const text =
+					typeof message?.content === "string" ? message.content : content.filter((b) => b.type === "text").map((b) => b.text).join("");
+				if (!text) continue;
+				const who = UserEntry.is(entry) ? "user" : AssistantEntry.is(entry) ? "assistant" : ToolResultEntry.is(entry) ? "tool" : undefined;
+				if (who) lines.push(`${who}: ${redactSecrets(text).slice(0, 4_000)}`);
+			}
+			await extractAfterRun({ notes: this.memory.notes, helper, transcript: lines.join("\n"), wroteNotes, outside: this.#outside() });
+			await this.#setMeta("extracted_through", String(Number(page.items.at(-1)!.id)));
+			await countRun(this.#write);
+			await dream({ sql: this.ctx.storage.sql, notes: this.memory.notes, helper, write: this.#write }, { minHours: 24, minRuns: 5 });
+	}
+
+	// ─── Actions and approvals ────────────────────────────────────────────────
+
+	/**
 	 * The owner's answer to an approval card. Allowing consumes the approval for the exact recorded action, once however
-	 * many devices answer, and only then delivers it: the action runs as its own step, not inside the conversation.
+	 * many devices answer; the action is then marked approved, published to the delivery queue and delivered. Until it
+	 * settles, the queue and this object's alarm keep delivering it.
 	 */
 	async answerApproval(principal: Principal, approvalId: string, decision: "allow" | "deny"): Promise<ConsumeResult> {
 		this.#check(principal, this.#id);
@@ -362,32 +506,56 @@ export class BotObject extends DurableObject<Env> {
 		const record = approval && getAction(sql, approval.actionId);
 		if (!approval || !record) return "revoked";
 		if (decision === "deny") {
-			denyApproval(sql, approvalId);
+			await this.#write((db) => denyApproval(db, approvalId));
 			return "revoked";
 		}
-		const result = consumeApproval(sql, approvalId, await digestOf(record.intent), this.#policyVersion);
-		if (result === "ok") await this.deliverAction(record.id);
+		const digest = await digestOf(record.intent);
+		const policyVersion = this.#policyVersion;
+		const result = await this.#write((db) => {
+			const consumed = consumeApproval(db, approvalId, digest, policyVersion);
+			if (consumed === "ok") markApproved(db, record.id);
+			return consumed;
+		});
+		if (result === "ok") {
+			await this.env.OUTBOUND.send({ botId: this.#id, actionId: record.id }).catch(() => undefined);
+			await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
+			await this.deliverAction(record.id).catch(() => undefined);
+		}
 		return result;
 	}
 
-	/** Delivers one recorded action through its adapter; the queue consumer calls this too. */
-	async deliverAction(actionId: string): Promise<ActionState> {
-		const record = getAction(this.ctx.storage.sql, actionId);
-		if (!record) return "failed";
-		const adapter = adapterFor(record.intent.tool);
-		if (!adapter) return record.state;
-		return dispatch(this.ctx.storage.sql, record, adapter);
+	/** Delivers one recorded action through its adapter, one delivery at a time per action; the queue calls this too. */
+	deliverAction(actionId: string): Promise<ActionState> {
+		const previous = this.#deliveries.get(actionId) ?? Promise.resolve("pending" as ActionState);
+		const next = previous
+			.catch(() => "pending" as ActionState)
+			.then(() => {
+				const record = getAction(this.ctx.storage.sql, actionId);
+				if (!record) return "failed" as ActionState;
+				const adapter = adapterFor(record.intent.tool);
+				if (!adapter) return record.state;
+				return dispatch(this.ctx.storage.sql, record, adapter, this.#write);
+			});
+		this.#deliveries.set(actionId, next);
+		void next.finally(() => {
+			if (this.#deliveries.get(actionId) === next) this.#deliveries.delete(actionId);
+		});
+		return next;
 	}
 
 	/** Bumped whenever the bot's approval settings change, revoking approvals granted under the old ones. */
 	get #policyVersion(): number {
-		const row = this.ctx.storage.sql.exec<{ value: string }>("SELECT value FROM bot_meta WHERE key = 'policy_version'").toArray()[0];
-		return row ? Number(row.value) : 1;
+		return Number(this.#meta("policy_version") ?? 1);
 	}
 
 	override async alarm(): Promise<void> {
 		await this.#arm({ ...this.#harness.wake(), active: true });
 		this.#harness.resume(); // due sleeps and work a lost instance left
+		// Approved actions not yet settled are delivered again (a neither adapter's unknown outcome never is).
+		const pending = deliveriesToResume(this.ctx.storage.sql);
+		for (const actionId of pending) await this.deliverAction(actionId).catch(() => undefined);
+		if (deliveriesToResume(this.ctx.storage.sql).some((id) => getAction(this.ctx.storage.sql, id)?.state === "pending"))
+			await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
 	}
 
 	// ─── Sockets ──────────────────────────────────────────────────────────────
@@ -410,19 +578,27 @@ export class BotObject extends DurableObject<Env> {
 			send({ type: "error", code: "bad_frame", message: error instanceof ProtocolError ? error.message : "bad frame" });
 			return;
 		}
-		// The first frame must be a ticket for this bot's owner; anything else closes the socket.
+		const refuse = () => {
+			send({ type: "error", code: "unauthorized", message: "unauthorized" });
+			socket.close(4401, "unauthorized");
+		};
+		// The first frame must be a ticket for this bot's owner, from a live session; anything else closes the socket.
 		if (!attachment.principal) {
 			const principal = frame.type === "auth" ? await verifyTicket(this.env, frame.ticket, "socket") : undefined;
 			try {
 				this.#check(principal, this.#id);
 			} catch {
-				send({ type: "error", code: "unauthorized", message: "unauthorized" });
-				socket.close(4401, "unauthorized");
-				return;
+				return refuse();
 			}
-			socket.serializeAttachment({ principal } satisfies Attachment);
+			socket.serializeAttachment({ principal, checkedAt: Date.now() } satisfies Attachment);
 			send({ type: "ready", accountId: principal!.accountId });
 			return;
+		}
+		// A revoked session ends its sockets: rechecked at most every 30 seconds.
+		if (Date.now() - (attachment.checkedAt ?? 0) > SESSION_RECHECK_MS) {
+			const live = attachment.principal.sessionId ? await sessionLive(this.env, attachment.principal.sessionId) : false;
+			if (!live) return refuse();
+			socket.serializeAttachment({ ...attachment, checkedAt: Date.now() } satisfies Attachment);
 		}
 		if (!("botId" in frame)) return;
 		try {
@@ -464,8 +640,9 @@ export class BotObject extends DurableObject<Env> {
 	/** Watches the conversation once per instance and sends each change to the subscribed sockets. */
 	#startLive(): Promise<LiveView> {
 		this.#live ??= (async () => {
-			const live = new LiveView();
-			const watch = await (await this.#conversation()).watch(context);
+			const root = await this.#conversation();
+			const live = new LiveView((query, limit, ctx) => root.entries(query, limit, undefined, ctx));
+			const watch = await root.watch(context);
 			live.update(watch.value);
 			watch.start(async (call) => {
 				if (call.kind !== "value") return;

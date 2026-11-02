@@ -1,11 +1,13 @@
 // search_history and read_history (spec section 6): old messages stay reachable after they leave the prompt. Results
 // are bounded excerpts with stable references ("<botId>:<entryId>"), newest first so later corrections come before what
 // they corrected. Every read checks that the reference is this bot's own message: a model-supplied id is not
-// authorization.
+// authorization. Secrets in old messages are redacted before indexing and in every excerpt.
 import type { Conversation, EntryId, EntryRecord } from "@knightcode/durable";
 import { AssistantEntry, defineTool, UserEntry } from "@knightcode/durable";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { num, obj, opt, str } from "@knightcode/schema";
+import { type HostWrite, immediateWrite } from "../bot/host-sql.ts";
+import { redactSecrets } from "./redact.ts";
 
 const context = BACKGROUND_CONTEXT;
 const SEARCH_LIMIT = 10;
@@ -43,7 +45,8 @@ function messageText(entry: EntryRecord): { role: "user" | "assistant"; text: st
 						.map((block) => block.text)
 						.join("")
 				: "";
-	return { role: entry.kind === UserEntry.kind ? "user" : "assistant", text, at: message.timestamp ?? 0 };
+	// Secrets never reach the index or an excerpt (spec section 13).
+	return { role: entry.kind === UserEntry.kind ? "user" : "assistant", text: redactSecrets(text), at: message.timestamp ?? 0 };
 }
 
 function excerpt(text: string, words: string[]): string {
@@ -59,9 +62,11 @@ export class HistoryIndex {
 	readonly #sql: SqlStorage;
 	readonly #botId: string;
 	readonly #conversation: () => Promise<Conversation>;
+	readonly #write: HostWrite;
 
-	constructor(sql: SqlStorage, botId: string, conversation: () => Promise<Conversation>) {
+	constructor(sql: SqlStorage, botId: string, conversation: () => Promise<Conversation>, write: HostWrite = immediateWrite(sql)) {
 		this.#sql = sql;
+		this.#write = write;
 		this.#botId = botId;
 		this.#conversation = conversation;
 		sql.exec("CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(entry UNINDEXED, role UNINDEXED, at UNINDEXED, text)");
@@ -75,19 +80,23 @@ export class HistoryIndex {
 		for (;;) {
 			const page = await root.entries({ minEntryId: (last + 1) as EntryId, order: "ascending" }, PAGE, undefined, context);
 			if (page.items.length === 0) return;
-			for (const entry of page.items) {
-				const message = messageText(entry);
-				if (message?.text)
-					this.#sql.exec(
-						"INSERT INTO history_fts (entry, role, at, text) VALUES (?, ?, ?, ?)",
-						Number(entry.id),
-						message.role,
-						message.at,
-						message.text,
-					);
-				last = Number(entry.id);
-			}
-			this.#sql.exec("INSERT INTO history_meta (id, indexed) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET indexed = excluded.indexed", last);
+			last = await this.#write((sql) => {
+				let newest = last;
+				for (const entry of page.items) {
+					const message = messageText(entry);
+					if (message?.text)
+						sql.exec(
+							"INSERT INTO history_fts (entry, role, at, text) VALUES (?, ?, ?, ?)",
+							Number(entry.id),
+							message.role,
+							message.at,
+							message.text,
+						);
+					newest = Number(entry.id);
+				}
+				sql.exec("INSERT INTO history_meta (id, indexed) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET indexed = excluded.indexed", newest);
+				return newest;
+			});
 			if (page.items.length < PAGE) return;
 		}
 	}

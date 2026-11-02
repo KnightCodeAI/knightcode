@@ -2,6 +2,7 @@
 // object's SQLite with an FTS5 index. Each write bumps the note's version, so recall can tell a corrected note from the
 // copy already in the prompt.
 import type { Note } from "@knightcode/bots-protocol";
+import { type HostWrite, immediateWrite } from "../bot/host-sql.ts";
 
 export type NoteType = Note["type"];
 
@@ -52,9 +53,11 @@ const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
 export class NotesStore {
 	readonly #sql: SqlStorage;
+	readonly #write: HostWrite;
 
-	constructor(sql: SqlStorage) {
+	constructor(sql: SqlStorage, write: HostWrite = immediateWrite(sql)) {
 		this.#sql = sql;
+		this.#write = write;
 		sql.exec(`CREATE TABLE IF NOT EXISTS notes (
 			name TEXT PRIMARY KEY,
 			description TEXT NOT NULL,
@@ -67,34 +70,42 @@ export class NotesStore {
 			updated_at INTEGER NOT NULL
 		)`);
 		sql.exec("CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(name, description, body)");
+		sql.exec("CREATE TABLE IF NOT EXISTS notes_meta (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)");
 		sql.exec(
 			"CREATE TABLE IF NOT EXISTS note_vectors (name TEXT PRIMARY KEY, version INTEGER NOT NULL, model TEXT NOT NULL, vector TEXT NOT NULL)",
 		);
 	}
 
-	/** Creates or replaces the note named `note.name`; `at` sets its time (imports, tests). */
-	write(note: NoteInput, at = Date.now()): StoredNote {
+	/**
+	 * Creates or replaces the note named `note.name`; `at` sets its time (imports, tests). Versions come from one
+	 * counter for the whole store, so a note deleted and written again never reuses a version still in a prompt.
+	 */
+	write(note: NoteInput, at = Date.now()): Promise<StoredNote> {
 		const name = oneLine(note.name);
-		if (!name) throw new Error("a note needs a name");
-		const previous = this.get(name);
-		this.#sql.exec(
-			`INSERT INTO notes (name, description, type, body, version, evergreen, outside, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-			 ON CONFLICT (name) DO UPDATE SET description = excluded.description, type = excluded.type, body = excluded.body,
-			   version = excluded.version, evergreen = excluded.evergreen, outside = excluded.outside, updated_at = excluded.updated_at`,
-			name,
-			oneLine(note.description),
-			note.type ?? "fact",
-			note.body,
-			(previous?.version ?? 0) + 1,
-			note.evergreen ? 1 : 0,
-			note.outside ? 1 : 0,
-			previous?.createdAt ?? at,
-			at,
-		);
-		this.#sql.exec("DELETE FROM notes_fts WHERE name = ?", name);
-		this.#sql.exec("INSERT INTO notes_fts (name, description, body) VALUES (?, ?, ?)", name, oneLine(note.description), note.body);
-		return this.get(name)!;
+		if (!name) return Promise.reject(new Error("a note needs a name"));
+		return this.#write((sql) => {
+			const previous = this.get(name);
+			sql.exec("INSERT OR IGNORE INTO notes_meta (id, version) VALUES (1, 0)");
+			const version = sql.exec<{ version: number }>("UPDATE notes_meta SET version = version + 1 WHERE id = 1 RETURNING version").one().version;
+			sql.exec(
+				`INSERT INTO notes (name, description, type, body, version, evergreen, outside, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT (name) DO UPDATE SET description = excluded.description, type = excluded.type, body = excluded.body,
+				   version = excluded.version, evergreen = excluded.evergreen, outside = excluded.outside, updated_at = excluded.updated_at`,
+				name,
+				oneLine(note.description),
+				note.type ?? "fact",
+				note.body,
+				version,
+				note.evergreen ? 1 : 0,
+				note.outside ? 1 : 0,
+				previous?.createdAt ?? at,
+				at,
+			);
+			sql.exec("DELETE FROM notes_fts WHERE name = ?", name);
+			sql.exec("INSERT INTO notes_fts (name, description, body) VALUES (?, ?, ?)", name, oneLine(note.description), note.body);
+			return this.get(name)!;
+		});
 	}
 
 	get(name: string): StoredNote | undefined {
@@ -106,10 +117,12 @@ export class NotesStore {
 		return this.#sql.exec<Row>("SELECT * FROM notes ORDER BY updated_at DESC").toArray().map(toNote);
 	}
 
-	delete(name: string): void {
-		this.#sql.exec("DELETE FROM notes WHERE name = ?", name);
-		this.#sql.exec("DELETE FROM notes_fts WHERE name = ?", name);
-		this.#sql.exec("DELETE FROM note_vectors WHERE name = ?", name);
+	delete(name: string): Promise<void> {
+		return this.#write((sql) => {
+			sql.exec("DELETE FROM notes WHERE name = ?", name);
+			sql.exec("DELETE FROM notes_fts WHERE name = ?", name);
+			sql.exec("DELETE FROM note_vectors WHERE name = ?", name);
+		});
 	}
 
 	/** The index the bot always sees: one line per note, name and description, never the content. */
@@ -137,13 +150,13 @@ export class NotesStore {
 		return row ? (JSON.parse(row.vector) as number[]) : undefined;
 	}
 
-	setVector(name: string, version: number, model: string, vector: number[]): void {
-		this.#sql.exec(
+	setVector(name: string, version: number, model: string, vector: number[]): Promise<void> {
+		return this.#write((sql) => void sql.exec(
 			"INSERT INTO note_vectors (name, version, model, vector) VALUES (?, ?, ?, ?) ON CONFLICT (name) DO UPDATE SET version = excluded.version, model = excluded.model, vector = excluded.vector",
 			name,
 			version,
 			model,
 			JSON.stringify(vector),
-		);
+		));
 	}
 }

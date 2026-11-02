@@ -1,7 +1,9 @@
 // Action records (spec section 24): every outward write is committed as a record before it is sent, with a stable id,
 // the intent, the approval that covers it and its delivery state. The state is set to `unknown` before each send, so a
 // crash or an error mid-send leaves the outcome unknown, and an action whose adapter can neither dedupe nor check is
-// never sent twice.
+// never sent twice. Callers serialize deliveries of one action (the bot object does), so a check and a send never
+// overlap another delivery of the same action.
+import { type HostWrite, immediateWrite } from "./host-sql.ts";
 
 /** One outward write a bot wants to make. */
 export interface ActionIntent {
@@ -48,6 +50,7 @@ export function createActionsTable(sql: SqlStorage): void {
 		state TEXT NOT NULL,
 		attempts INTEGER NOT NULL DEFAULT 0,
 		error TEXT,
+		approved_at INTEGER,
 		created_at INTEGER NOT NULL
 	)`);
 }
@@ -88,8 +91,20 @@ export function getAction(sql: SqlStorage, id: string): ActionRecord | undefined
 	return row ? toRecord(row) : undefined;
 }
 
-function setState(sql: SqlStorage, id: string, state: ActionState, error?: string): void {
-	sql.exec("UPDATE actions SET state = ?, error = ? WHERE id = ?", state, error ?? null, id);
+const setState = (write: HostWrite, id: string, state: ActionState, error?: string) =>
+	write((sql) => void sql.exec("UPDATE actions SET state = ?, error = ? WHERE id = ?", state, error ?? null, id));
+
+/** Marks an action as approved for delivery, so delivery resumes after a failure or an eviction until it settles. */
+export function markApproved(sql: SqlStorage, id: string): void {
+	sql.exec("UPDATE actions SET approved_at = ? WHERE id = ? AND approved_at IS NULL", Date.now(), id);
+}
+
+/** Approved actions not yet settled: pending (not sent yet, or a definite failure), or unknown and safe to resolve. */
+export function deliveriesToResume(sql: SqlStorage): string[] {
+	return sql
+		.exec<{ id: string }>("SELECT id FROM actions WHERE approved_at IS NOT NULL AND state IN ('pending', 'unknown') ORDER BY created_at")
+		.toArray()
+		.map((row) => row.id);
 }
 
 /**
@@ -97,7 +112,12 @@ function setState(sql: SqlStorage, id: string, state: ActionState, error?: strin
  * outcome is resolved by the adapter's kind: a reconcilable adapter checks first, an idempotent one sends again, and
  * `neither` never sends again (the bot reports it and asks).
  */
-export async function dispatch(sql: SqlStorage, record: ActionRecord, adapter: WriteAdapter): Promise<ActionState> {
+export async function dispatch(
+	sql: SqlStorage,
+	record: ActionRecord,
+	adapter: WriteAdapter,
+	write: HostWrite = immediateWrite(sql),
+): Promise<ActionState> {
 	const current = getAction(sql, record.id) ?? record;
 	if (current.state === "sent" || current.state === "confirmed" || current.state === "failed") return current.state;
 	if (current.state === "unknown") {
@@ -105,27 +125,27 @@ export async function dispatch(sql: SqlStorage, record: ActionRecord, adapter: W
 		if (adapter.kind === "reconcilable") {
 			const found = adapter.check ? await adapter.check(current).catch(() => "unknown" as const) : "unknown";
 			if (found === "done") {
-				setState(sql, current.id, "confirmed");
+				await setState(write, current.id, "confirmed");
 				return "confirmed";
 			}
 			if (found === "unknown") return "unknown";
 		}
 	}
 	// In flight the outcome is unknown: a crash from here on leaves it so.
-	sql.exec("UPDATE actions SET state = 'unknown', attempts = attempts + 1 WHERE id = ?", current.id);
+	await write((db) => void db.exec("UPDATE actions SET state = 'unknown', attempts = attempts + 1 WHERE id = ?", current.id));
 	let result: DeliveryResult;
 	try {
 		result = await adapter.send({ ...current, state: "unknown", attempts: current.attempts + 1 });
 	} catch (error) {
-		setState(sql, current.id, "unknown", error instanceof Error ? error.message : String(error));
+		await setState(write, current.id, "unknown", error instanceof Error ? error.message : String(error));
 		return "unknown";
 	}
 	if (result.ok) {
 		const state = result.confirmed ? "confirmed" : "sent";
-		setState(sql, current.id, state);
+		await setState(write, current.id, state);
 		return state;
 	}
 	// Definitely not sent: safe to try again.
-	setState(sql, current.id, "pending", result.error);
+	await setState(write, current.id, "pending", result.error);
 	return "pending";
 }

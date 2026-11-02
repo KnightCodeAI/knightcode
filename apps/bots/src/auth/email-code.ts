@@ -1,11 +1,22 @@
-// Sign-in with a one-time email code (spec section 4): six digits, good for ten minutes and five tries. Only a keyed
-// hash of the code is stored; a new request replaces the old code.
+// Sign-in with a one-time email code (spec section 4): six digits, good for ten minutes. Only a keyed hash of the code
+// is stored; a new request replaces the old code. At most one code a minute and five an hour per address, and five
+// wrong tries per hour whatever the number of codes: each try is counted atomically before it is compared.
 import type { Env } from "../env.ts";
 import { accountForIdentity } from "./accounts.ts";
 import { hmac } from "./util.ts";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
+const RESEND_AFTER_MS = 60_000;
+const SENDS_PER_HOUR = 5;
+const HOUR_MS = 60 * 60 * 1000;
+
+export class TooManyCodes extends Error {
+	constructor() {
+		super("too many codes; wait a little before asking again");
+		this.name = "TooManyCodes";
+	}
+}
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const normalize = (email: string) => email.trim().toLowerCase();
@@ -27,12 +38,24 @@ export async function sendEmailCode(env: Env, email: string): Promise<void> {
 	// The outbound mail binding arrives with the email channel (Task 3.5); without it no code could reach anyone.
 	if (!env.EMAIL) throw new Error("email sending is not set up");
 	const code = sixDigits();
-	await env.DB.prepare(
-		"INSERT INTO email_codes (email, code_hash, expires_at, attempts) VALUES (?, ?, ?, 0) " +
-			"ON CONFLICT (email) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0",
+	const now = Date.now();
+	// One statement decides and records the send: a fresh hour starts the counts over; otherwise it is refused when the
+	// last code is under a minute old or the hour's five are used. Attempts carry over within the hour.
+	const stored = await env.DB.prepare(
+		`INSERT INTO email_codes (email, code_hash, expires_at, attempts, sent_at, sends, window_start) VALUES (?1, ?2, ?3, 0, ?4, 1, ?4)
+		 ON CONFLICT (email) DO UPDATE SET
+		   code_hash = excluded.code_hash,
+		   expires_at = excluded.expires_at,
+		   attempts = CASE WHEN email_codes.window_start <= ?4 - ?5 THEN 0 ELSE email_codes.attempts END,
+		   sends = CASE WHEN email_codes.window_start <= ?4 - ?5 THEN 1 ELSE email_codes.sends + 1 END,
+		   window_start = CASE WHEN email_codes.window_start <= ?4 - ?5 THEN ?4 ELSE email_codes.window_start END,
+		   sent_at = ?4
+		 WHERE email_codes.sent_at <= ?4 - ?6 AND (email_codes.window_start <= ?4 - ?5 OR email_codes.sends < ?7)
+		 RETURNING email`,
 	)
-		.bind(address, await codeHash(env, address, code), Date.now() + CODE_TTL_MS)
-		.run();
+		.bind(address, await codeHash(env, address, code), now + CODE_TTL_MS, now, HOUR_MS, RESEND_AFTER_MS, SENDS_PER_HOUR)
+		.first<{ email: string }>();
+	if (!stored) throw new TooManyCodes();
 	await env.EMAIL.send({
 		to: address,
 		from: "KnightCode Bots <signin@bots.knightcode.dev>",
@@ -44,18 +67,15 @@ export async function sendEmailCode(env: Env, email: string): Promise<void> {
 /** The account the code signs into (created on first sign-in), or undefined for a wrong, used or expired code. */
 export async function verifyEmailCode(env: Env, email: string, code: string): Promise<string | undefined> {
 	const address = normalize(email);
-	const row = await env.DB.prepare("SELECT code_hash, expires_at, attempts FROM email_codes WHERE email = ?")
-		.bind(address)
-		.first<{ code_hash: string; expires_at: number; attempts: number }>();
+	if (!/^\d{6}$/.test(code)) return undefined;
+	// The try is counted before the code is compared, in one statement: concurrent guesses each use one of the five.
+	const row = await env.DB.prepare(
+		"UPDATE email_codes SET attempts = attempts + 1 WHERE email = ? AND attempts < ? AND expires_at > ? RETURNING code_hash",
+	)
+		.bind(address, MAX_ATTEMPTS, Date.now())
+		.first<{ code_hash: string }>();
 	if (!row) return undefined;
-	if (row.expires_at <= Date.now() || row.attempts >= MAX_ATTEMPTS) {
-		await env.DB.prepare("DELETE FROM email_codes WHERE email = ?").bind(address).run();
-		return undefined;
-	}
-	if (!/^\d{6}$/.test(code) || (await codeHash(env, address, code)) !== row.code_hash) {
-		await env.DB.prepare("UPDATE email_codes SET attempts = attempts + 1 WHERE email = ?").bind(address).run();
-		return undefined;
-	}
+	if ((await codeHash(env, address, code)) !== row.code_hash) return undefined;
 	// Spent before signing in, so a code works once even when two requests race.
 	const spent = await env.DB.prepare("DELETE FROM email_codes WHERE email = ? AND code_hash = ?")
 		.bind(address, row.code_hash)

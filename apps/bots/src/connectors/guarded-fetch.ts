@@ -4,7 +4,19 @@
 // (Authorization, cookies, API key headers) go only to the origin they were issued for: a redirect to another origin
 // drops them. Workers cannot pin a connection to the checked address, but their egress never reaches private
 // networks, which closes the rebinding gap the check leaves.
-import { isPublicHost } from "../tools/web-fetch.ts";
+
+/** Hosts a bot may not reach: loopback, private and link-local ranges, and local names. */
+export function isPublicHost(hostname: string): boolean {
+	const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+	if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) return false;
+	const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(host);
+	if (v4) {
+		const [a, b] = [Number(v4[1]), Number(v4[2])];
+		return !(a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224);
+	}
+	if (host.includes(":")) return !(host === "::1" || host === "::" || /^f[cd]/.test(host) || /^fe[89ab]/.test(host) || host.startsWith("::ffff:"));
+	return host.includes(".");
+}
 
 export interface FetchPolicy {
 	/** host or host:port the user allowed to be private (none by default). */

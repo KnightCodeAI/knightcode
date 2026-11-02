@@ -1,5 +1,6 @@
 // Consolidation, "dream" (spec section 6): a daily pass, once enough has changed, that converts relative dates to
 // absolute ones, merges duplicates, deletes contradicted notes and keeps the index short.
+import { type HostWrite, immediateWrite } from "../bot/host-sql.ts";
 import type { NotesStore, StoredNote } from "./notes.ts";
 import type { Helper } from "./recall.ts";
 
@@ -11,8 +12,8 @@ export function createDreamTable(sql: SqlStorage): void {
 }
 
 /** Counts a finished run toward the next consolidation. */
-export function countRun(sql: SqlStorage): void {
-	sql.exec("UPDATE dream_state SET runs = runs + 1 WHERE id = 1");
+export function countRun(write: HostWrite): Promise<void> {
+	return write((sql) => void sql.exec("UPDATE dream_state SET runs = runs + 1 WHERE id = 1"));
 }
 
 const isoDay = (time: number) => new Date(time).toISOString().slice(0, 10);
@@ -39,7 +40,7 @@ function parsePlan(reply: string): Plan {
 }
 
 export async function dream(
-	bot: { sql: SqlStorage; notes: NotesStore; helper: Helper },
+	bot: { sql: SqlStorage; notes: NotesStore; helper: Helper; write?: HostWrite },
 	options: { minHours: number; minRuns: number; now?: number },
 ): Promise<{ ran: boolean; deleted: string[]; merged: string[] }> {
 	const now = options.now ?? Date.now();
@@ -51,14 +52,14 @@ export async function dream(
 	// Relative dates first, so the model compares like with like.
 	for (const note of bot.notes.list()) {
 		const body = absoluteDates(note.body, note.updatedAt);
-		if (body !== note.body) bot.notes.write({ ...note, body }, note.updatedAt);
+		if (body !== note.body) await bot.notes.write({ ...note, body }, note.updatedAt);
 	}
 	// Exact duplicates keep the newest copy.
 	const seen = new Map<string, StoredNote>();
 	for (const note of bot.notes.list()) {
 		const key = note.body.trim().toLowerCase();
 		if (seen.has(key)) {
-			bot.notes.delete(note.name);
+			await bot.notes.delete(note.name);
 			deleted.push(note.name);
 		} else seen.set(key, note);
 	}
@@ -76,16 +77,16 @@ export async function dream(
 			const from = (merge.from ?? []).filter((name) => names.has(name));
 			if (from.length === 0 || typeof merge.name !== "string" || typeof merge.body !== "string") continue;
 			const newest = Math.max(...from.map((name) => bot.notes.get(name)!.updatedAt));
-			for (const name of from) if (name !== merge.name) bot.notes.delete(name);
-			bot.notes.write({ name: merge.name, description: merge.description ?? merge.name, body: merge.body }, newest);
+			for (const name of from) if (name !== merge.name) await bot.notes.delete(name);
+			await bot.notes.write({ name: merge.name, description: merge.description ?? merge.name, body: merge.body }, newest);
 			merged.push(merge.name);
 		}
 		for (const name of plan.delete ?? [])
 			if (names.has(name) && bot.notes.get(name)) {
-				bot.notes.delete(name);
+				await bot.notes.delete(name);
 				deleted.push(name);
 			}
 	}
-	bot.sql.exec("UPDATE dream_state SET last_at = ?, runs = 0 WHERE id = 1", now);
+	await (bot.write ?? immediateWrite(bot.sql))((sql) => void sql.exec("UPDATE dream_state SET last_at = ?, runs = 0 WHERE id = 1", now));
 	return { ran: true, deleted, merged };
 }

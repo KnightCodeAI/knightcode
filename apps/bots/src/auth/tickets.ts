@@ -1,7 +1,7 @@
 // Connection tickets (spec section 15): short-lived, signed and scoped. The desktop app's main process trades its
 // session for one, and a WebSocket presents one in its first frame. Stateless: the signature and expiry are the check.
 import type { Env } from "../env.ts";
-import type { Principal } from "./session.ts";
+import { type Principal, sessionLive } from "./session.ts";
 import { base64url, fromBase64url, hmac, hmacVerify, randomToken } from "./util.ts";
 
 export type TicketScope = "socket" | "screen";
@@ -36,5 +36,7 @@ export async function verifyTicket(env: Env, ticket: string, scope?: TicketScope
 	}
 	if (!(body.expiresAt > Date.now())) return undefined;
 	if (scope && body.scope !== scope) return undefined;
+	// A ticket lives no longer than the session it was issued from.
+	if (!body.principal.sessionId || !(await sessionLive(env, body.principal.sessionId))) return undefined;
 	return body.principal;
 }

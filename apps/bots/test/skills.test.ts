@@ -66,10 +66,10 @@ it("drafts from a demonstration with the steps and no protected input, and delet
 });
 
 it("never stores protected input, even if the client sends its value", async () => {
-	await runInDurableObject(env.BOT.get(env.BOT.idFromName("teach-raw")), (_instance, state) => {
+	await runInDurableObject(env.BOT.get(env.BOT.idFromName("teach-raw")), async (_instance, state) => {
 		const teaching = new Teaching(state.storage.sql);
-		const { sessionId } = teaching.startTeaching("sign in");
-		teaching.recordStep(sessionId, { kind: "protected-input", target: "Password", value: "hunter2" } as never);
+		const { sessionId } = await teaching.startTeaching("sign in");
+		await teaching.recordStep(sessionId, { kind: "protected-input", target: "Password", value: "hunter2" } as never);
 		const stored = state.storage.sql.exec<{ event: string }>("SELECT event FROM teach_steps WHERE session_id = ?", sessionId).toArray();
 		expect(stored).toEqual([]);
 	});

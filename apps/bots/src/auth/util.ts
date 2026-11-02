@@ -61,6 +61,15 @@ export function cookie(name: string, value: string, options: { path?: string; ma
 
 /** A path on this site to send the user back to: anything else (another origin, `//host`) becomes "/". */
 export function safeNext(next: string | null | undefined): string {
-	if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return "/";
-	return next;
+	if (!next || !next.startsWith("/")) return "/";
+	// Checked after the URL parser has normalized it (tabs and newlines removed, backslashes turned to slashes), as a
+	// browser would read it: anything that leaves this origin goes home instead.
+	const base = "https://bots.invalid";
+	let url: URL;
+	try {
+		url = new URL(next, base);
+	} catch {
+		return "/";
+	}
+	return url.origin === base ? `${url.pathname}${url.search}${url.hash}` : "/";
 }
