@@ -19,4 +19,5 @@ export default defineConfig({
 	resolve: {
 		alias: [{ find: /^@knightcode\/telemetry$/, replacement: telemetrySrcIndex }],
 	},
+	ssr: { resolve: { conditions: ["source"] } },
 });

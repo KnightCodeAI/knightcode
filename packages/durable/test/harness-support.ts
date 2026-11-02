@@ -7,7 +7,7 @@ import type {
 	ToolResultMessage,
 	UserMessage,
 } from "@knightcode/ai";
-import { createModels, Type } from "@knightcode/ai";
+import { createModels } from "@knightcode/ai";
 import {
 	type AnyTask,
 	createRegistry,
@@ -23,10 +23,11 @@ import {
 	section,
 	type ToolRegistration,
 } from "@knightcode/durable";
+import { obj } from "@knightcode/schema";
 import { context } from "./session-support.ts";
 
 export function tool(name: string, description = `${name} tool`): ToolRegistration {
-	return defineTool({ name, description, parameters: Type.Object({}), execute: async () => ({ output: [] }) });
+	return defineTool({ name, description, parameters: obj({}), execute: async () => ({ output: [] }) });
 }
 
 /** Open a Harness with a fresh registry holding the named tools. */

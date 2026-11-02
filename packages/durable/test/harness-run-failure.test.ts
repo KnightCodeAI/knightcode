@@ -1,5 +1,6 @@
 // `knightcode.live.runFailure`: why the newest run ended without an answer, as state a renderer shows.
-import { type FauxResponseStep, fauxAssistantMessage, fauxText, fauxToolCall, Type } from "@knightcode/ai";
+
+import { type FauxResponseStep, fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import {
 	type AfterFailedRun,
 	type Conversation,
@@ -10,6 +11,7 @@ import {
 	MemoryStorage,
 	type RunFailure,
 } from "@knightcode/durable";
+import { obj } from "@knightcode/schema";
 import { describe, expect, it } from "vitest";
 import { chatSetup, openChat, unanswered } from "./chat-support.ts";
 import { addTool } from "./harness-support.ts";
@@ -104,7 +106,7 @@ describe("knightcode.live.runFailure", () => {
 			defineTool({
 				name: "hold",
 				description: "Waits",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async () => {
 					started.resolve();
 					await gate.promise;

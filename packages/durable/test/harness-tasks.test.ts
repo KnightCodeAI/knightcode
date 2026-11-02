@@ -1,6 +1,6 @@
 import type { Context } from "@knightcode/chord";
 import { withAbortSignal, withCancel } from "@knightcode/chord/context";
-import { createModels, Type } from "@knightcode/ai";
+import { createModels } from "@knightcode/ai";
 import {
 	type CommitPublication,
 	type Conversation,
@@ -18,6 +18,7 @@ import {
 	type TaskId,
 	type TaskRuntime,
 } from "@knightcode/durable";
+import { obj } from "@knightcode/schema";
 import { InMemoryTelemetryContext } from "@knightcode/telemetry";
 import { describe, expect, it } from "vitest";
 import type { SessionImpl } from "../src/session/session.ts";
@@ -424,7 +425,7 @@ describe("task phases", () => {
 			defineTool({
 				name: "late",
 				description: "late",
-				parameters: Type.Object({}),
+				parameters: obj({}),
 				execute: async () => ({}),
 			}),
 		);

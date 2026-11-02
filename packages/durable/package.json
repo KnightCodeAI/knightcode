@@ -36,7 +36,7 @@
     "@knightcode/telemetry": "workspace:*",
     "@silvia-odwyer/photon": "0.3.3",
     "diff": "8.0.4",
-    "typebox": "1.3.27"
+    "@knightcode/schema": "workspace:*"
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.6"

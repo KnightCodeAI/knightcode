@@ -1,4 +1,3 @@
-import { Type } from "@knightcode/ai";
 import {
 	type AgentState,
 	CompactionTask,
@@ -15,6 +14,7 @@ import {
 	wrapSection,
 	wrapTool,
 } from "@knightcode/durable";
+import { obj } from "@knightcode/schema";
 import { describe, expect, it } from "vitest";
 import { agentHooks, resolveAgent, resolveSettings } from "../src/harness/agent.ts";
 import { context } from "./session-support.ts";
@@ -25,7 +25,7 @@ function tool(name: string, extra: Partial<AppTool> = {}): AppTool {
 	return {
 		name,
 		description: `${name} tool`,
-		parameters: Type.Object({}),
+		parameters: obj({}),
 		execute: async () => ({ output: [] }),
 		...extra,
 	};

@@ -1,4 +1,4 @@
-import { createModels, fauxAssistantMessage, Type } from "@knightcode/ai";
+import { createModels, fauxAssistantMessage } from "@knightcode/ai";
 import {
 	type AnyTask,
 	createRegistry,
@@ -14,6 +14,7 @@ import {
 	section,
 	wrapTool,
 } from "@knightcode/durable";
+import { obj } from "@knightcode/schema";
 import { describe, expect, it } from "vitest";
 import { chatSetup } from "./chat-support.ts";
 import { ControlledStorage, context } from "./session-support.ts";
@@ -186,7 +187,7 @@ describe("reports", () => {
 		const echo = defineTool({
 			name: "echo",
 			description: "echo",
-			parameters: Type.Object({}),
+			parameters: obj({}),
 			execute: async () => ({}),
 		});
 		registry.install(defineExtension({ name: "tools", tools: [echo] }));
