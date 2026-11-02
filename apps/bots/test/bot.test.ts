@@ -36,6 +36,26 @@ it("resumes work after eviction with no client connected", async () => {
 	await runAlarm("b1");
 	expect(await lastAssistantText("b1")).toBe("done");
 });
+it("resumes after eviction during a retry backoff", async () => {
+	setModelsFactory(fakeTo([{ error: "503 Service Unavailable: overloaded" }, { text: "recovered" }]));
+	await botStub("b1").submit(principal, "go", "r-backoff");
+	// The failed attempt sleeps until its retry, with the object's alarm armed for it.
+	const alarm = await backoffAlarm("b1");
+	expect(alarm).toBeGreaterThan(Date.now());
+	await evict("b1");
+	expect(await lastAssistantText("b1")).toBe("recovered");
+}, 20_000);
+it("resumes work admitted just before an eviction", async () => {
+	setModelsFactory(fakeTo([{ text: "admitted" }]));
+	await runInDurableObject(botStub("b1"), async (instance, state) => {
+		await (instance as unknown as BotObject).submit(principal, "go", "r-admitted");
+		// Evicted before the harness's wake report could land: the alarm armed before submitting still stands.
+		expect(await state.storage.getAlarm()).not.toBeNull();
+		state.abort("evicted");
+	}).catch(() => undefined);
+	await runAlarm("b1");
+	expect(await lastAssistantText("b1")).toBe("admitted");
+});
 it("refuses another account's socket and RPC", async () => {
 	await expect(openSocket("b1", undefined, otherAccountTicket())).rejects.toThrow(/unauthorized/);
 	// Called on the instance: the test pool's RPC wrapper reports any rejected call as unhandled.
@@ -58,6 +78,15 @@ const otherAccountTicket = () => issueTicket(env, other, "socket");
 /** Resets the object as an eviction would: the next call starts a fresh instance over the same storage. */
 async function evict(botId: string): Promise<void> {
 	await runInDurableObject(botStub(botId), (_instance, state) => state.abort("evicted")).catch(() => undefined);
+}
+
+/** The object's alarm once it is set for a retry backoff: seconds ahead, not the minute-long heartbeat. */
+async function backoffAlarm(botId: string): Promise<number> {
+	for (const deadline = Date.now() + 3_000; Date.now() < deadline; await new Promise((resolve) => setTimeout(resolve, 20))) {
+		const at = await runInDurableObject(botStub(botId), (_instance, state) => state.storage.getAlarm());
+		if (at !== null && at > Date.now() + 500 && at < Date.now() + 10_000) return at;
+	}
+	throw new Error("no backoff alarm");
 }
 
 async function runAlarm(botId: string): Promise<void> {
