@@ -2,6 +2,7 @@ import type { ToolDefinition } from "@knightcodeai/cli";
 import { DEFAULT_MAX_BYTES, formatSize, truncateHead } from "@knightcodeai/cli/core/tools/truncate";
 import { RE2JS } from "re2js";
 import { type Static, Type } from "typebox";
+import { fetch as undiciFetch, getGlobalDispatcher, type Response as UndiciResponse } from "undici";
 import { assertPublicUrl, type GuardOptions, type PublicUrl } from "./guard.ts";
 import { extractTitle, htmlToMarkdown, isHtmlContentType, isTextContentType, pickMainContent } from "./html.ts";
 import { webfetchRenderers } from "./render.ts";
@@ -47,13 +48,15 @@ export function combineSignals(signal: AbortSignal | undefined, timeoutMs: numbe
 	return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
+type FetchResponse = Response | UndiciResponse;
+
 /** Throws `message` after releasing a response we will not read, so its connection goes back to the pool. */
-export async function discard(response: Response, message: string): Promise<never> {
+export async function discard(response: FetchResponse, message: string): Promise<never> {
 	await response.body?.cancel();
 	throw new Error(message);
 }
 
-export async function readBody(response: Response, maxBytes: number): Promise<Uint8Array> {
+export async function readBody(response: FetchResponse, maxBytes: number): Promise<Uint8Array> {
 	const reader = response.body?.getReader();
 	if (!reader) return new Uint8Array();
 	const chunks: Uint8Array[] = [];
@@ -90,17 +93,28 @@ async function follow(
 	start: PublicUrl,
 	options: FetchOptions,
 	signal: AbortSignal,
-): Promise<{ url: URL; response: Response }> {
-	const doFetch = options.fetch ?? fetch;
+): Promise<{ url: URL; response: FetchResponse }> {
 	let target = start;
 	for (let hop = 0; ; hop++) {
-		// The connection goes to the checked address; Bun takes the TLS server name and the
-		// certificate identity from Host, so the request still verifies as target.url.hostname.
-		const response = await doFetch(target.connect, {
-			redirect: "manual",
+		const host = target.url.host;
+		const init = {
+			redirect: "manual" as const,
 			signal,
-			headers: { "User-Agent": USER_AGENT, Accept: ACCEPT, Host: target.url.host },
-		});
+			headers: { "User-Agent": USER_AGENT, Accept: ACCEPT, Host: host },
+		};
+		const response = options.fetch
+			? await options.fetch(target.connect, init)
+			: await undiciFetch(target.connect, {
+					...init,
+					// Bun preserves Host itself. Node fetch strips it, so restore it at dispatch:
+					// TLS verifies the original name while the socket/proxy targets the checked IP.
+					dispatcher: process.versions.bun
+						? undefined
+						: getGlobalDispatcher().compose(
+								(dispatch) => (request, handler) =>
+									dispatch({ ...request, headers: { ...request.headers, host } }, handler),
+							),
+				});
 		const location = response.headers.get("location");
 		if (!REDIRECT_STATUSES.has(response.status) || !location) return { url: target.url, response };
 		await response.body?.cancel();
