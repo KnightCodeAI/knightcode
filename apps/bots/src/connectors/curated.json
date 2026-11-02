@@ -1,0 +1,83 @@
+[
+	{
+		"id": "github",
+		"name": "GitHub",
+		"maker": "GitHub",
+		"category": "developer",
+		"icon": "https://github.com/favicon.ico",
+		"description": "Repositories, issues, pull requests and code search.",
+		"url": "https://api.githubcopilot.com/mcp/",
+		"auth": "oauth"
+	},
+	{
+		"id": "linear",
+		"name": "Linear",
+		"maker": "Linear",
+		"category": "developer",
+		"icon": "https://linear.app/favicon.ico",
+		"description": "Issues, projects and cycles.",
+		"url": "https://mcp.linear.app/mcp",
+		"auth": "oauth"
+	},
+	{
+		"id": "sentry",
+		"name": "Sentry",
+		"maker": "Sentry",
+		"category": "developer",
+		"icon": "https://sentry.io/favicon.ico",
+		"description": "Errors, issues and releases.",
+		"url": "https://mcp.sentry.dev/mcp",
+		"auth": "oauth"
+	},
+	{
+		"id": "notion",
+		"name": "Notion",
+		"maker": "Notion",
+		"category": "productivity",
+		"icon": "https://www.notion.so/images/favicon.ico",
+		"description": "Pages, databases and comments.",
+		"url": "https://mcp.notion.com/mcp",
+		"auth": "oauth"
+	},
+	{
+		"id": "atlassian",
+		"name": "Jira and Confluence",
+		"maker": "Atlassian",
+		"category": "productivity",
+		"icon": "https://www.atlassian.com/favicon.ico",
+		"description": "Jira issues and Confluence pages.",
+		"url": "https://mcp.atlassian.com/v1/sse",
+		"auth": "oauth"
+	},
+	{
+		"id": "asana",
+		"name": "Asana",
+		"maker": "Asana",
+		"category": "productivity",
+		"icon": "https://asana.com/favicon.ico",
+		"description": "Tasks, projects and goals.",
+		"url": "https://mcp.asana.com/sse",
+		"auth": "oauth"
+	},
+	{
+		"id": "stripe",
+		"name": "Stripe",
+		"maker": "Stripe",
+		"category": "finance",
+		"icon": "https://stripe.com/favicon.ico",
+		"description": "Customers, payments, invoices and subscriptions.",
+		"url": "https://mcp.stripe.com",
+		"auth": "oauth",
+		"usageNote": "Never refund, cancel or change prices without the owner saying so in this chat."
+	},
+	{
+		"id": "intercom",
+		"name": "Intercom",
+		"maker": "Intercom",
+		"category": "support",
+		"icon": "https://www.intercom.com/favicon.ico",
+		"description": "Conversations, contacts and help articles.",
+		"url": "https://mcp.intercom.com/sse",
+		"auth": "oauth"
+	}
+]

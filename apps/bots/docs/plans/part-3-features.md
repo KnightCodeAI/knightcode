@@ -118,7 +118,7 @@ git commit -m "feat(bots): add the persistent per-user computer"
     approvals; MCP App panels served from the sandbox origin with a strict
     content security policy.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/connectors.test.ts
@@ -140,10 +140,10 @@ it("connects a remote MCP server through the emulator and calls a tool", async (
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/connectors.test.ts`)
-- [ ] **Step 3: Implement the connector modules and the Composio emulator**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/connectors.test.ts`)
+- [x] **Step 3: Implement the connector modules and the Composio emulator**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/connectors apps/bots/test/emulators/composio.ts apps/bots/test/connectors.test.ts
