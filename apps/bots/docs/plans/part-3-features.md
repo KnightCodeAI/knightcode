@@ -396,7 +396,7 @@ git commit -m "feat(bots): add vault tools, 1Password, agent payments and bank d
   subscription sign-in sit behind flags that stay off until their human
   tasks are settled; API keys always work.
 
-- [ ] **Step 1: Write the failing tests**: connecting a provider to the
+- [x] **Step 1: Write the failing tests**: connecting a provider to the
   cloud leaves the desktop's local credential store byte-identical; the
   enrollment token works once and expires after 10 minutes; the egress proxy
   refuses `127.0.0.1`, `192.168.1.10` and `169.254.169.254` and allows a
@@ -404,11 +404,11 @@ git commit -m "feat(bots): add vault tools, 1Password, agent payments and bank d
   falling back; a command on the user's computer asks once, then runs under
   "Allow on this computer"; the bot is told the computer is offline when the
   app is closed.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run` in `apps/desktop` for `bots-link`; `bunx vitest --run test/desktop-link.test.ts` in `apps/bots`)
-- [ ] **Step 3: Implement the desktop link modules** (main process only;
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run` in `apps/desktop` for `bots-link`; `bunx vitest --run test/desktop-link.test.ts` in `apps/bots`)
+- [x] **Step 3: Implement the desktop link modules** (main process only;
   the coding harness and app server are untouched)
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop/src/main/bots apps/desktop/test/bots-link.test.ts apps/bots/src/desktop apps/bots/src/computer/tailscale.ts apps/bots/test/desktop-link.test.ts

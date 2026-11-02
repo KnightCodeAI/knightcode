@@ -13,6 +13,7 @@ import type { Balance, MeteredKind, Reservation } from "./balance.ts";
 import { createCredentialsTable, SealedCredentialStore } from "./credentials.ts";
 import { beginEnrollment, createEnrollmentTable, spendEnrollment } from "./enrollment.ts";
 import { type BankAccount, linkBank, PlaidClient } from "../finance/plaid.ts";
+import { DesktopLink, type ExecResult } from "../desktop/link.ts";
 import { Inbox } from "../inbox/inbox.ts";
 import type { Purchase } from "../payments/link.ts";
 import { checkLimits, createSpendTables, recordPurchase, setLimit } from "../payments/spend-approvals.ts";
@@ -42,10 +43,12 @@ export class UserObject extends DurableObject<Env> {
 	#inbox: Inbox | undefined;
 	#dataKey: Promise<CryptoKey> | undefined;
 	#credentials: SealedCredentialStore | undefined;
+	readonly #desktop: DesktopLink;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 		this.#sql = ctx.storage.sql;
+		this.#desktop = new DesktopLink(ctx, env, () => this.#accountId);
 		ctx.blockConcurrencyWhile(async () => {
 			this.#sql.exec("CREATE TABLE IF NOT EXISTS data_key (id INTEGER PRIMARY KEY CHECK (id = 1), wrapped TEXT NOT NULL)");
 			createVaultTable(this.#sql);
@@ -61,6 +64,32 @@ export class UserObject extends DurableObject<Env> {
 			if (this.#sql.exec("SELECT 1 FROM journal_outbox LIMIT 1").toArray().length > 0)
 				await ctx.storage.setAlarm(Date.now() + JOURNAL_RETRY_MS);
 		});
+	}
+
+	// ─── The desktop link ─────────────────────────────────────────────────────
+
+	/** The desktop app's outbound socket; its first frame must be a ticket for this account. */
+	override async fetch(request: Request): Promise<Response> {
+		if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return new Response(null, { status: 426 });
+		return this.#desktop.accept();
+	}
+	override async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
+		await this.#desktop.message(socket, message);
+	}
+	override webSocketClose(socket: WebSocket, code: number): void {
+		try {
+			socket.close(code, "closed");
+		} catch {
+			// Already closed.
+		}
+		this.#desktop.closed();
+	}
+	desktopOnline(): boolean {
+		return this.#desktop.online();
+	}
+	/** One command on the owner's computer; the desktop asks the owner first when it should. */
+	desktopExec(botId: string, session: string, command: string): Promise<ExecResult> {
+		return this.#desktop.exec({ botId, session, command });
 	}
 
 	/** The account this object belongs to (its name). */

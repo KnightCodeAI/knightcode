@@ -621,6 +621,7 @@ export class BotObject extends DurableObject<Env> {
 				}),
 				...(paymentsAvailable(this.env, this.#country) ? this.#paymentTools() : []),
 				...(financeAvailable(this.#country) ? this.#financeTools() : []),
+				this.#myComputerTool(),
 			],
 			image: {
 				models,
@@ -1069,6 +1070,26 @@ export class BotObject extends DurableObject<Env> {
 		];
 	}
 
+	/** A session on the owner's own computer: one per run, so the desktop asks again on the next run. */
+	#computerSession: string | undefined;
+
+	/** Commands on the owner's own computer, through the desktop link. */
+	#myComputerTool(): ToolRegistration {
+		return defineTool({
+			name: "run_on_my_computer",
+			description:
+				"Run a shell command on the owner's own computer through the KnightCode desktop app. The owner is asked before the first command; it fails when the computer is offline.",
+			deferred: true,
+			parameters: obj({ command: str() }),
+			execute: async (args) => {
+				this.#computerSession ??= crypto.randomUUID();
+				const result = await this.#user().desktopExec(this.#id, this.#computerSession, args.command);
+				const text = result.ok ? `exit ${result.exitCode}\n${redactSecrets(result.output).slice(0, 20_000)}` : result.error;
+				return { output: [{ type: "text" as const, text }], ...(result.ok && result.exitCode === 0 ? {} : { isError: true }) };
+			},
+		}) as ToolRegistration;
+	}
+
 	/** Read-only bank data, before opening a bank's website. */
 	#financeTools(): ToolRegistration[] {
 		return [
@@ -1212,6 +1233,7 @@ export class BotObject extends DurableObject<Env> {
 	 * enough runs. Entries already processed are tracked, so each run is handled once even across restarts.
 	 */
 	#afterRun(): Promise<void> {
+		this.#computerSession = undefined;
 		// One pass at a time; the guard is released only after it is stored, even when the pass ends at once.
 		if (this.#afterRunning) return this.#afterRunning;
 		const pass = this.#learnFromRun().catch((error: unknown) => console.error("after run", error));

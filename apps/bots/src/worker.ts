@@ -245,6 +245,10 @@ export default {
 			if (!grant) return json({ error: "expired" }, 403);
 			return env.COMPUTER.get(env.COMPUTER.idFromName(grant.accountId)).fetch(request);
 		}
+		// The desktop app's computer link: the account's user object checks the ticket in its first frame.
+		const desktop = /^\/api\/desktop\/([^/]+)\/link$/.exec(pathname);
+		if (desktop && request.headers.get("upgrade")?.toLowerCase() === "websocket")
+			return env.USER.get(env.USER.idFromName(decodeURIComponent(desktop[1]!))).fetch(request);
 		// A bot's live socket: the bot object checks the ticket in its first frame.
 		const socket = /^\/api\/bots\/([^/]+)\/socket$/.exec(pathname);
 		if (socket && request.headers.get("upgrade")?.toLowerCase() === "websocket")
