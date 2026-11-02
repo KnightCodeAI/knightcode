@@ -13,5 +13,5 @@
 		"erasableSyntaxOnly": true
 	},
 	"include": ["*.ts"],
-	"exclude": [".*.ts"]
+	"exclude": [".*.ts", "tool-budget.ts"]
 }

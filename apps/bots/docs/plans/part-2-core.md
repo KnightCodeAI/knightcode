@@ -496,7 +496,7 @@ git commit -m "feat(bots): add bot memory, recall, consolidation and history sea
   exceed 6 KB; the bot's knowledge files (Task 2.4's `listFiles`) listed in
   its context by name and readable through a `read_knowledge` tool.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/tools.test.ts
@@ -512,10 +512,10 @@ it("hides image generation without an image model", async () => {
 });
 ```
 
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/tools.test.ts`)
-- [ ] **Step 3: Implement the tools in the listed files**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/tools.test.ts`)
+- [x] **Step 3: Implement the tools in the listed files**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/tools apps/bots/scripts/tool-budget.ts apps/bots/test/tools.test.ts

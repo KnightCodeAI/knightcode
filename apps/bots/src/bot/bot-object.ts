@@ -3,7 +3,7 @@
 // bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner.
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { decodeFrame, encodeFrame, ProtocolError, type ServerFrame } from "@knightcode/bots-protocol";
-import { type Conversation, createRegistry, Harness, type Wake } from "@knightcode/durable";
+import { type Conversation, createRegistry, type Extension, Harness, type Registry, type ToolRegistration, type Wake } from "@knightcode/durable";
 import { openDurableObjectSqliteStorage } from "@knightcode/durable/storage/sqlite/cloudflare";
 import { DurableObject } from "cloudflare:workers";
 import type { Principal } from "../auth/session.ts";
@@ -14,6 +14,10 @@ import { type ActionState, createActionsTable, dispatch, getAction } from "./act
 import { consumeApproval, type ConsumeResult, createApprovalsTable, denyApproval, digestOf, getApproval } from "./approvals.ts";
 import { BotMemory } from "../memory/memory.ts";
 import { modelHelper } from "../memory/recall.ts";
+import { botExtensions } from "../tools/catalog.ts";
+import { HELP_DOCS } from "../tools/help-docs.ts";
+import { availableImageModels } from "../tools/image-tool.ts";
+import { SettingsStore } from "../tools/settings-tool.ts";
 import { modelsFor } from "./models.ts";
 import { createProvenanceTable } from "./provenance.ts";
 import { assertOwns, Unauthorized } from "./principal.ts";
@@ -36,6 +40,9 @@ export class BotObject extends DurableObject<Env> {
 	#live: Promise<LiveView> | undefined;
 	/** Notes, open work, history and recall. */
 	readonly memory: BotMemory;
+	readonly #settings: SettingsStore;
+	readonly #registry: Registry = createRegistry();
+	#extensions: { core: Extension; toolSearch: Extension } | undefined;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -43,6 +50,7 @@ export class BotObject extends DurableObject<Env> {
 		createActionsTable(ctx.storage.sql);
 		createApprovalsTable(ctx.storage.sql);
 		createProvenanceTable(ctx.storage.sql);
+		this.#settings = new SettingsStore(ctx.storage.sql);
 		this.memory = new BotMemory({
 			sql: ctx.storage.sql,
 			botId: this.#id,
@@ -65,12 +73,14 @@ export class BotObject extends DurableObject<Env> {
 				storage,
 				{
 					models: () => modelsFor({ env: this.env, accountId: this.#owner ?? "" }),
-					registry: createRegistry(),
+					registry: this.#registry,
 					// A failed alarm write resets the object; it arms again when it next starts.
 					onWake: (wake) => void this.#arm(wake).catch(() => ctx.abort("Alarm write failed")),
 				},
 				context,
 			);
+			// The tools are installed before any work resumes, so a resumed run finds them.
+			if (this.#owner !== undefined) await this.#installTools();
 			// Armed before `resume()` runs anything, as before any call that can start work.
 			await this.#arm(this.#harness.wake());
 			this.#harness.resume();
@@ -118,7 +128,47 @@ export class BotObject extends DurableObject<Env> {
 			this.ctx.storage.sql.exec("INSERT INTO bot_meta (key, value) VALUES ('owner', ?)", principal.accountId);
 			this.ctx.storage.sql.exec("INSERT OR REPLACE INTO bot_meta (key, value) VALUES ('model', ?)", JSON.stringify(model));
 		}
-		this.#root ??= await this.#harness.root(context, { agent: { model } });
+		const { core, toolSearch } = await this.#installTools();
+		this.#root ??= await this.#harness.root(context, { agent: { model, extensions: [core, toolSearch] } });
+	}
+
+	/** The bot's tools as installed now (its own and tool search). */
+	tools(): ToolRegistration[] {
+		const extensions = this.#extensions;
+		return extensions ? [...(extensions.core.tools ?? []), ...(extensions.toolSearch.tools ?? [])] : [];
+	}
+
+	/**
+	 * Builds and installs the bot's extensions for its owner. Image generation is offered only when one of the owner's
+	 * providers has an image model.
+	 */
+	async #installTools(): Promise<{ core: Extension; toolSearch: Extension }> {
+		const owner = this.#owner!;
+		const models = modelsFor({ env: this.env, accountId: owner });
+		const user = this.env.USER.get(this.env.USER.idFromName(owner));
+		const botId = this.#id;
+		const extensions = botExtensions({
+			settings: this.#settings,
+			memory: this.memory,
+			help: HELP_DOCS,
+			knowledge: {
+				list: () => user.listFiles({ botId, kind: "knowledge" }),
+				read: async (name) => {
+					const file = (await user.listFiles({ botId, kind: "knowledge" })).find((candidate) => candidate.name === name);
+					const found = file && (await user.getFile(file.id));
+					return found ? new TextDecoder().decode(found.body) : undefined;
+				},
+			},
+			image: {
+				models,
+				available: await availableImageModels(models),
+				save: ({ name, mime, bytes }) => user.putFile({ name, mime, kind: "bot-output", botId }, bytes),
+			},
+		});
+		this.#registry.install(extensions.core);
+		this.#registry.install(extensions.toolSearch);
+		this.#extensions = extensions;
+		return extensions;
 	}
 
 	async submit(principal: Principal, text: string, requestId: string): Promise<void> {
