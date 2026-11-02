@@ -1,5 +1,5 @@
-import { ModelThinkingLevelSchema } from "@knightcode/ai/providers/model-schema";
 import { type Static, type TSchemaOptions, Type } from "typebox";
+import { ModelThinkingLevelSchema } from "./knightcode-ai-schemas.ts";
 import { SETTINGS_DEFAULTS } from "./settings-defaults.ts";
 
 function nonNegativeSafeInteger(options: { default?: number } = {}) {

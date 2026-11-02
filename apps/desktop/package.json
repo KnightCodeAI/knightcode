@@ -1,7 +1,7 @@
 {
 	"name": "@knightcode/desktop",
 	"productName": "KnightCode",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"private": false,
 	"description": "The KnightCode desktop app",
 	"author": "KnightCode",

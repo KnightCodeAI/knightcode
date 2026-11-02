@@ -9,7 +9,6 @@ import {
 	fauxText,
 	fauxToolCall,
 	type ToolResultMessage,
-	Type,
 } from "@knightcode/ai";
 import {
 	defineTool,
@@ -28,6 +27,7 @@ import {
 	ToolResultEntry,
 	ToolTask,
 } from "@knightcode/durable";
+import { bool, obj, opt, str } from "@knightcode/schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
 import { commitWrites } from "../src/testing/commit-writes.ts";
@@ -78,7 +78,7 @@ function stored(): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, 50));
 }
 
-const Parameters = Type.Object({ text: Type.Optional(Type.String()) });
+const Parameters = obj({ text: opt(str()) });
 
 function tool(
 	name: string,
@@ -312,7 +312,7 @@ describe("afterTool on results the call phase decides", () => {
 		addTool(
 			setup.registry,
 			tool("typed", async () => ({ output: [], structuredOutput: { ok: true } }), {
-				structuredOutputSchema: Type.Object({ ok: Type.Boolean() }),
+				structuredOutputSchema: obj({ ok: bool() }),
 			}),
 		);
 		const nested: NestedToolExecutionResult[] = [];

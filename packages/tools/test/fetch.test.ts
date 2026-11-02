@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import tls from "node:tls";
+import { Agent, buildConnector, getGlobalDispatcher, setGlobalDispatcher } from "undici";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { clearPageCache, fetchPage, formatPage, grepLines, webfetchTool } from "../src/web/fetch.ts";
 import { type FixtureServer, html, startServer } from "./server.ts";
 
@@ -72,6 +74,14 @@ beforeAll(async () => {
 				else res.end();
 			};
 			push();
+		},
+		"/host-hop": (_req, res) => {
+			res.writeHead(302, { location: `http://next.example:${new URL(server.url).port}/host` });
+			res.end();
+		},
+		"/host": (req, res) => {
+			res.writeHead(200, { "content-type": "text/plain" });
+			res.end(req.headers.host);
 		},
 		"/accept": (req, res) => {
 			res.writeHead(200, { "content-type": "text/plain" });
@@ -166,6 +176,54 @@ describe("fetchPage", () => {
 		await expect(fetchPage("http://127.0.0.1:1/x")).rejects.toThrow(/^Blocked:/);
 		expect(server.hits()).toBe(before);
 	});
+
+	test.each([
+		{ path: "/host", host: "docs.example", addresses: ["93.184.216.34"] },
+		{ path: "/host-hop", host: "next.example", addresses: ["93.184.216.34", "1.2.3.4"] },
+	])("keeps the original Host on the wire with Node fetch: $path", async ({ path, host, addresses }) => {
+		const original = getGlobalDispatcher();
+		const connector = buildConnector({});
+		const connections: string[] = [];
+		const agent = new Agent({
+			connect(options, callback) {
+				connections.push(options.hostname);
+				// Route the checked public address to the local fixture, without external traffic.
+				connector({ ...options, hostname: "127.0.0.1" }, callback);
+			},
+		});
+		setGlobalDispatcher(agent);
+		const port = new URL(server.url).port;
+		try {
+			const page = await fetchPage(`http://docs.example:${port}${path}`, {
+				lookup: async (hostname) => ({ address: hostname === "docs.example" ? "93.184.216.34" : "1.2.3.4" }),
+			});
+			expect(page.text).toBe(`${host}:${port}`);
+			expect(connections).toEqual(addresses);
+		} finally {
+			setGlobalDispatcher(original);
+			await agent.destroy();
+		}
+	});
+
+	test.each(["93.184.216.34", "2606:4700::1111"])(
+		"uses the original TLS server name while connecting to checked address %s",
+		async (address) => {
+			const original = getGlobalDispatcher();
+			const agent = new Agent();
+			setGlobalDispatcher(agent);
+			const connect = vi.spyOn(tls, "connect").mockImplementation(() => {
+				throw new Error("TLS connection captured");
+			});
+			try {
+				await expect(fetchPage("https://docs.example/path", { lookup: async () => ({ address }) })).rejects.toThrow();
+				expect(connect).toHaveBeenCalledWith(expect.objectContaining({ host: address, servername: "docs.example" }));
+			} finally {
+				connect.mockRestore();
+				setGlobalDispatcher(original);
+				await agent.destroy();
+			}
+		},
+	);
 
 	test("connects to the checked address and keeps the name in Host, on every redirect hop", async () => {
 		const calls: Array<{ url: string; host: string | null }> = [];

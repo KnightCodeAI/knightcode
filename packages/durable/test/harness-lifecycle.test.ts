@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context, JsonValue } from "@knightcode/chord";
 import { withAbortSignal } from "@knightcode/chord/context";
-import { createModels, fauxAssistantMessage, fauxText, fauxToolCall, Type } from "@knightcode/ai";
+import { createModels, fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import {
 	type Conversation,
 	type ConversationId,
@@ -17,6 +17,7 @@ import {
 	type Storage,
 	type TaskId,
 } from "@knightcode/durable";
+import { obj } from "@knightcode/schema";
 import { describe, expect, it } from "vitest";
 import type { SessionImpl } from "../src/session/session.ts";
 import { openNodeSqliteStorage } from "../src/storage/sqlite/node.ts";
@@ -164,7 +165,7 @@ describe("Harness close", () => {
 				defineTool({
 					name: "wait",
 					description: "wait",
-					parameters: Type.Object({}),
+					parameters: obj({}),
 					execute: async () => {
 						if (where === "tool") await stubborn();
 						return { output: [] };

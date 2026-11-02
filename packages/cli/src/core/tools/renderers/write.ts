@@ -12,7 +12,12 @@
 import { Container, Text } from "@knightcode/tui";
 import { diffView, LinesView, renderNumberedLines } from "../../../modes/interactive/components/diff.ts";
 import { keyHint } from "../../../modes/interactive/components/keybinding-hints.ts";
-import { getLanguageFromPath, highlightCode, type Theme } from "../../../modes/interactive/theme/theme.ts";
+import {
+	CodeHighlighter,
+	getLanguageFromPath,
+	highlightCode,
+	type Theme,
+} from "../../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition } from "../../extensions/types.ts";
 import type { WriteToolDetails } from "../write.ts";
 import {
@@ -27,14 +32,22 @@ import {
 import { formatDiffSummary } from "./edit.ts";
 
 type WriteArgs = { path?: string; file_path?: string; content?: string } | undefined;
-type WriteHighlightCache = {
+type WriteContentPreview = {
+	normalizedLines: string[];
+	highlightedLines: readonly string[];
+};
+type WriteHighlightCache = WriteContentPreview & {
 	rawPath: string | null;
 	lang: string | undefined;
 	rawContent: string;
-	normalizedLines: string[];
 	highlightedLines: string[];
 };
-export type WriteRenderState = { cache?: WriteHighlightCache };
+export type WriteRenderState = {
+	// Line by line highlighting while the content is streaming.
+	cache?: WriteHighlightCache;
+	// Reuse the first lines while streaming and the complete file across updates and expand toggles.
+	highlighter?: CodeHighlighter;
+};
 
 const PREVIEW_LINES = 10;
 const WRITE_PARTIAL_FULL_HIGHLIGHT_LINES = 50;
@@ -42,11 +55,11 @@ const WRITE_PARTIAL_FULL_HIGHLIGHT_LINES = 50;
 function highlightSingleLine(line: string, lang: string | undefined): string {
 	return highlightCode(line, lang)[0] ?? "";
 }
-function refreshWriteHighlightPrefix(cache: WriteHighlightCache): void {
+function refreshWriteHighlightPrefix(cache: WriteHighlightCache, highlighter: CodeHighlighter): void {
 	const prefixCount = Math.min(WRITE_PARTIAL_FULL_HIGHLIGHT_LINES, cache.normalizedLines.length);
 	if (prefixCount === 0) return;
 	const prefixSource = cache.normalizedLines.slice(0, prefixCount).join("\n");
-	const prefixHighlighted = highlightCode(prefixSource, cache.lang);
+	const prefixHighlighted = highlighter.highlight(prefixSource, cache.lang);
 	for (let i = 0; i < prefixCount; i++) {
 		cache.highlightedLines[i] = prefixHighlighted[i] ?? highlightSingleLine(cache.normalizedLines[i] ?? "", cache.lang);
 	}
@@ -67,6 +80,7 @@ function updateWriteHighlightCacheIncremental(
 	cache: WriteHighlightCache | undefined,
 	rawPath: string | null,
 	fileContent: string,
+	highlighter: CodeHighlighter,
 ): WriteHighlightCache {
 	if (!cache || cache.rawPath !== rawPath || !fileContent.startsWith(cache.rawContent)) {
 		return rebuildWriteHighlightCacheFull(rawPath, fileContent);
@@ -88,10 +102,10 @@ function updateWriteHighlightCacheIncremental(
 		cache.normalizedLines.push(segments[i]);
 		cache.highlightedLines.push(highlightSingleLine(segments[i], cache.lang));
 	}
-	refreshWriteHighlightPrefix(cache);
+	refreshWriteHighlightPrefix(cache, highlighter);
 	return cache;
 }
-function trimTrailingEmptyLines(lines: string[]): string[] {
+function trimTrailingEmptyLines(lines: readonly string[]): string[] {
 	let end = lines.length;
 	while (end > 0 && lines[end - 1] === "") {
 		end--;
@@ -99,8 +113,20 @@ function trimTrailingEmptyLines(lines: string[]): string[] {
 	return lines.slice(0, end);
 }
 
+function highlightWriteContent(
+	rawPath: string | null,
+	fileContent: string,
+	highlighter: CodeHighlighter,
+): WriteContentPreview {
+	const normalized = replaceTabs(normalizeDisplayText(fileContent));
+	return {
+		normalizedLines: normalized.split("\n"),
+		highlightedLines: highlighter.highlight(normalized, rawPath ? getLanguageFromPath(rawPath) : undefined),
+	};
+}
+
 /** Numbered, highlighted content: the first {@link PREVIEW_LINES} lines unless expanded. */
-function addContentPreview(container: Container, cache: WriteHighlightCache, expanded: boolean, theme: Theme): void {
+function addContentPreview(container: Container, cache: WriteContentPreview, expanded: boolean, theme: Theme): void {
 	const lines = cache.highlightedLines.slice(0, trimTrailingEmptyLines(cache.normalizedLines).length);
 	const shown = expanded ? lines : lines.slice(0, PREVIEW_LINES);
 	if (shown.length === 0) return;
@@ -130,22 +156,21 @@ export const writeRenderers: Pick<ToolDefinition<any, any>, "renderCall" | "rend
 		const renderArgs = args as WriteArgs;
 		const rawPath = str(renderArgs?.file_path ?? renderArgs?.path);
 		const fileContent = str(renderArgs?.content);
-		if (fileContent) {
-			state.cache = context.argsComplete
-				? rebuildWriteHighlightCacheFull(rawPath, fileContent)
-				: updateWriteHighlightCacheIncremental(state.cache, rawPath, fileContent);
-		} else {
-			state.cache = undefined;
-		}
+		state.highlighter ??= new CodeHighlighter();
+		state.cache =
+			fileContent && !context.argsComplete
+				? updateWriteHighlightCacheIncremental(state.cache, rawPath, fileContent, state.highlighter)
+				: undefined;
 
 		const component = (context.lastComponent as Container | undefined) ?? new Container();
 		component.clear();
 		component.addChild(new Text(formatToolCall(theme, "Write", renderToolPath(rawPath, theme, context.cwd)), 0, 0));
 		if (fileContent === null) {
 			component.addChild(new Text(theme.fg("error", "[invalid content arg - expected string]"), 0, 0));
-		} else if (state.cache && (context.isPartial || context.isError)) {
+		} else if (fileContent && (context.isPartial || context.isError)) {
 			// Keep the attempted content visible on failure; on success the result takes over.
-			addContentPreview(component, state.cache, context.expanded, theme);
+			const preview = state.cache ?? highlightWriteContent(rawPath, fileContent, state.highlighter);
+			addContentPreview(component, preview, context.expanded, theme);
 		}
 		return component;
 	},
@@ -171,12 +196,9 @@ export const writeRenderers: Pick<ToolDefinition<any, any>, "renderCall" | "rend
 		}
 
 		const state = context.state as WriteRenderState;
-		const cache =
-			state.cache?.rawContent === fileContent && state.cache.rawPath === rawPath
-				? state.cache
-				: rebuildWriteHighlightCacheFull(rawPath, fileContent);
-		state.cache = cache;
-		const lineCount = trimTrailingEmptyLines(cache.normalizedLines).length;
+		state.highlighter ??= new CodeHighlighter();
+		const preview = highlightWriteContent(rawPath, fileContent, state.highlighter);
+		const lineCount = trimTrailingEmptyLines(preview.normalizedLines).length;
 		component.addChild(
 			new Text(
 				theme.fg(
@@ -187,7 +209,7 @@ export const writeRenderers: Pick<ToolDefinition<any, any>, "renderCall" | "rend
 				0,
 			),
 		);
-		addContentPreview(component, cache, context.expanded, theme);
+		addContentPreview(component, preview, context.expanded, theme);
 		return component;
 	},
 };

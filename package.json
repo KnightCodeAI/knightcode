@@ -7,7 +7,7 @@
     "dev": "bun --env-file=.env run --watch packages/cli/src/bun/cli.ts",
     "start": "bun --env-file=.env run packages/cli/src/bun/cli.ts",
     "changeset": "bun run scripts/new-changeset.ts",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc --noEmit && tsc --noEmit -p packages/cli/examples/tsconfig.json",
     "check:browser-smoke": "node scripts/check-browser-smoke.mjs",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx}\"",

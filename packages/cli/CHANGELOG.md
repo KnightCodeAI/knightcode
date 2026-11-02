@@ -1,5 +1,31 @@
 # @knightcodeai/cli
 
+## 0.23.3
+
+### Added
+
+- Added a Choose a terminal section to the Windows guide, naming which terminals ship a current console host and which built-in hosts crash on fullscreen or leak replies into the prompt.
+
+- Added Claude Code and Grok Build plugin support: `knightcode plugin` and `/plugins` (two searchable tabs, Installed and Marketplace) install plugins and marketplace catalogs from GitHub, Git URLs and local folders, and a trusted plugin's skills, `/<plugin>:<command>` commands and MCP servers load in new and reloaded sessions. Anthropic's and xAI's marketplaces are built in and, with the marketplaces Claude Code and Grok Build know, list every plugin in `/plugins` without being added; the plugins those tools installed can be imported. A plugin's MCP servers start without a reload, and `/plugins` opens `/mcp` when one asks for a sign-in. Plugins run nothing until trusted, and trust never carries over from other tools; hooks, agents, LSP servers and output styles are listed but never run. See docs/plugins.md.
+
+### Changed
+
+- Changed the tmux and Windows guides to list problems that come from tmux or the console host under Known issues, each with a remedy. The tmux guide now covers the color-reply text tmux 3.6 types into the editor at startup.
+
+- Changed the default system prompt so the preamble, tool list, edit guidelines, and skill path instructions are shorter. The desktop app entry stays on the documentation list.
+
+### Removed
+
+- Removed the native OS `sandbox/` extension example and its dependency. Use the Gondolin example or the containerization guide to run tools in isolation.
+
+### Fixed
+
+- Fixed `knightcode update` stopping with `git clean -fdx failed with code 1` on Windows when another KnightCode session had a git extension's native module or executable open. Windows cannot delete such files, so the update left the new code with the old dependencies. KnightCode now warns, installs the dependencies anyway, and retries the clean on the next update.
+
+- Fixed glob patterns in model selection and package filters being able to hang KnightCode: crafted patterns could make glob matching take exponential time. Glob matching now uses a matcher without regular expressions.
+
+- Fixed the error for an MCP server that asks for more access than its sign-in granted: it said the server "requires sign-in" although you were signed in. It now names the missing scope and asks you to sign in again to grant it.
+
 ## 0.23.2
 
 ### Added

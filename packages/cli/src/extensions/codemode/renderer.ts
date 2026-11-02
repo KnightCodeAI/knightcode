@@ -16,7 +16,7 @@ import {
 	expandHint,
 	VisualLinePreview,
 } from "../../modes/interactive/components/visual-truncate.ts";
-import { highlightCode, type Theme } from "../../modes/interactive/theme/theme.ts";
+import { CodeHighlighter, type Theme } from "../../modes/interactive/theme/theme.ts";
 import type { CodemodeNestedCall, CodemodeToolDetails } from "./tool.ts";
 
 const CODE_PREVIEW_LINES = 10;
@@ -24,6 +24,12 @@ const CALL_PREVIEW_COUNT = 8;
 const OUTPUT_PREVIEW_LINES = 5;
 const COLLAPSED_ARGS_CHARS = 80;
 const SCRIPT_HEADER = /^Script (completed|failed)\nWall time [\d.]+ seconds\nOutput:\n$/;
+
+/** Renderer state of a codemode row. */
+interface CodemodeRenderState {
+	// Progress, timer ticks and expanding redraw the call, so the row keeps the script's highlighting.
+	scriptHighlighter?: CodeHighlighter;
+}
 
 function formatDuration(ms: number | undefined): string {
 	if (ms === undefined) return "";
@@ -79,7 +85,11 @@ export const codemodeRenderers: Pick<
 		}
 		component.addChild(new Text(title, 0, 0));
 		if (code) {
-			const highlighted = highlightCode(replaceTabs(code.replace(/\r/g, "").trimEnd()), "javascript").join("\n");
+			const state = context.state as CodemodeRenderState;
+			state.scriptHighlighter ??= new CodeHighlighter();
+			const highlighted = state.scriptHighlighter
+				.highlight(replaceTabs(code.replace(/\r/g, "").trimEnd()), "javascript")
+				.join("\n");
 			component.addChild(
 				context.expanded
 					? new Text(highlighted, 0, 0)

@@ -88,9 +88,8 @@ function getAliases(): Record<string, string> {
 	const knightCliEntry = packageIndex;
 	const knightAgentEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@knightcode/agent");
 	const knightTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@knightcode/tui");
-	// Extensions resolve the @knightcode/ai root to the compat entrypoint (a
-	// strict superset of the core entrypoint).
-	const knightAiCompatEntry = resolveWorkspaceOrImport("ai/dist/compat.js", "@knightcode/ai/compat");
+	// Extensions see the compat entrypoint plus TypeBox's Type, Static, TSchema and StringEnum.
+	const knightAiCompatEntry = path.resolve(__dirname, "knightcode-ai-extension-view.js");
 	const knightAiModelsEntry = resolveWorkspaceOrImport("ai/dist/models.js", "@knightcode/ai/models");
 	const knightAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@knightcode/ai/oauth");
 	const knightAiProvidersEntry = resolveWorkspaceOrImport("ai/dist/providers/all.js", "@knightcode/ai/providers/all");

@@ -2,6 +2,7 @@ import { setKeybindings } from "@knightcode/tui";
 import type { Theme } from "@knightcodeai/cli";
 import { KeybindingsManager } from "@knightcodeai/cli/core/keybindings";
 import { beforeAll, describe, expect, test } from "vitest";
+import type { WebfetchDetails } from "../src/web/fetch.ts";
 import { webfetchCallText, webfetchResultText, websearchCallText, websearchResultText } from "../src/web/render.ts";
 
 // A theme that tags colours so assertions can see which role each span got.
@@ -49,6 +50,20 @@ describe("webfetch", () => {
 		expect(webfetchResultText({ ...result, details: { ...fetchDetails, matches: 7 } }, false, theme)).toContain(
 			"7 matches of 1832 lines",
 		);
+	});
+
+	test("an engine error with empty details shows the error, not a page summary", () => {
+		expect(
+			webfetchResultText(
+				{
+					content: [{ type: "text", text: "fetch failed\nTLS handshake failed" }],
+					// The agent supplies empty details when execute throws.
+					details: {} as WebfetchDetails,
+				},
+				false,
+				theme,
+			),
+		).toBe("<toolOutput>fetch failed</toolOutput>");
 	});
 
 	test("expanded result prints the content; an error result prints its first line", () => {
