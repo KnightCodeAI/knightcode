@@ -12,6 +12,8 @@ import type { Env } from "../env.ts";
 import { adapterFor } from "../delivery/queue.ts";
 import { type ActionState, createActionsTable, dispatch, getAction } from "./actions.ts";
 import { consumeApproval, type ConsumeResult, createApprovalsTable, denyApproval, digestOf, getApproval } from "./approvals.ts";
+import { BotMemory } from "../memory/memory.ts";
+import { modelHelper } from "../memory/recall.ts";
 import { modelsFor } from "./models.ts";
 import { createProvenanceTable } from "./provenance.ts";
 import { assertOwns, Unauthorized } from "./principal.ts";
@@ -32,6 +34,8 @@ export class BotObject extends DurableObject<Env> {
 	#harness!: Harness;
 	#root: Conversation | undefined;
 	#live: Promise<LiveView> | undefined;
+	/** Notes, open work, history and recall. */
+	readonly memory: BotMemory;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -39,6 +43,18 @@ export class BotObject extends DurableObject<Env> {
 		createActionsTable(ctx.storage.sql);
 		createApprovalsTable(ctx.storage.sql);
 		createProvenanceTable(ctx.storage.sql);
+		this.memory = new BotMemory({
+			sql: ctx.storage.sql,
+			botId: this.#id,
+			conversation: () => this.#conversation(),
+			owner: () => this.#owner,
+			// The memory helper is the user's pick; until settings carry one it is the bot's own model.
+			helper: () => {
+				const owner = this.#owner;
+				const model = this.#model;
+				return owner && model ? modelHelper(modelsFor({ env: this.env, accountId: owner }), model) : undefined;
+			},
+		});
 		void ctx.blockConcurrencyWhile(async () => {
 			// A fallback before anything can throw: an object whose open or recovery fails is started again.
 			const fallback = Date.now() + HEARTBEAT_MS;
@@ -72,6 +88,11 @@ export class BotObject extends DurableObject<Env> {
 			?.value;
 	}
 
+	get #model(): ModelChoice | undefined {
+		const row = this.ctx.storage.sql.exec<{ value: string }>("SELECT value FROM bot_meta WHERE key = 'model'").toArray()[0];
+		return row ? (JSON.parse(row.value) as ModelChoice) : undefined;
+	}
+
 	#check(principal: Principal | undefined, botId: string): void {
 		assertOwns({ id: this.#id, owner: this.#owner }, principal, botId);
 	}
@@ -93,16 +114,20 @@ export class BotObject extends DurableObject<Env> {
 	async claim(principal: Principal, model: ModelChoice): Promise<void> {
 		const owner = this.#owner;
 		if (owner !== undefined && owner !== principal.accountId) throw new Unauthorized();
-		if (owner === undefined)
+		if (owner === undefined) {
 			this.ctx.storage.sql.exec("INSERT INTO bot_meta (key, value) VALUES ('owner', ?)", principal.accountId);
+			this.ctx.storage.sql.exec("INSERT OR REPLACE INTO bot_meta (key, value) VALUES ('model', ?)", JSON.stringify(model));
+		}
 		this.#root ??= await this.#harness.root(context, { agent: { model } });
 	}
 
 	async submit(principal: Principal, text: string, requestId: string): Promise<void> {
 		this.#check(principal, this.#id);
 		const root = await this.#conversation();
-		// Armed before the call that can start work: `onWake` runs after its commit.
+		// Armed before the calls that can start work: `onWake` runs after their commits.
 		await this.#arm({ ...this.#harness.wake(), active: true });
+		// Recall lands just ahead of the input; a failure there never blocks the message.
+		await this.memory.recall(text, requestId).catch((error: unknown) => console.error("recall", error));
 		await root.submit({ type: "input", content: text, requestId }, context);
 	}
 

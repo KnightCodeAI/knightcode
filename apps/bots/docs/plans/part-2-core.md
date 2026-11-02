@@ -436,7 +436,7 @@ git commit -m "feat(bots): add action records, single-use approvals and grants"
   - `shareNotes(names)` with a privacy check that reports how many it kept
     back; notes written by an outside-marked run need approval to share.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // apps/bots/test/memory.test.ts
@@ -464,12 +464,12 @@ it("search_history refuses a message id from another bot", async () => {
 messages with the fake model and checks that facts, reworded facts, dates,
 later-changed decisions and open work are recalled.
 
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/memory.test.ts test/recall-evals.test.ts`)
-- [ ] **Step 3: Implement memory in the listed files** (context assembled
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/memory.test.ts test/recall-evals.test.ts`)
+- [x] **Step 3: Implement memory in the listed files** (context assembled
   by rules; stable instructions first, changing memory last; summaries reused
   until their messages change)
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/memory apps/bots/test/memory.test.ts apps/bots/test/recall-evals.test.ts
