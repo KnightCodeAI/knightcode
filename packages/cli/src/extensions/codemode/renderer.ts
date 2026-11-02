@@ -71,9 +71,16 @@ function nestedCallHeader(call: CodemodeNestedCall, theme: Theme, context: ToolR
 	}
 	if (typeof args === "object" && args !== null && !Array.isArray(args)) {
 		const displayArgs: Record<string, unknown> = { ...args };
-		for (const key of ["path", "file_path"]) {
-			const path = displayArgs[key];
-			if (typeof path === "string") displayArgs[key] = getCwdRelativePath(path, context.cwd) ?? path;
+		if (["read", "write", "edit", "grep", "find", "ls"].includes(call.name)) {
+			try {
+				for (const key of ["path", "file_path"]) {
+					const path = displayArgs[key];
+					if (typeof path === "string") displayArgs[key] = getCwdRelativePath(path, context.cwd) ?? path;
+				}
+			} catch {
+				// Stored calls include rejected input; invalid file URLs must not hide the nested results.
+				return new Text(formatToolCallWithArgs(call.name, args, theme, false), 0, 0);
+			}
 		}
 		// Full Write/Edit renderers own content highlighting and filesystem diff preflight.
 		// Nested rows only need their path header, even when the call or script failed.

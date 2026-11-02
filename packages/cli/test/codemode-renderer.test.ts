@@ -229,6 +229,60 @@ describe("codemode renderer", () => {
 		expect(text).toContain('read({"path":"a/very/long/path...)');
 	});
 
+	// PR #511: custom tool paths are opaque arguments, not necessarily filesystem paths.
+	it.each(["path", "file_path"])("preserves custom %s arguments without resolving them", (key) => {
+		const args = JSON.stringify({ [key]: "file:///invalid/%ZZ" });
+		const component = tool("await tools.custom_api(args)");
+		component.updateResult({
+			content: [HEADER],
+			details: { calls: [{ id: "call/1", name: "custom_api", args, status: "ok", durationMs: 5 }] },
+			isError: false,
+		});
+		for (const expanded of [false, true]) {
+			component.setExpanded(expanded);
+			const text = plain(component, 120);
+			expect(text).toContain("1 call completed");
+			expect(text).toMatch(/✓ custom_api.*file:\/\/\/invalid\/%ZZ.*5ms/);
+			if (expanded) expect(text).toContain(args);
+		}
+	});
+
+	// PR #511: malformed filesystem paths must not hide every nested call via the result fallback.
+	it.each([
+		["read", "path"],
+		["read", "file_path"],
+		["write", "path"],
+		["edit", "path"],
+		["ls", "path"],
+		["find", "path"],
+		["grep", "path"],
+	])("keeps nested errors visible for malformed %s %s arguments", (name, key) => {
+		const args = JSON.stringify({ [key]: "file:///invalid/%ZZ" });
+		const error = "Invalid file URL";
+		const component = tool("await tools.read(args)");
+		component.updateResult({
+			content: [HEADER, { type: "text", text: "Other script output" }],
+			details: {
+				calls: [
+					{ id: "call/1", name, args, status: "error", durationMs: 5, error },
+					{ id: "call/2", name: "bash", args: '{"command":"pwd"}', status: "ok", durationMs: 8 },
+				],
+			},
+			isError: false,
+		});
+		for (const expanded of [false, true]) {
+			component.setExpanded(expanded);
+			const text = plain(component, 120);
+			expect(text).toContain("1 call completed, 1 call failed");
+			expect(text).toContain(`✗ ${name}`);
+			expect(text).toContain("file:///invalid/%ZZ");
+			expect(text).toContain(error);
+			expect(text).toMatch(/✓ Bash\(pwd\)\s+8ms/);
+			expect(text).toContain("Other script output");
+			if (expanded) expect(text).toContain(args);
+		}
+	});
+
 	it("shows the cost of model calls and their total", () => {
 		const call = { name: "models.classify", args: "scorer/judge", status: "ok" as const, durationMs: 5 };
 		const text = render({
