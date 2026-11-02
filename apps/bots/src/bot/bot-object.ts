@@ -2,7 +2,7 @@
 // durable harness over its own SQLite, keeps its alarm armed so work survives eviction and deploys, and serves the
 // bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner.
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import { decodeFrame, encodeFrame, ProtocolError, type ServerFrame } from "@knightcode/bots-protocol";
+import { decodeFrame, encodeFrame, ProtocolError, type ServerFrame, type Skill, type SkillDraft } from "@knightcode/bots-protocol";
 import { type Conversation, createRegistry, type Extension, Harness, type Registry, type ToolRegistration, type Wake } from "@knightcode/durable";
 import { openDurableObjectSqliteStorage } from "@knightcode/durable/storage/sqlite/cloudflare";
 import { DurableObject } from "cloudflare:workers";
@@ -13,6 +13,7 @@ import { adapterFor } from "../delivery/queue.ts";
 import { type ActionState, createActionsTable, dispatch, getAction } from "./actions.ts";
 import { consumeApproval, type ConsumeResult, createApprovalsTable, denyApproval, digestOf, getApproval } from "./approvals.ts";
 import { BotMemory } from "../memory/memory.ts";
+import { type TeachEvent, Teaching } from "../skills/teach.ts";
 import { modelHelper } from "../memory/recall.ts";
 import { Connection, RemoteExecutionEnv, webSocketTransport } from "@knightcode/env";
 import type { ComputerAccess } from "../computer/browser-tools.ts";
@@ -44,6 +45,7 @@ export class BotObject extends DurableObject<Env> {
 	/** Notes, open work, history and recall. */
 	readonly memory: BotMemory;
 	readonly #settings: SettingsStore;
+	readonly #teaching: Teaching;
 	readonly #registry: Registry = createRegistry();
 	#extensions: { core: Extension; toolSearch: Extension } | undefined;
 	/** The computer lease held while this bot works on its computer. */
@@ -57,6 +59,7 @@ export class BotObject extends DurableObject<Env> {
 		createApprovalsTable(ctx.storage.sql);
 		createProvenanceTable(ctx.storage.sql);
 		this.#settings = new SettingsStore(ctx.storage.sql);
+		this.#teaching = new Teaching(ctx.storage.sql);
 		this.memory = new BotMemory({
 			sql: ctx.storage.sql,
 			botId: this.#id,
@@ -235,6 +238,47 @@ export class BotObject extends DurableObject<Env> {
 		this.#settings.write(next);
 		await this.#installTools();
 		return next;
+	}
+
+	// ─── Teaching by showing ──────────────────────────────────────────────────
+
+	startTeaching(principal: Principal, goal: string): { sessionId: string } {
+		this.#check(principal, this.#id);
+		return this.#teaching.startTeaching(goal);
+	}
+
+	/** One demonstrated step (the client sends the event, the screen's screenshot and the page snapshot). */
+	recordTeachStep(principal: Principal, sessionId: string, event: TeachEvent, screenshot?: string, snapshot?: string): boolean {
+		this.#check(principal, this.#id);
+		return this.#teaching.recordStep(sessionId, event, screenshot, snapshot);
+	}
+
+	/** Drafts the skill on the bot's own model. */
+	async stopTeaching(principal: Principal, sessionId: string): Promise<SkillDraft> {
+		this.#check(principal, this.#id);
+		const helper = this.#helper();
+		if (!helper) throw new Error("The bot has no model to draft with.");
+		return this.#teaching.stopTeaching(sessionId, helper);
+	}
+
+	/** Saves the draft as this bot's skill (until the user shares it) and deletes the recording. */
+	async saveTeachingDraft(principal: Principal, sessionId: string, draft: SkillDraft): Promise<Skill> {
+		this.#check(principal, this.#id);
+		const user = this.env.USER.get(this.env.USER.idFromName(this.#owner!));
+		const skill = await user.skillAdd({ ...draft, scope: "bot", botId: this.#id });
+		this.#teaching.discard(sessionId);
+		return skill;
+	}
+
+	discardTeaching(principal: Principal, sessionId: string): void {
+		this.#check(principal, this.#id);
+		this.#teaching.discard(sessionId);
+	}
+
+	#helper() {
+		const owner = this.#owner;
+		const model = this.#model;
+		return owner && model ? modelHelper(modelsFor({ env: this.env, accountId: owner }), model) : undefined;
 	}
 
 	/** The bot's tools as installed now (its own and tool search). */

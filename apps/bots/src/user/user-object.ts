@@ -3,7 +3,7 @@
 // wrapped by the key-encryption key), so destroying that key makes the account's data unreadable at once.
 import type { Credential, CredentialInfo, CredentialStore } from "@knightcode/ai";
 import { builtinModels } from "@knightcode/ai/providers/all";
-import type { FileKind, FileRef, VaultItem } from "@knightcode/bots-protocol";
+import type { FileKind, FileRef, Skill, SkillScope, VaultItem } from "@knightcode/bots-protocol";
 import { DurableObject } from "cloudflare:workers";
 import { type ArchiveManifest, openArchive, sealArchive } from "../crypto/archive.ts";
 import { createDataKey, unwrapDataKey } from "../crypto/envelope.ts";
@@ -12,6 +12,7 @@ import * as balance from "./balance.ts";
 import type { Balance, MeteredKind, Reservation } from "./balance.ts";
 import { createCredentialsTable, SealedCredentialStore } from "./credentials.ts";
 import { beginEnrollment, createEnrollmentTable, spendEnrollment } from "./enrollment.ts";
+import { addSkill, createSkillsTable, deleteSkill, listSkills, shareSkill, type SkillInput, updateSkill } from "../skills/library.ts";
 import { createFilesTable, type FileMeta, getFile, listFiles, putFile } from "./files.ts";
 import { createOutboxTable, flushJournal, type JournalEntry, recordJournal } from "./journal.ts";
 import { createVaultTable, type RevealPurpose, type VaultInput, vaultDelete, vaultList, vaultPut, vaultReveal } from "./vault.ts";
@@ -43,6 +44,7 @@ export class UserObject extends DurableObject<Env> {
 			balance.createBalanceTables(this.#sql);
 			createOutboxTable(this.#sql);
 			createFilesTable(this.#sql);
+			createSkillsTable(this.#sql);
 		});
 	}
 
@@ -175,6 +177,24 @@ export class UserObject extends DurableObject<Env> {
 
 	listFiles(filter: { botId?: string; kind?: FileKind } = {}): FileRef[] {
 		return listFiles(this.#sql, filter);
+	}
+
+	// ─── Skills ───────────────────────────────────────────────────────────────
+
+	skillAdd(input: SkillInput): Skill {
+		return addSkill(this.#sql, input);
+	}
+	skillList(filter: { scope?: SkillScope; botId?: string; q?: string } = {}): Skill[] {
+		return listSkills(this.#sql, filter);
+	}
+	skillUpdate(id: string, patch: Partial<Pick<SkillInput, "name" | "description" | "content">>): Skill {
+		return updateSkill(this.#sql, id, patch);
+	}
+	skillShare(id: string): Skill {
+		return shareSkill(this.#sql, id);
+	}
+	skillDelete(id: string): void {
+		deleteSkill(this.#sql, id);
 	}
 
 	// ─── Computer workspaces ──────────────────────────────────────────────────

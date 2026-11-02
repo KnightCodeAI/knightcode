@@ -164,15 +164,15 @@ git commit -m "feat(bots): add the connector catalog, guarded fetch and MCP in t
   `stopTeaching(): Promise<DraftSkill>` (recording deleted once the draft
   is saved or discarded; Protected input never recorded).
 
-- [ ] **Step 1: Write the failing tests**: a bot-saved skill is visible
+- [x] **Step 1: Write the failing tests**: a bot-saved skill is visible
   only to that bot until shared; a teaching session's draft lists the
   demonstrated steps and contains no protected input; the recording is gone
   after save; a GitHub import previews before adding and refuses a
   repository with no skills.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/skills.test.ts`)
-- [ ] **Step 3: Implement the skill modules**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/skills.test.ts`)
+- [x] **Step 3: Implement the skill modules**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/skills apps/bots/test/skills.test.ts
