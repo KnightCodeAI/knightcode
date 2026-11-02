@@ -120,7 +120,9 @@ describe("Markdown component", () => {
 			const markdown = new Markdown("[a][x]\n\n[x]: https://one.example", 0, 0, defaultMarkdownTheme);
 			markdown.render(80);
 			markdown.setText("[a][x]\n\n[x]: https://two.example");
-			assert.ok(stripAnsi(markdown.render(80).join("\n")).includes("https://two.example"));
+			const rendered = stripAnsi(markdown.render(80).join("\n"));
+			assert.match(rendered, /two\.example/);
+			assert.doesNotMatch(rendered, /one\.example/);
 		});
 	});
 
