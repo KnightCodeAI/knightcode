@@ -38,6 +38,8 @@ export interface BotToolDeps {
 	image?: Parameters<typeof imageTool>[0];
 	/** Runs after update_bot changes a setting. */
 	settingsChanged?: (settings: BotSettings, before: BotSettings) => Promise<void>;
+	/** Each model response, for the usage page (provider usage reports). */
+	onResponse?: (message: { provider?: string; model?: string; usage?: { input?: number; output?: number; cost?: { total?: number } } }) => void;
 	/** What chat may change right now: the outside mark and the user's models. */
 	settingsRules?: () => UpdateRules;
 	/** More of the bot's tools: messaging other bots, helpers, and (for a manager) the management tools. */
@@ -117,7 +119,12 @@ export function botExtensions(deps: BotToolDeps): { core: Extension; toolSearch:
 		core: defineExtension({
 			name: "bots-core",
 			tools: botTools(deps),
-			hooks: [hook(GenerationTask, { beforeRequest: (request) => ({ messages: shortenOldMessages(request.messages) }) })],
+			hooks: [
+				hook(GenerationTask, {
+					beforeRequest: (request) => ({ messages: shortenOldMessages(request.messages) }),
+					afterResponse: (message) => deps.onResponse?.(message),
+				}),
+			],
 			sections: [
 				// First and stable: the owner's instructions, as the bot's settings hold them now.
 				section("bot", () => {

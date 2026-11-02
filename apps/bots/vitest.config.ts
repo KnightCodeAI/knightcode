@@ -28,6 +28,7 @@ export default defineConfig({
 					// Trigger sources' signing secrets, for tests that sign events as the sources do.
 					GITHUB_APP_WEBHOOK_SECRET: "test-github-webhook-secret",
 					SLACK_SIGNING_SECRET: "test-slack-signing-secret",
+					STRIPE_WEBHOOK_SECRET: "test-stripe-webhook-secret",
 					// 32 zero bytes, base64.
 					TEST_KEK: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 					TEST_MIGRATIONS: await readD1Migrations(fileURLToPath(new URL("./migrations", import.meta.url))),

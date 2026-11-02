@@ -42,6 +42,11 @@ export interface Env {
 	/** Stripe (agent payments): secret key, and (tests) the emulator's base URL. Payments are offered in PAYMENTS_COUNTRIES. */
 	STRIPE_SECRET_KEY?: string;
 	STRIPE_API_URL?: string;
+	/** Signs Stripe's webhooks (a secret). */
+	STRIPE_WEBHOOK_SECRET?: string;
+	/** The plan's monthly price and the top-up product, created once in Stripe. */
+	STRIPE_PLAN_PRICE?: string;
+	STRIPE_TOPUP_PRODUCT?: string;
 	PAYMENTS_COUNTRIES?: string;
 	/** Plaid (bank data): client id and secret, and (tests) the emulator's base URL. */
 	PLAID_CLIENT_ID?: string;

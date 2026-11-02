@@ -64,6 +64,8 @@ import { financeAvailable, PlaidClient } from "../finance/plaid.ts";
 import { CardsUnavailable, type PaymentCredential, paymentsAvailable, type PaymentsProvider, type Purchase, StripeLinkProvider } from "../payments/link.ts";
 import { verifySpendAssertion } from "../payments/spend-approvals.ts";
 import { vaultTools } from "../vault/tools.ts";
+import { ACCOUNT_LIMITS } from "../billing/limits.ts";
+import { usageByModel } from "../billing/usage.ts";
 import { defineTool } from "@knightcode/durable";
 import { arr, bool, num, obj, opt, str, union, lit, unknown as anyJson } from "@knightcode/schema";
 import { startHelperTool } from "../team/helpers.ts";
@@ -599,6 +601,7 @@ export class BotObject extends DurableObject<Env> {
 			},
 			...(this.#settings.read().computerAccess ? { computer: this.#computerAccess() } : {}),
 			settingsChanged: (settings, before) => this.#settingsChanged(settings, before),
+			onResponse: (message) => void this.#runUsage.push(message),
 			settingsRules: () => this.#settingsRules(),
 			provenance: { outside: () => this.#outside(), enter: (source) => this.#enterOutside(source) },
 			gate: (intent) => this.#gate(intent),
@@ -651,7 +654,7 @@ export class BotObject extends DurableObject<Env> {
 				sql.exec("DELETE FROM bot_meta WHERE key = 'run_grant'");
 			});
 		// A person's message starts a new chain of bot messages, even when it steers a run a bot started.
-		await this.#write((sql) => void sql.exec("DELETE FROM bot_meta WHERE key = 'chain_hop'"));
+		await this.#write((sql) => void sql.exec("DELETE FROM bot_meta WHERE key IN ('chain_hop', 'run_routine')"));
 		// The owner's own new run gets the management tools (a steer stays in a run outside text may have touched).
 		if (idle) await this.#offerFleet(true);
 		// Recall lands just ahead of the input; a failure there never blocks the message.
@@ -743,9 +746,12 @@ export class BotObject extends DurableObject<Env> {
 		routine: Routine,
 		run: { firedAt: number; title: string; startedBy: "routine" | "email" | "webhook" | "channel"; lateMs: number; event?: TriggerEvent },
 	): Promise<void> {
+		if (!(await this.#user().planAllows("routines"))) return;
+		if (!this.#routines.underRate(routine.id, routineNow(), ACCOUNT_LIMITS.triggersPerMinute)) return;
 		const root = await this.#conversation();
 		const idle = !this.#harness.wake().active;
 		await this.#arm({ ...this.#harness.wake(), active: true });
+		await this.#setMeta("run_routine", routine.id);
 		const eventDigest = run.event ? await digestOf({ tool: "event", title: run.event.title, args: run.event.text }) : String(run.firedAt);
 		await this.#write((sql) => {
 			if (idle) sql.exec("DELETE FROM provenance WHERE run_id = ?", RUN_KEY);
@@ -1070,6 +1076,18 @@ export class BotObject extends DurableObject<Env> {
 		];
 	}
 
+	/** Provider usage of this run's responses, reported after the run. */
+	// ponytail: in memory; an eviction mid-run loses that run's partial usage. Store per response if the page needs exactness.
+	#runUsage: Parameters<typeof usageByModel>[0] = [];
+
+	/** What the last run spent, per model, for the usage page. */
+	async #reportUsage(): Promise<void> {
+		const deltas = usageByModel(this.#runUsage.splice(0));
+		if (deltas.length === 0) return;
+		const routineId = this.#meta("run_routine");
+		await this.#user().recordUsage(deltas.map((delta) => ({ ...delta, botId: this.#id, ...(routineId ? { routineId } : {}) })));
+	}
+
 	/** A session on the owner's own computer: one per run, so the desktop asks again on the next run. */
 	#computerSession: string | undefined;
 
@@ -1236,6 +1254,7 @@ export class BotObject extends DurableObject<Env> {
 		this.#computerSession = undefined;
 		// One pass at a time; the guard is released only after it is stored, even when the pass ends at once.
 		if (this.#afterRunning) return this.#afterRunning;
+		void this.#reportUsage().catch((error: unknown) => console.error("usage", error));
 		const pass = this.#learnFromRun().catch((error: unknown) => console.error("after run", error));
 		this.#afterRunning = pass;
 		void pass.finally(() => {

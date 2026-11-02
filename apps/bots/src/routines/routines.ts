@@ -177,6 +177,14 @@ export class RoutineStore {
 	 * Records a firing and moves the schedule past `now`: every missed firing is covered by this one run. A reminder
 	 * turns itself off after its run.
 	 */
+	/** Whether `routineId` started fewer than `perMinute` runs in the minute before `now`. */
+	underRate(routineId: string, now: number, perMinute: number): boolean {
+		return (
+			this.#sql.exec<{ n: number }>("SELECT COUNT(*) AS n FROM routine_runs WHERE routine_id = ? AND fired_at > ?", routineId, now - 60_000).one().n <
+			perMinute
+		);
+	}
+
 	async recordRun(routine: Routine, run: Omit<RoutineRun, "id" | "routineId">): Promise<RoutineRun> {
 		const id = `run_${crypto.randomUUID()}`;
 		const now = routineNow();

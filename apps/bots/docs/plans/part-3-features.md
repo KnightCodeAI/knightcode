@@ -432,15 +432,15 @@ git commit -m "feat(bots): link the desktop app for computer use, routing and si
   per bot, routine and model; account resource limits (concurrent runs,
   helper fan-out, trigger rate, stored data).
 
-- [ ] **Step 1: Write the failing tests**: a replayed `invoice.paid`
+- [x] **Step 1: Write the failing tests**: a replayed `invoice.paid`
   credits once; a $5 top-up with a $0.45 fee credits `(5 - 0.45) / 1.1`
   dollars of cost; a $4 top-up is refused; bank links and Composio overage
   are unavailable during the trial; a failed renewal stops routines and the
   computer but sign-in and export still work.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/billing.test.ts`)
-- [ ] **Step 3: Implement billing**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/billing.test.ts`)
+- [x] **Step 3: Implement billing**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/billing apps/bots/test/billing.test.ts

@@ -20,7 +20,14 @@ beforeAll(async () => {
 
 const user = () => env.USER.get(env.USER.idFromName(owner.accountId));
 const bot = (id: string) => env.BOT.get(env.BOT.idFromName(id));
-const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+/** Waits until `check` holds (the socket's frames are handled asynchronously), up to five seconds. */
+async function until(check: () => Promise<boolean> | boolean) {
+	const deadline = Date.now() + 5_000;
+	while (!(await check())) {
+		if (Date.now() > deadline) throw new Error("timed out");
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+}
 /** Completes an enrollment in the object itself (a rejected RPC would surface as unhandled in this test pool). */
 const complete = (token: string, credential: never) =>
 	runInDurableObject(user(), (instance: UserObject) => instance.completeEnrollment(token, credential).then(() => "stored", (error: Error) => error.message));
@@ -44,7 +51,7 @@ async function linkDesktop(accountId: string, ticket: string, answer: (command: 
 		if (frame.kind === "exec") socket.send(JSON.stringify({ kind: "exec-result", id: frame.id, ...answer(frame.command) }));
 	});
 	socket.send(JSON.stringify({ kind: "auth", ticket }));
-	await settle();
+	await until(async () => closed !== undefined || (await env.USER.get(env.USER.idFromName(accountId)).desktopOnline()));
 	return { socket, closed: () => closed };
 }
 
@@ -81,7 +88,7 @@ it("runs a command through the linked desktop, and tells the bot the computer is
 	expect(await runOnMyComputer("home-bot", "rm -rf ~")).toMatchObject({ text: expect.stringMatching(/declined/), isError: true });
 
 	desktop.socket.close(1000, "app closed");
-	await settle();
+	await until(async () => !(await user().desktopOnline()));
 	expect(await user().desktopOnline()).toBe(false);
 	expect(await runOnMyComputer("home-bot", "ls")).toEqual({ text: OFFLINE, isError: true });
 });

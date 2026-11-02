@@ -5,7 +5,7 @@
 export interface JournalEntry {
 	/** Unique per change: "settle:<reservation>", "grant:<payment>". */
 	key: string;
-	kind: "reserve" | "settle" | "grant" | "limit";
+	kind: "reserve" | "settle" | "grant" | "refund" | "limit";
 	cents: number;
 	ref: string;
 }

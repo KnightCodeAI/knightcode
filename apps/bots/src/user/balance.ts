@@ -6,7 +6,7 @@ import type { JournalEntry } from "./journal.ts";
 export type MeteredKind = "computer" | "composio" | "bank";
 
 /**
- * Cents per unit at measured cost x 1.1: a computer unit is a 5-minute block of awake time, a Composio unit one call
+ * Cents of cost per unit (credits are cents of cost; payments convert at cost x 1.1, billing/plans.ts): a computer unit is a 5-minute block of awake time, a Composio unit one call
  * past the plan's allowance, a bank unit one linked account for a month. Dated placeholders until the beta measures
  * real cost (spec section 16: "a dated cost table the beta fills in").
  */
@@ -125,6 +125,15 @@ export function grantCredits(sql: SqlStorage, cents: number, key: string, journa
 	if (inserted === 0) return;
 	sql.exec("UPDATE balance SET credits = credits + ? WHERE id = 1", cents);
 	journal({ key: `grant:${key}`, kind: "grant", cents, ref: key });
+}
+
+/** Takes refunded credit back once per `key`; the balance may go below zero, which stops metered work until topped up. */
+export function revokeCredits(sql: SqlStorage, cents: number, key: string, journal: (entry: JournalEntry) => void): void {
+	if (!Number.isInteger(cents) || cents <= 0) throw new Error("a refund is a positive number of cents");
+	const inserted = sql.exec("INSERT OR IGNORE INTO grants (key, cents, at) VALUES (?, ?, ?)", key, -cents, Date.now()).rowsWritten;
+	if (inserted === 0) return;
+	sql.exec("UPDATE balance SET credits = credits - ? WHERE id = 1", cents);
+	journal({ key: `refund:${key}`, kind: "refund", cents, ref: key });
 }
 
 export function setSpendingLimit(sql: SqlStorage, cents: number | null, journal: (entry: JournalEntry) => void): void {

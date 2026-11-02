@@ -14,6 +14,9 @@ import { createCredentialsTable, SealedCredentialStore } from "./credentials.ts"
 import { beginEnrollment, createEnrollmentTable, spendEnrollment } from "./enrollment.ts";
 import { type BankAccount, linkBank, PlaidClient } from "../finance/plaid.ts";
 import { DesktopLink, type ExecResult } from "../desktop/link.ts";
+import { type Feature, planAllows, type PlanStatus } from "../billing/plans.ts";
+import { createUsageTable, recordUsage, type UsageDelta, usageSummary } from "../billing/usage.ts";
+import type { BillingChange } from "../billing/webhooks.ts";
 import { Inbox } from "../inbox/inbox.ts";
 import type { Purchase } from "../payments/link.ts";
 import { checkLimits, createSpendTables, recordPurchase, setLimit } from "../payments/spend-approvals.ts";
@@ -59,6 +62,7 @@ export class UserObject extends DurableObject<Env> {
 			createFilesTable(this.#sql);
 			createSkillsTable(this.#sql);
 			createSpendTables(this.#sql);
+			createUsageTable(this.#sql);
 			this.#sql.exec("CREATE TABLE IF NOT EXISTS user_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
 			// Entries an earlier instance could not copy are copied soon.
 			if (this.#sql.exec("SELECT 1 FROM journal_outbox LIMIT 1").toArray().length > 0)
@@ -178,6 +182,8 @@ export class UserObject extends DurableObject<Env> {
 	// ─── Balance ──────────────────────────────────────────────────────────────
 
 	async reserve(kind: MeteredKind, units: number): Promise<Reservation | "insufficient"> {
+		// A lapsed plan stops every metered extra; the trial has no bank links or Composio overage.
+		if (!this.planAllows(kind === "bank" ? "bank" : kind === "composio" ? "composio_overage" : "computer")) return "insufficient";
 		const result = balance.reserve(this.#sql, kind, units, this.#journal);
 		await this.#flush();
 		return result;
@@ -297,6 +303,29 @@ export class UserObject extends DurableObject<Env> {
 		return previous;
 	}
 
+	// ─── Plan and usage ───────────────────────────────────────────────────────
+
+	plan(): PlanStatus {
+		return (this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'plan'").toArray()[0]?.value as PlanStatus | undefined) ?? "none";
+	}
+	planAllows(feature: Feature): boolean {
+		return planAllows(this.plan(), feature);
+	}
+	/** One verified Stripe event's changes; grants and refunds are keyed, so replays change nothing. */
+	applyBilling(changes: BillingChange[]): void {
+		for (const change of changes) {
+			if (change.type === "plan") this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('plan', ?)", change.status);
+			else if (change.type === "grant") balance.grantCredits(this.#sql, change.cents, change.key, this.#journal);
+			else balance.revokeCredits(this.#sql, change.cents, change.key, this.#journal);
+		}
+	}
+	recordUsage(deltas: UsageDelta[]): void {
+		recordUsage(this.#sql, deltas);
+	}
+	usage(since?: number) {
+		return usageSummary(this.#sql, since);
+	}
+
 	// ─── Country, payments and bank data ───────────────────────────────────────
 
 	/** The account's country (ISO alpha-2), which decides whether payments and finance are offered. */
@@ -326,6 +355,7 @@ export class UserObject extends DurableObject<Env> {
 
 	/** Links a bank: the month's fee is reserved first, so too little balance refuses it. */
 	async linkBank(publicToken: string): Promise<BankAccount[] | "insufficient"> {
+		if (!this.planAllows("bank")) return "insufficient";
 		const result = await linkBank({
 			plaid: this.#plaid(),
 			publicToken,

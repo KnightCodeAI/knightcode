@@ -3,6 +3,8 @@ import { sendEmailCode, TooManyCodes, verifyEmailCode } from "./auth/email-code.
 import { completeOAuth, startOAuth } from "./auth/oauth.ts";
 import { beginPasskey, finishPasskey } from "./auth/passkeys.ts";
 import { issueTicket } from "./auth/tickets.ts";
+import { StripeBilling } from "./billing/stripe.ts";
+import { billingChanges, type StripeEvent, verifyStripeSignature } from "./billing/webhooks.ts";
 import type { Principal } from "./auth/session.ts";
 import { safeNext } from "./auth/util.ts";
 import { verifyScreenToken } from "./computer/screens.ts";
@@ -140,6 +142,15 @@ async function hooks(request: Request, env: Env, pathname: string): Promise<Resp
 		}
 		return json({ ok: true, fired });
 	};
+	if (pathname === "/hooks/stripe") {
+		const body = await request.text();
+		if (!env.STRIPE_WEBHOOK_SECRET || !(await verifyStripeSignature(env.STRIPE_WEBHOOK_SECRET, request.headers.get("stripe-signature"), body)))
+			return json({ error: "unauthorized" }, 401);
+		const stripe = new StripeBilling({ secretKey: env.STRIPE_SECRET_KEY ?? "", apiUrl: env.STRIPE_API_URL });
+		const result = await billingChanges(JSON.parse(body) as StripeEvent, { fee: (intent) => stripe.fee(intent) });
+		if (result) await env.USER.get(env.USER.idFromName(result.accountId)).applyBilling(result.changes);
+		return json({ ok: true });
+	}
 	if (pathname === "/hooks/github") return run(githubAdapter);
 	if (pathname === "/hooks/telegram") {
 		const messages = await telegramChannel.verify(request, env);
