@@ -42,6 +42,10 @@ export interface Env {
 	/** Stripe (agent payments): secret key, and (tests) the emulator's base URL. Payments are offered in PAYMENTS_COUNTRIES. */
 	STRIPE_SECRET_KEY?: string;
 	STRIPE_API_URL?: string;
+	/** Web Push (VAPID): the public key (raw P-256, base64url), its private scalar (a secret, base64url) and contact. */
+	VAPID_PUBLIC_KEY?: string;
+	VAPID_PRIVATE_KEY?: string;
+	VAPID_SUBJECT?: string;
 	/** Signs Stripe's webhooks (a secret). */
 	STRIPE_WEBHOOK_SECRET?: string;
 	/** The plan's monthly price and the top-up product, created once in Stripe. */

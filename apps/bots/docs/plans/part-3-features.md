@@ -459,14 +459,14 @@ git commit -m "feat(bots): add plans, trial, top-ups and limits"
   push held while the user is active in any app and sent once away; the
   desktop unread badge count.
 
-- [ ] **Step 1: Write the failing tests**: no push is sent while presence
+- [x] **Step 1: Write the failing tests**: no push is sent while presence
   is active; one push is sent after the user goes away; a bot set to "never"
   sends none; the payload carries no message content beyond the preview the
   user allowed.
-- [ ] **Step 2: Run them to verify they fail** (`bunx vitest --run test/push.test.ts`)
-- [ ] **Step 3: Implement push and presence**
-- [ ] **Step 4: Run them to verify they pass**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run them to verify they fail** (`bunx vitest --run test/push.test.ts`)
+- [x] **Step 3: Implement push and presence**
+- [x] **Step 4: Run them to verify they pass**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/src/push apps/bots/web/src/sw.ts apps/bots/test/push.test.ts

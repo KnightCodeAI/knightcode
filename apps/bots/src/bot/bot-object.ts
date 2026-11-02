@@ -601,7 +601,12 @@ export class BotObject extends DurableObject<Env> {
 			},
 			...(this.#settings.read().computerAccess ? { computer: this.#computerAccess() } : {}),
 			settingsChanged: (settings, before) => this.#settingsChanged(settings, before),
-			onResponse: (message) => void this.#runUsage.push(message),
+			onResponse: (message) => {
+				this.#runUsage.push(message);
+				const content = (message as { content?: unknown }).content;
+				const text = Array.isArray(content) ? content.filter((block: { type?: string }) => block.type === "text").map((block: { text?: string }) => block.text ?? "").join("") : "";
+				if (text) this.#lastReply = text;
+			},
 			settingsRules: () => this.#settingsRules(),
 			provenance: { outside: () => this.#outside(), enter: (source) => this.#enterOutside(source) },
 			gate: (intent) => this.#gate(intent),
@@ -1079,6 +1084,17 @@ export class BotObject extends DurableObject<Env> {
 	/** Provider usage of this run's responses, reported after the run. */
 	// ponytail: in memory; an eviction mid-run loses that run's partial usage. Store per response if the page needs exactness.
 	#runUsage: Parameters<typeof usageByModel>[0] = [];
+	/** The run's last reply, for a push preview. */
+	#lastReply: string | undefined;
+	#presenceAt = 0;
+
+	/** Tells the owner, as this bot's notification setting allows. */
+	async #notify(kind: "finish" | "input", text: string | undefined): Promise<void> {
+		const settings = this.#settings.read();
+		await this.#user()
+			.notify({ botId: this.#id, botName: settings.name, kind, level: settings.notify ?? "input", ...(text ? { text } : {}) })
+			.catch((error: unknown) => console.error("notify", error));
+	}
 
 	/** What the last run spent, per model, for the usage page. */
 	async #reportUsage(): Promise<void> {
@@ -1221,6 +1237,7 @@ export class BotObject extends DurableObject<Env> {
 			await this.#user()
 				.inboxAdd({ kind: "approval", botId: this.#id, title: intent.title, approvalId: approval.id })
 				.catch((error: unknown) => console.error("inbox", error));
+			void this.#notify("input", intent.title);
 			return { decision: "ask", approvalId: approval.id };
 		}
 		await this.#write((sql) => markApproved(sql, record.id));
@@ -1255,6 +1272,8 @@ export class BotObject extends DurableObject<Env> {
 		// One pass at a time; the guard is released only after it is stored, even when the pass ends at once.
 		if (this.#afterRunning) return this.#afterRunning;
 		void this.#reportUsage().catch((error: unknown) => console.error("usage", error));
+		void this.#notify("finish", this.#lastReply);
+		this.#lastReply = undefined;
 		const pass = this.#learnFromRun().catch((error: unknown) => console.error("after run", error));
 		this.#afterRunning = pass;
 		void pass.finally(() => {
@@ -1441,6 +1460,10 @@ export class BotObject extends DurableObject<Env> {
 			socket.serializeAttachment({ principal, checkedAt: Date.now() } satisfies Attachment);
 			send({ type: "ready", accountId: principal!.accountId });
 			return;
+		}
+		if (Date.now() - this.#presenceAt > 15_000) {
+			this.#presenceAt = Date.now();
+			void this.#user().presence(true).catch(() => {});
 		}
 		// A revoked session ends its sockets: rechecked at most every 30 seconds.
 		if (Date.now() - (attachment.checkedAt ?? 0) > SESSION_RECHECK_MS) {

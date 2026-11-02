@@ -98,6 +98,15 @@ const HANDLERS: { [N in RouteName]?: Handler<N> } = {
 		return { ticket: await issueTicket(env, principal, scope, ttlMs), expiresAt: Date.now() + ttlMs };
 	},
 	listVault: async (env, principal) => ({ items: await userOf(env, principal).vaultList() }),
+	getPushKey: async (env) => ({ publicKey: env.VAPID_PUBLIC_KEY ?? "" }),
+	subscribePush: async (env, principal, { subscription }) => {
+		await userOf(env, principal).subscribePush(subscription as never);
+		return { ok: true };
+	},
+	unsubscribePush: async (env, principal, { endpoint }) => {
+		await userOf(env, principal).unsubscribePush(endpoint);
+		return { ok: true };
+	},
 	putVault: async (env, principal, item) => userOf(env, principal).vaultPut(item),
 	deleteVault: async (env, principal, { id }) => {
 		await userOf(env, principal).vaultDelete(id);

@@ -18,6 +18,21 @@ import { type Feature, planAllows, type PlanStatus } from "../billing/plans.ts";
 import { createUsageTable, recordUsage, type UsageDelta, usageSummary } from "../billing/usage.ts";
 import type { BillingChange } from "../billing/webhooks.ts";
 import { Inbox } from "../inbox/inbox.ts";
+import {
+	addSubscription,
+	createPushTables,
+	hold,
+	isActive,
+	markPresence,
+	type Notice,
+	previewsAllowed,
+	pushFor,
+	removeSubscription,
+	setPreviewsAllowed,
+	subscriptions,
+	takeHeld,
+} from "../push/presence.ts";
+import { type PushSubscription, sendPush } from "../push/web-push.ts";
 import type { Purchase } from "../payments/link.ts";
 import { checkLimits, createSpendTables, recordPurchase, setLimit } from "../payments/spend-approvals.ts";
 import { type Editor, PageStore } from "../pages/pages.ts";
@@ -63,6 +78,7 @@ export class UserObject extends DurableObject<Env> {
 			createSkillsTable(this.#sql);
 			createSpendTables(this.#sql);
 			createUsageTable(this.#sql);
+			createPushTables(this.#sql);
 			this.#sql.exec("CREATE TABLE IF NOT EXISTS user_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
 			// Entries an earlier instance could not copy are copied soon.
 			if (this.#sql.exec("SELECT 1 FROM journal_outbox LIMIT 1").toArray().length > 0)
@@ -226,6 +242,57 @@ export class UserObject extends DurableObject<Env> {
 
 	override async alarm(): Promise<void> {
 		await this.#flush();
+		await this.flushPushes();
+	}
+
+	// ─── Notifications ────────────────────────────────────────────────────────
+
+	subscribePush(subscription: PushSubscription): void {
+		addSubscription(this.#sql, subscription);
+	}
+	unsubscribePush(endpoint: string): void {
+		removeSubscription(this.#sql, endpoint);
+	}
+	setPushPreviews(allowed: boolean): void {
+		setPreviewsAllowed(this.#sql, allowed);
+	}
+
+	/** Activity in some app (or leaving it). Pushes wait while active and go out once the user is away. */
+	async presence(active: boolean, now = Date.now()): Promise<void> {
+		const until = markPresence(this.#sql, active, now);
+		this.touch(now);
+		if (active) await this.#alarmAt(until);
+		else await this.flushPushes(now);
+	}
+
+	/** A bot finished or needs input: pushed now if the user is away, else held until they are. */
+	async notify(notice: Notice, now = Date.now()): Promise<void> {
+		const push = pushFor(notice, previewsAllowed(this.#sql));
+		if (!push) return;
+		hold(this.#sql, push);
+		await this.flushPushes(now);
+	}
+
+	/** Sends what is held as one push, unless the user is still active (then the alarm comes back when they leave). */
+	async flushPushes(now = Date.now()): Promise<void> {
+		if (isActive(this.#sql, now)) return this.#alarmAt(Number(this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'active_until'").one().value));
+		const push = takeHeld(this.#sql);
+		if (!push || !this.env.VAPID_PUBLIC_KEY || !this.env.VAPID_PRIVATE_KEY) return;
+		const keys = { publicKey: this.env.VAPID_PUBLIC_KEY, privateKey: this.env.VAPID_PRIVATE_KEY, subject: this.env.VAPID_SUBJECT ?? "mailto:support@knightcode.dev" };
+		for (const subscription of subscriptions(this.#sql)) {
+			const result = await sendPush(subscription, push, keys).catch(() => "failed" as const);
+			if (result === "gone") removeSubscription(this.#sql, subscription.endpoint);
+		}
+	}
+
+	/** The desktop's unread badge: inbox items not yet read. */
+	badgeCount(): number {
+		return this.inbox.list().filter((item) => !item.read).length;
+	}
+
+	async #alarmAt(at: number): Promise<void> {
+		const current = await this.ctx.storage.getAlarm();
+		if (current === null || current > at) await this.ctx.storage.setAlarm(at);
 	}
 
 	// ─── Files ────────────────────────────────────────────────────────────────

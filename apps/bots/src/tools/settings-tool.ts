@@ -13,6 +13,8 @@ export interface BotSettings {
 	instructionsVersion: number;
 	computerAccess: boolean;
 	approvals: "never" | "auto" | "ask" | "default";
+	/** Push when the bot finishes (and when it needs input), only when it needs input, or never. */
+	notify?: "finish" | "input" | "never";
 	/** Proactive suggestions: off until the owner turns them on. */
 	suggestions?: boolean;
 	/** A Chief of Staff: it gets the management tools (in runs the owner started). */

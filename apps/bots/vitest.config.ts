@@ -29,6 +29,9 @@ export default defineConfig({
 					GITHUB_APP_WEBHOOK_SECRET: "test-github-webhook-secret",
 					SLACK_SIGNING_SECRET: "test-slack-signing-secret",
 					STRIPE_WEBHOOK_SECRET: "test-stripe-webhook-secret",
+					// A throwaway pair for tests only.
+					VAPID_PUBLIC_KEY: "BLtNfT_HbYjlAJeSSN1IjVrICQmZ2Znziz4jjHPJpULIhKlS0_2uTcl_iSQdIerJOcTmWH4658kCIXfzeNvIiWI",
+					VAPID_PRIVATE_KEY: "e_yON4PMcfC5CstZ_Aye7dvjIitnKezFUJ0amJbNK-o",
 					// 32 zero bytes, base64.
 					TEST_KEK: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
 					TEST_MIGRATIONS: await readD1Migrations(fileURLToPath(new URL("./migrations", import.meta.url))),
