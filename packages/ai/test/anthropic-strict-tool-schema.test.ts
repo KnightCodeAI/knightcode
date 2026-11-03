@@ -95,6 +95,31 @@ describe("Anthropic strict tool schemas", () => {
 		});
 	});
 
+	// A non-strict schema keeps its root definitions so a property $ref still resolves.
+	it("keeps root definitions in non-strict schemas so property refs resolve", async () => {
+		const settings = { type: "object", properties: { verbose: { type: "boolean" } } };
+		const cases = [
+			{ ref: "#/$defs/Settings", definitions: { $defs: { Settings: settings } } },
+			{ ref: "#/definitions/Settings", definitions: { definitions: { Settings: settings } } },
+		];
+		for (const { ref, definitions } of cases) {
+			const parameters = {
+				type: "object",
+				properties: { settings: { $ref: ref } },
+				required: ["settings"],
+				...definitions,
+			} as unknown as Tool["parameters"];
+			const tool = await captureFirstTool(createTool(parameters));
+			expect(tool.strict).toBeUndefined();
+			expect(tool.input_schema).toEqual({
+				type: "object",
+				properties: { settings: { $ref: ref } },
+				required: ["settings"],
+				...definitions,
+			});
+		}
+	});
+
 	it("sends prefer tools non-strict when they use keywords Anthropic strict mode rejects", async () => {
 		const unsupportedParameters: Tool["parameters"][] = [
 			Type.Object({ timeoutMs: Type.Optional(Type.Integer({ minimum: 1, maximum: 300000 })) }),
