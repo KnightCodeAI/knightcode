@@ -23,6 +23,8 @@ export default defineConfig({
 					// The emulated GitHub, Google and the rest, started here in Node; test/global-setup.ts stops them.
 					...(await emulatorBindings()),
 					SESSION_SECRET: "test-session-secret",
+					// Pinned, so a developer's .dev.vars (which the pool also reads) never changes the callbacks tests expect.
+					APP_ORIGIN: "https://bots.knightcode.dev",
 					// The pool runs no containers: the computer object uses its fake provider.
 					BOTS_COMPUTER_PROVIDER: "fake",
 					// Trigger sources' signing secrets, for tests that sign events as the sources do.
