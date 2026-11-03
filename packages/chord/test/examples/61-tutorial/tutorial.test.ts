@@ -37,7 +37,7 @@ function blocksOf(book: string): Block[] {
 		const open = /^```(\w*)$/.exec(lines[n]!);
 		if (open === null) continue;
 		const end = lines.indexOf("```", n + 1);
-		const marker = /^<!-- (.+) -->$/.exec(lines[n - 1] ?? "")?.[1];
+		const marker = /^<!-- ([\s\S]+) -->$/.exec(lines[n - 1] ?? "")?.[1];
 		found.push({ lang: open[1]!, marker, text: lines.slice(n + 1, end).join("\n"), line: n + 1 });
 		n = end;
 	}

@@ -39,7 +39,7 @@
   },
   "peerDependencies": {
     "esbuild": "0.28.2",
-    "react": "19.3.0",
+    "react": "19.2.4",
     "ws": "8.21.3"
   },
   "peerDependenciesMeta": {
@@ -54,11 +54,11 @@
     }
   },
   "devDependencies": {
-    "@types/react": "19.2.14",
-    "@types/react-dom": "19.2.3",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.4",
     "@types/ws": "8.18.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
     "ws": "8.21.3"
   },
   "scripts": {
