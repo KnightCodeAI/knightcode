@@ -200,7 +200,7 @@ git add apps/bots/scripts/verify.ts apps/bots/package.json
 git commit -m "chore(bots): add the MVP verify command"
 ```
 
-- [ ] **Step 4: Final run for the goal**
+- [x] **Step 4: Final run for the goal**
 
 Run `bun run verify` once more in this session and leave its full output
 in the transcript. Expected: `MVP VERIFIED` with 0 failures.
