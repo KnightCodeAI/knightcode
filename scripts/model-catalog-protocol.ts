@@ -51,7 +51,6 @@ export type ModelCatalogIndex = {
 
 export type ModelCatalogRequest =
 	| { kind: "catalog"; knightcodeVersion: string | undefined; representation: ModelCatalogRepresentation }
-	| { kind: "redirect"; location: string }
 	| { kind: "invalid"; error: string };
 
 export function getModelCatalogArtifactKey(revision: string, artifact: ModelCatalogArtifact): string {
@@ -95,10 +94,11 @@ export function parseModelCatalogRepresentation(
 /**
  * Decide how to answer a catalog request from its URL and User-Agent.
  *
- * Released clients do not send `knightcode-version`. Responses are cached by URL, so
- * instead of varying the response on the User-Agent, clients that identify
- * as KnightCode are redirected to the equivalent URL with an explicit `knightcode-version`.
- * Requests without a KnightCode User-Agent receive the default catalog.
+ * Released clients do not send `knightcode-version`, so clients that identify as KnightCode
+ * are served the catalog for the version in their User-Agent. The response
+ * therefore varies on the User-Agent, and the server must say so with `Vary`.
+ * An explicit `knightcode-version` takes precedence. Requests without a KnightCode User-Agent
+ * receive the default catalog.
  */
 export function parseModelCatalogRequest(url: string | URL, userAgent: string | null | undefined): ModelCatalogRequest {
 	const requestUrl = new URL(url);
@@ -111,8 +111,7 @@ export function parseModelCatalogRequest(url: string | URL, userAgent: string | 
 	if (knightcodeVersion === null) {
 		const userAgentVersion = KNIGHTCODE_USER_AGENT_RE.exec(userAgent ?? "")?.[1];
 		if (userAgentVersion !== undefined && isValidModelCatalogKnightcodeVersion(userAgentVersion)) {
-			requestUrl.searchParams.set("knightcode-version", userAgentVersion);
-			return { kind: "redirect", location: requestUrl.toString() };
+			return { kind: "catalog", knightcodeVersion: userAgentVersion, representation };
 		}
 		return { kind: "catalog", knightcodeVersion: undefined, representation };
 	}
