@@ -24,7 +24,7 @@ export const test = base.extend<{ seedName: string | undefined; extendSeed: ((se
 	account: [
 		async ({ context, seedName, extendSeed }, use) => {
 			if (!REAL) return use(undefined);
-			// The dev server may be coming back after an exit (see global-setup.ts): a few tries over half a minute.
+			// The Worker may be coming back after the restart test killed it (see global-setup.ts): a few tries over half a minute.
 			let session = await context.request.post("/__dev/session", { data: { name: "Raghav" } }).catch(() => undefined);
 			for (let attempt = 0; attempt < 30 && !session?.ok(); attempt++) {
 				await new Promise((resolve) => setTimeout(resolve, 1_000));
@@ -33,7 +33,7 @@ export const test = base.extend<{ seedName: string | undefined; extendSeed: ((se
 			if (!session) throw new Error("the dev server did not answer");
 			expect(session.ok(), await session.text()).toBe(true);
 			for (const leftover of leftovers()) {
-				const cleared = await context.request.post("/__dev/delete", { data: { accountId: leftover } });
+				const cleared = await context.request.post("/__dev/delete", { data: { accountId: leftover }, timeout: 90_000 });
 				expect(cleared.ok(), await cleared.text()).toBe(true);
 			}
 			rmSync(LEFTOVERS, { force: true });
@@ -50,13 +50,13 @@ export const test = base.extend<{ seedName: string | undefined; extendSeed: ((se
 			// The account is deleted whatever happens (by id: the test may sign out), so the next test can load the same bot ids.
 			const { accountId } = (await session.json()) as { accountId: string };
 			try {
-				const seeded = await context.request.post("/__dev/seed", { data: seed });
+				const seeded = await context.request.post("/__dev/seed", { data: seed, timeout: 90_000 });
 				expect(seeded.ok(), await seeded.text()).toBe(true);
 				await use(accountId);
 			} finally {
-				// No page keeps talking to the objects being deleted: a request cut off by their reset makes the dev server exit.
+				// No page keeps talking to the objects being deleted: a request cut off by their reset would fail.
 				for (const open of context.pages()) await open.close().catch(() => undefined);
-				const deleted = await context.request.post("/__dev/delete", { data: { accountId } }).catch(() => undefined);
+				const deleted = await context.request.post("/__dev/delete", { data: { accountId }, timeout: 90_000 }).catch(() => undefined);
 				if (!deleted?.ok()) {
 					appendFileSync(LEFTOVERS, `${accountId}\n`);
 					throw new Error(`the test account was not deleted: ${await deleted?.text()}`);

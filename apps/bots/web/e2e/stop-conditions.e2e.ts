@@ -180,7 +180,7 @@ test("They create a PR-review bot, install the GitHub App, and a new PR receives
 		expect(comment.user.type).toBe("Bot");
 		expect(comment.user.login).toBe("knightcode-bots[bot]");
 	} finally {
-		await context.request.post("/__dev/delete", { data: { accountId: account.id } });
+		await context.request.post("/__dev/delete", { data: { accountId: account.id }, timeout: 90_000 });
 	}
 });
 

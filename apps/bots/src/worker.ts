@@ -383,7 +383,8 @@ async function handle(request: Request, env: Env): Promise<Response> {
 			];
 			const before = await Promise.all(objects.map((object) => object().instanceId().catch(() => "")));
 			const report = await deleteAccount(env, principal);
-			const deadline = Date.now() + 15_000;
+			// A busy disk makes local resets slow; one still pending would land in the next test, so that is a failure.
+			const deadline = Date.now() + 30_000;
 			await Promise.all(
 				objects.map(async (object, index) => {
 					while (Date.now() < deadline) {
@@ -393,6 +394,7 @@ async function handle(request: Request, env: Env): Promise<Response> {
 						if (now && now !== before[index]) return;
 						await new Promise((resolve) => setTimeout(resolve, 50));
 					}
+					throw new Error("a purged object did not reset within 30 s");
 				}),
 			);
 			return json(report);

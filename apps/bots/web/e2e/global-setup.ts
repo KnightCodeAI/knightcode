@@ -1,4 +1,4 @@
-// The real backend for the browser tests (BOTS_BACKEND=real): wrangler dev with local D1, R2, queues and Durable
+// The real backend for the browser tests (BOTS_BACKEND=real): the Worker in Miniflare with local D1, R2, queues and Durable
 // Objects on a fixed port (Vite proxies the Worker's paths to it), the emulated third-party services, and the fake model
 // server, which the Worker offers as the provider "fake". Nothing deployed is touched. Returns the teardown.
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
@@ -144,6 +144,15 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 		env: { ...process.env, CI: "1" },
 	});
 	if (migrate.status !== 0) throw new Error(`D1 migrations failed:\n${migrate.stdout}\n${migrate.stderr}`);
+	// Bundled once, then served from Miniflare without wrangler dev's proxy (see worker-server.ts).
+	const bundle = `${state}/bundle`;
+	const build = spawnSync(wrangler[0]!, [...wrangler.slice(1), "deploy", "--dry-run", "--config", config, "--outdir", bundle], {
+		cwd: app,
+		shell: true,
+		encoding: "utf8",
+		env: { ...process.env, CI: "1" },
+	});
+	if (build.status !== 0) throw new Error(`the Worker did not build:\n${build.stdout}\n${build.stderr}`);
 	let log = "";
 	// Kept for reading after a run: the Worker's own errors land here.
 	const logFile = `${state}/dev.log`;
@@ -153,12 +162,12 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 	};
 	let stopping = false;
 	let dev: ChildProcess;
-	// ponytail: wrangler dev has been seen to exit on its own mid-run (an empty "ERROR" line); it is started again on
-	// the same local state, and the next test's fixture waits for it. A real failure still fails the test that hit it.
+	// The stop-condition suite kills the Worker mid-run: it is started again on the same local state, and the next
+	// test's fixture waits for it.
+	const server = fileURLToPath(new URL("./worker-server.ts", import.meta.url));
 	const start = () => {
-		dev = spawn(wrangler[0]!, [...wrangler.slice(1), "dev", "--config", config, "--persist-to", state, "--port", String(WORKER_PORT), "--ip", "127.0.0.1", "--local"], {
+		dev = spawn(process.execPath, [server, config, bundle, state, String(WORKER_PORT)], {
 			cwd: app,
-			shell: true,
 			stdio: ["ignore", "pipe", "pipe"],
 			env: { ...process.env, CI: "1" },
 		});
@@ -168,7 +177,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 		writeFileSync(`${state}/worker.pid`, String(dev.pid ?? ""));
 		dev.on("exit", () => {
 			if (stopping) return;
-			appendFileSync(logFile, "\n[e2e] wrangler dev exited; starting it again\n");
+			appendFileSync(logFile, "\n[e2e] the Worker exited; starting it again\n");
 			start();
 		});
 	};
@@ -180,7 +189,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 			() => false,
 		);
 		if (ready) break;
-		if (Date.now() > deadline) throw new Error(`wrangler dev did not start:\n${log.slice(-4000)}`);
+		if (Date.now() > deadline) throw new Error(`the Worker did not start:\n${log.slice(-4000)}`);
 		await new Promise((done) => setTimeout(done, 500));
 	}
 	process.env.BOTS_FAKE_MODEL_URL = models.url;
