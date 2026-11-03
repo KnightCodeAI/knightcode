@@ -173,6 +173,20 @@ it("loads the knightcode-env client in the Workers runtime", async () => {
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const computer = (account: string) => env.COMPUTER.get(env.COMPUTER.idFromName(account));
+it("stops a running computer as soon as the user lowers the spending limit to what is already spent", async () => {
+	const account = "acct-lowered";
+	await grant(account, 10_000);
+	await acquire(account, "b1");
+	expect(fakeComputers.get(account)!.running).toBe(true);
+	await runInDurableObject(user(account), (instance) => (instance as unknown as { setSpendingLimitDollars(limit: number): Promise<unknown> }).setSpendingLimitDollars(0));
+	expect(fakeComputers.get(account)!.running).toBe(false);
+	expect(await computer(account).status()).toMatchObject({ state: "stopped", stoppedReason: "spending_limit" });
+	// Raised again, the computer starts on the next use.
+	await user(account).setSpendingLimit(null);
+	await acquire(account, "b1");
+	expect(fakeComputers.get(account)!.running).toBe(true);
+});
+
 const user = (account: string) => env.USER.get(env.USER.idFromName(account));
 const grant = (account: string, cents: number) => user(account).grantCredits(cents, `grant-${crypto.randomUUID()}`);
 const balance = (account: string) => user(account).balance();

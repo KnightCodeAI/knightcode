@@ -640,6 +640,7 @@ export class UserObject extends DurableObject<Env> {
 	}
 	async setSpendingLimitDollars(limit: number | null): Promise<Billing> {
 		await this.setSpendingLimit(limit === null ? null : Math.round(limit * 100));
+		await this.env.COMPUTER.get(this.env.COMPUTER.idFromName(this.#accountId)).budgetChanged();
 		return this.billing();
 	}
 	setAutoTopUp(value: { enabled: boolean; threshold?: number; amount?: number }) {

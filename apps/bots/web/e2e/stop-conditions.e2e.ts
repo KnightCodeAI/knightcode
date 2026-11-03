@@ -430,3 +430,39 @@ test("Killing the Worker mid-run resumes the run, and no email or comment is sen
 	await until(async () => (await threadTexts(api, bot.id)).includes("Resumed and finished."), "the resumed run", 180_000);
 	expect(sentMail().filter((mail) => mail.to.includes(recipient))).toHaveLength(1);
 });
+
+test("A user hits their spending limit: the computer stops, chat keeps working", async ({ context, page }) => {
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	const bot = await api.createBot({ name: `Browser${tag}`, purpose: "Looks things up" });
+	await api.updateBot({ botId: bot.id, computerAccess: true, approvals: "never" });
+	await script(context.request, {
+		[bot.name]: [
+			{ tool: "tool_search", args: { query: "browser_navigate" } },
+			{ tool: "browser_navigate", args: { url: "https://example.com" } },
+			"Opened example.com.",
+			{ tool: "browser_navigate", args: { url: "https://example.com/pricing" } },
+			"The computer is stopped, so I could not open it.",
+			"Chat still works.",
+		],
+	});
+	const send = async (text: string) => {
+		await page.getByRole("textbox", { name: "Message" }).fill(text);
+		await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	};
+	await page.goto(`/bots/${bot.id}`);
+	await send("Open example.com");
+	await expect(page.getByText("Opened example.com.")).toBeVisible({ timeout: 60_000 });
+	expect((await api.getComputer({})).status).toBe("awake");
+	// The limit: nothing more than is already spent. The computer stops now.
+	await api.setSpendingLimit({ limit: 0 });
+	await until(async () => (await api.getComputer({})).status === "sleeping", "the computer stopped");
+	await send("Open the pricing page");
+	await expect(page.getByText("The computer is stopped, so I could not open it.")).toBeVisible({ timeout: 60_000 });
+	const refused = (await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool !== undefined).at(-1);
+	expect(refused?.tool).toContain("the spending limit is reached");
+	expect((await api.getComputer({})).status).toBe("sleeping");
+	// Chat runs on the user's own provider: it keeps answering.
+	await send("Are you still there?");
+	await expect(page.getByText("Chat still works.")).toBeVisible({ timeout: 60_000 });
+});

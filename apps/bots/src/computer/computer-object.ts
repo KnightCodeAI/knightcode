@@ -164,6 +164,18 @@ export class ComputerObject extends DurableObject<Env> {
 		await this.#arm();
 	}
 
+	/**
+	 * The owner changed the spending limit: a running computer stops now when the next block of time could not be had,
+	 * instead of at the end of the block it holds (spec section 16: at the limit the computer stops).
+	 */
+	async budgetChanged(): Promise<void> {
+		if (this.#state !== "running") return;
+		const probe = await this.#user().reserve("computer", 1);
+		if (probe === "insufficient") await this.#sleep("spending_limit");
+		else await this.#user().settle((probe as Reservation).id, 0);
+		await this.#arm();
+	}
+
 	/** The start in progress, shared by every acquisition that needs it. */
 	#starting: Promise<boolean> | undefined;
 
