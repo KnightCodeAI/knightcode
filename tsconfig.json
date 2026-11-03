@@ -39,7 +39,7 @@
       "@chat/app/*": ["./packages/chord/test/examples/59-chat/app/*.ts"],
       "@todo/app/*": [
         "./packages/chord/test/examples/61-tutorial/src/api/*.ts",
-        "./packages/chord/test/examples/61-tutorial/src/api/*/index.ts",
+        "./packages/chord/test/examples/61-tutorial/src/api/*/index.ts"
       ],
       "@knightcode/chord/http": ["./packages/chord/src/node/http/index.ts"],
       "@knightcode/chord/workers": ["./packages/chord/src/node/workers/index.ts"],
