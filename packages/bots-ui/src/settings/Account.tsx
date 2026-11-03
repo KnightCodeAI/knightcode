@@ -55,11 +55,17 @@ export function Account() {
 	};
 	const addPasskey = async () => {
 		const { options } = await store.api.beginPasskey({});
-		const credential = await navigator.credentials
-			?.create({ publicKey: options as PublicKeyCredentialCreationOptions })
-			.catch(() => null);
+		// The server sends the options as JSON (base64url fields); the browser wants them as bytes, and the credential
+		// goes back as its JSON form.
+		const parse = (
+			globalThis.PublicKeyCredential as
+				{ parseCreationOptionsFromJSON?: (json: unknown) => PublicKeyCredentialCreationOptions } | undefined
+		)?.parseCreationOptionsFromJSON;
+		const publicKey = parse ? parse(options) : (options as PublicKeyCredentialCreationOptions);
+		const credential = (await navigator.credentials?.create({ publicKey }).catch(() => null)) as
+			(Credential & { toJSON?: () => unknown }) | null;
 		if (!credential) return toast({ text: "Passkey not added." });
-		await store.api.addPasskey({ name: "This device", response: credential });
+		await store.api.addPasskey({ name: "This device", response: credential.toJSON?.() ?? credential });
 		store.reload("sign-in");
 	};
 	return (

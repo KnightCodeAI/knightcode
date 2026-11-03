@@ -178,3 +178,25 @@ it("review 3.20: a bank link pays each month for every account it returns, and a
 	expect(await account.bankAccounts()).toEqual([]);
 	await expect(new PlaidClient({ ...PLAID_TEST, apiUrl: env.PLAID_API_URL }).accounts("access-monthly")).rejects.toThrow(/400/);
 });
+
+it("a purchase draws on the wallet the owner linked in Settings, with no wallet set on the bot", async () => {
+	const provider = cardProvider();
+	setPaymentsProvider(() => provider);
+	setSpendVerifier(async () => true);
+	try {
+		await user().setCountry("US");
+		await user().grantCredits(1_000, `grant-${crypto.randomUUID()}`);
+		await user().linkWallet("https://bots.knightcode.dev/settings/payments");
+		await bot("account-wallet").claim(owner, { provider: "fake", modelId: "fake-model" });
+		await bot("account-wallet").updateSettings(owner, { computerAccess: true });
+		await user().setSpendLimit("account-wallet", { perPurchase: 5_000, perMonth: 20_000 });
+		await tool("account-wallet", "buy", { merchant: "Shop", amount: 2_500, currency: "usd", item: "Desk lamp" });
+		const [card] = await bot("account-wallet").pendingApprovals(owner);
+		expect(await bot("account-wallet").answerApproval(owner, card!.id, "allow", { stand: "in" })).toBe("ok");
+		expect(provider.requests).toBe(1);
+		expect((await tool("account-wallet", "fill_card", { approvalId: card!.id, ref: "17", field: "number" })).isError).toBe(false);
+	} finally {
+		setPaymentsProvider(undefined);
+		setSpendVerifier(undefined);
+	}
+});

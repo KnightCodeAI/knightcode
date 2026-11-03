@@ -69,7 +69,7 @@ import { type TeachEvent, Teaching } from "../skills/teach.ts";
 import { FLEET_TOOL_NAMES, type FleetDeps, fleetTools } from "../team/fleet.ts";
 import { createSuggestionTables, maySuggest, recordSuggestion } from "../inbox/suggestions.ts";
 import { financeAvailable, PlaidClient } from "../finance/plaid.ts";
-import { CardsUnavailable, type PaymentCredential, paymentsAvailable, type PaymentsProvider, type Purchase, StripeLinkProvider } from "../payments/link.ts";
+import { CardsUnavailable, type PaymentCredential, paymentsAvailable, type PaymentsProvider, paymentsProviderFor, type Purchase } from "../payments/link.ts";
 import { verifySpendAssertion } from "../payments/spend-approvals.ts";
 import { callWithSecret, devVaultOrigins, vaultTools } from "../vault/tools.ts";
 import { ACCOUNT_LIMITS } from "../billing/limits.ts";
@@ -122,11 +122,10 @@ const RUN_KEY = "current-run";
 /** The owner allowed the computer for the current outside-touched work; cleared with the run's outside mark. */
 const COMPUTER_ALLOWED_KEY = "current-run:computer";
 
-let paymentsFactory: (env: Env) => PaymentsProvider | undefined = (env) =>
-	env.STRIPE_SECRET_KEY ? new StripeLinkProvider({ secretKey: env.STRIPE_SECRET_KEY, apiUrl: env.STRIPE_API_URL }) : undefined;
+let paymentsFactory: (env: Env) => PaymentsProvider | undefined = paymentsProviderFor;
 /** Tests only: the payments provider (`undefined` restores Stripe's). */
 export function setPaymentsProvider(next: ((env: Env) => PaymentsProvider | undefined) | undefined): void {
-	paymentsFactory = next ?? ((env) => (env.STRIPE_SECRET_KEY ? new StripeLinkProvider({ secretKey: env.STRIPE_SECRET_KEY, apiUrl: env.STRIPE_API_URL }) : undefined));
+	paymentsFactory = next ?? paymentsProviderFor;
 }
 
 let spendVerifier: typeof verifySpendAssertion = verifySpendAssertion;
@@ -2061,7 +2060,8 @@ export class BotObject extends DurableObject<Env> {
 				kind: "idempotent",
 				send: async (action) => {
 					const provider = paymentsFactory(this.env);
-					const wallet = this.#meta("wallet_customer");
+					// The bot's own wallet, else the one the owner linked in Settings > Payments.
+					const wallet = this.#meta("wallet_customer") ?? (await this.#user().walletCustomer());
 					if (!provider || !wallet) return { ok: false, error: "The owner has not linked a wallet." };
 					const { merchant, amount, currency, item, acceptsSharedTokens } = action.intent.args as Purchase & { acceptsSharedTokens: boolean };
 					const purchase = { merchant, amount, currency, item };

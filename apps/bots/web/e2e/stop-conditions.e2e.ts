@@ -756,3 +756,66 @@ test("A user teaches a task by recording it, saves the drafted skill, and a rout
 	const run = (await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool !== undefined).at(-1);
 	expect(run?.tool).toBe(steps);
 });
+
+test("A US user approves a purchase with a passkey and the bot pays with a single-use card (Stripe test mode: a published test card, nothing charged)", async ({ context, page }) => {
+	test.setTimeout(180_000);
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	// The owner's device: a platform authenticator that verifies the user.
+	const cdp = await context.newCDPSession(page);
+	await cdp.send("WebAuthn.enable");
+	const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
+		options: { protocol: "ctap2", transport: "internal", hasResidentKey: true, hasUserVerification: true, isUserVerified: true },
+	});
+	await page.goto("/settings/account");
+	await page.getByRole("button", { name: "Add a passkey" }).click();
+	await until(async () => (await api.listSignInMethods({})).passkeys.length > 0, "the passkey");
+	// Payments: a US account, its wallet linked, and a limit for this bot.
+	expect((await api.getPayments({})).available).toBe(true);
+	await api.linkWallet({});
+	const bot = await api.createBot({ name: `Buyer${tag}`, purpose: "Buys office supplies" });
+	await api.updateBot({ botId: bot.id, computerAccess: true, approvals: "never" });
+	await api.setSpendLimits({ limits: [{ botId: bot.id, perPurchase: 100, perMonth: 500 }] });
+	await script(context.request, {
+		[bot.name]: [
+			{ tool: "tool_search", args: { query: "buy fill_card" } },
+			{ tool: "buy", args: { merchant: "Lamp Shop", amount: 2_500, currency: "usd", item: "Desk lamp" } },
+			"Approve the purchase with your passkey and I will pay.",
+		],
+	});
+	const send = async (text: string) => {
+		await page.getByRole("textbox", { name: "Message" }).fill(text);
+		await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	};
+	await page.goto(`/bots/${bot.id}`);
+	await send("Buy the desk lamp from Lamp Shop");
+	await expect(page.getByText("Approve the purchase with your passkey and I will pay.")).toBeVisible({ timeout: 60_000 });
+	const approval = await until(async () => (await api.listApprovals({})).approvals.find((candidate) => candidate.botId === bot.id && candidate.state === "pending"), "the purchase approval");
+	expect(approval.action.spend).toEqual({ merchant: "Lamp Shop", amount: 25, currency: "USD", item: "Desk lamp" });
+	// Allow once asks the passkey to sign this exact purchase.
+	await page.getByRole("button", { name: "Allow once" }).first().click();
+	await until(async () => (await api.listApprovals({})).approvals.find((candidate) => candidate.id === approval.id)?.state !== "pending", "the approved purchase");
+	const { credentials } = await cdp.send("WebAuthn.getCredentials", { authenticatorId });
+	expect(credentials[0]!.signCount).toBeGreaterThan(0);
+	// The bot pays: the card is filled into the checkout, masked, and never shown to it.
+	await script(context.request, {
+		[bot.name]: [
+			{ tool: "fill_card", args: { approvalId: approval.id, ref: "card-number", field: "number" } },
+			{ tool: "fill_card", args: { approvalId: approval.id, ref: "card-cvc", field: "cvc" } },
+			"Paid with a single-use card.",
+		],
+	});
+	await send("Pay now");
+	await expect(page.getByText("Paid with a single-use card.")).toBeVisible({ timeout: 60_000 });
+	const fills = (await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool?.startsWith("Filled")).map((request) => request.tool!);
+	expect(fills).toHaveLength(2);
+	const testCard = "4242424242424242";
+	expect(await modelSaw(context.request, testCard)).toBe(0);
+	expect((await threadTexts(api, bot.id)).join("\n")).not.toContain(testCard);
+	expect(await page.content()).not.toContain(testCard);
+	// Single-use: the card belongs to that approval only.
+	await script(context.request, { [bot.name]: [{ tool: "fill_card", args: { approvalId: "apr_other", ref: "card-number", field: "number" } }, "No card for that."] });
+	await send("Use the card again");
+	await expect(page.getByText("No card for that.")).toBeVisible({ timeout: 60_000 });
+	expect((await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool !== undefined).at(-1)?.tool).not.toContain("Filled");
+});

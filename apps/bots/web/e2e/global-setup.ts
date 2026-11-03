@@ -120,6 +120,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 					BOTS_DEV_MODEL_IDS: FAKE_MODELS.join(","),
 					BOTS_DEV_COMPUTER_IDLE_MS: "15000",
 					BOTS_DEV_VAULT_ORIGINS: new URL(models.url).origin,
+					BOTS_DEV_PAYMENTS: "test",
 					STRIPE_WEBHOOK_SECRET: "e2e-stripe-webhook-secret",
 					GITHUB_APP_ID: "4242",
 					GITHUB_APP_PRIVATE_KEY: appKey,

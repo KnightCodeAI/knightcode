@@ -73,3 +73,25 @@ export class StripeLinkProvider implements PaymentsProvider {
 		throw new CardsUnavailable();
 	}
 }
+
+/**
+ * Development servers only (BOTS_DEV_SEED with BOTS_DEV_PAYMENTS=test): Stripe test mode's behaviour, for the browser
+ * tests. Each approved purchase gets its own single-use card, limited to that purchase, with Stripe's published test
+ * card number; nothing is charged. Never used in production (the flag needs the development seed).
+ */
+export class TestModePayments implements PaymentsProvider {
+	async linkWallet(input: { accountId: string; returnUrl: string }) {
+		return { url: `${input.returnUrl}?wallet=linked`, customerId: `cus_test_${input.accountId}` };
+	}
+
+	async requestCredential(input: Purchase & { customerId: string; acceptsSharedTokens: boolean }): Promise<PaymentCredential> {
+		const { merchant, amount, currency, item } = input;
+		return { kind: "card", number: "4242424242424242", expMonth: 12, expYear: new Date().getUTCFullYear() + 2, cvc: "123", limitedTo: { merchant, amount, currency, item } };
+	}
+}
+
+/** The payments provider for this deployment: Stripe when it is set up, test mode on a development server that asks. */
+export function paymentsProviderFor(env: { STRIPE_SECRET_KEY?: string; STRIPE_API_URL?: string; BOTS_DEV_SEED?: string; BOTS_DEV_PAYMENTS?: string }): PaymentsProvider | undefined {
+	if (env.BOTS_DEV_SEED === "1" && env.BOTS_DEV_PAYMENTS === "test") return new TestModePayments();
+	return env.STRIPE_SECRET_KEY ? new StripeLinkProvider({ secretKey: env.STRIPE_SECRET_KEY, ...(env.STRIPE_API_URL ? { apiUrl: env.STRIPE_API_URL } : {}) }) : undefined;
+}

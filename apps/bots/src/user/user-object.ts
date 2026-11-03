@@ -45,7 +45,7 @@ import { appOrigin } from "../auth/oauth.ts";
 import { type CatalogSource, curatedEntries, mergeCatalog, sourceOf } from "../connectors/catalog.ts";
 import { ComposioClient } from "../connectors/composio.ts";
 import { issueLinkCode } from "../channels/linking.ts";
-import { paymentsAvailable, StripeLinkProvider } from "../payments/link.ts";
+import { paymentsAvailable, paymentsProviderFor } from "../payments/link.ts";
 import { financeAvailable } from "../finance/plaid.ts";
 import { AWAY_MS } from "../inbox/catch-up.ts";
 
@@ -549,10 +549,15 @@ export class UserObject extends DurableObject<Env> {
 		return { available: paymentsAvailable(this.env, this.country()), linked: readDoc(this.#sql, "wallet", () => null) !== null, limits };
 	}
 	async linkWallet(returnUrl: string): Promise<{ url: string }> {
-		if (!this.env.STRIPE_SECRET_KEY) throw new Error("payments are not set up");
-		const wallet = await new StripeLinkProvider({ secretKey: this.env.STRIPE_SECRET_KEY, apiUrl: this.env.STRIPE_API_URL }).linkWallet({ accountId: this.#accountId, returnUrl });
+		const provider = paymentsProviderFor(this.env);
+		if (!provider) throw new Error("payments are not set up");
+		const wallet = await provider.linkWallet({ accountId: this.#accountId, returnUrl });
 		writeDoc(this.#sql, "wallet", { customerId: wallet.customerId });
 		return { url: wallet.url };
+	}
+	/** The wallet the owner linked, which bots' purchases draw on. */
+	walletCustomer(): string | undefined {
+		return readDoc(this.#sql, "wallet", () => null as { customerId: string } | null)?.customerId;
 	}
 	setSpendLimits(limits: SpendLimit[]): Payments {
 		this.#sql.exec("DELETE FROM spend_limits");
