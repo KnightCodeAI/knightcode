@@ -2,7 +2,7 @@
 // signing webhooks the way each service does.
 import { spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { type ApiClient, createApiClient } from "@knightcode/bots-protocol";
 import type { APIRequestContext, BrowserContext, Page } from "@playwright/test";
 import type { Reply } from "../../test/fake-model-server.ts";
@@ -95,7 +95,9 @@ export function sentMail(): SentMail[] {
 	for (const block of log.split("send_email binding called with MessageBuilder:").slice(1)) {
 		const field = (name: string) => block.match(new RegExp(`^${name}: (.*)$`, "m"))?.[1]?.trim() ?? "";
 		const textFile = field("Text");
-		mails.push({ from: field("From"), to: field("To"), subject: field("Subject"), text: textFile ? readFileSync(textFile, "utf8") : "" });
+		// A restarted Worker clears its temporary files: older mail keeps its headers, without its text.
+		const text = textFile && existsSync(textFile) ? readFileSync(textFile, "utf8") : "";
+		mails.push({ from: field("From"), to: field("To"), subject: field("Subject"), text });
 	}
 	return mails;
 }
