@@ -6,7 +6,8 @@ import { CreateBot } from "./bot/CreateBot.tsx";
 import { ChatView } from "./chat/ChatView.tsx";
 import { Catalog } from "./connectors/Catalog.tsx";
 import { GroupChat } from "./groups/GroupChat.tsx";
-import { GroupSettings } from "./groups/GroupSettings.tsx";
+import { GroupPane } from "./groups/GroupPane.tsx";
+import { CreateGroup } from "./groups/CreateGroup.tsx";
 import { awayFor, CatchUp, isAway, markActive } from "./inbox/CatchUp.tsx";
 import { Inbox } from "./inbox/Inbox.tsx";
 import { Checklist, type OnboardingItem, onboardingSkipped, openItems } from "./onboarding/Checklist.tsx";
@@ -52,6 +53,24 @@ export function BotsApp({ api, connect, platform, sandboxOrigin, sidebarHeader, 
 		store.socket.reopen();
 		return () => store.socket.close();
 	}, [store]);
+	// Programmatic focus restoration can match :focus-visible after a mouse click, especially on a fresh page.
+	// Track input on the document so chat controls and portalled menus share the same fallback-ring policy.
+	useEffect(() => {
+		const root = document.documentElement;
+		const pointer = () => {
+			root.dataset.kbInput = "pointer";
+		};
+		const keyboard = (event: KeyboardEvent) => {
+			if (!event.metaKey && !event.altKey && !event.ctrlKey) root.dataset.kbInput = "keyboard";
+		};
+		document.addEventListener("pointerdown", pointer, true);
+		document.addEventListener("keydown", keyboard, true);
+		return () => {
+			document.removeEventListener("pointerdown", pointer, true);
+			document.removeEventListener("keydown", keyboard, true);
+			delete root.dataset.kbInput;
+		};
+	}, []);
 	// The desktop app sets the theme on the page itself.
 	useEffect(() => {
 		if (platform === "web") applyThemePreference();
@@ -124,6 +143,7 @@ function Shell({ sidebarHeader }: { sidebarHeader?: ReactNode }) {
 	const paneParam = useQueryParam("pane");
 	const shownPane =
 		phone && !(route.name === "bot" && (route.pane !== "details" || paneParam === "details")) ? "closed" : pane;
+	const groupPane = route.name === "group" ? (route.pane ?? (phone ? "closed" : "details")) : "closed";
 	const [navOpen, setNavOpen] = useState(false);
 	const path = formatRoute(route);
 	useEffect(() => setNavOpen(false), [path]);
@@ -141,8 +161,10 @@ function Shell({ sidebarHeader }: { sidebarHeader?: ReactNode }) {
 					{phone && <MobileNav open={navOpen} onOpenChange={setNavOpen} />}
 					{route.name === "group" ? (
 						group ? (
-							<GroupChat group={group} />
-						) : route.groupId === "new" ? null : (
+							<GroupChat group={group} paneOpen={groupPane !== "closed"} />
+						) : route.groupId === "new" ? (
+							<CreateGroup onClose={() => toChat()} />
+						) : (
 							<MainView route={route} loading={!data} />
 						)
 					) : view ? (
@@ -153,7 +175,11 @@ function Shell({ sidebarHeader }: { sidebarHeader?: ReactNode }) {
 						<MainView route={route} loading={!data} />
 					)}
 				</main>
-				{bot && <InfoPane bot={bot} view={shownPane} routineId={route.name === "bot" ? route.routineId : undefined} />}
+				{group ? (
+					<GroupPane key={group.id} group={group} view={groupPane} />
+				) : (
+					bot && <InfoPane bot={bot} view={shownPane} routineId={route.name === "bot" ? route.routineId : undefined} />
+				)}
 			</div>
 			<CommandK open={paletteOpen} onOpenChange={setPaletteOpen} />
 			{route.name === "new" && <CreateBot tab={route.tab} onClose={backToChat} />}
@@ -161,12 +187,6 @@ function Shell({ sidebarHeader }: { sidebarHeader?: ReactNode }) {
 			{route.name === "skills" && <SkillsLibrary onClose={backToChat} />}
 			{route.name === "settings" && <SettingsDialog view={route.section} onClose={backToChat} />}
 			{route.name === "activity" && <SettingsDialog view="activity" onClose={backToChat} />}
-			{route.name === "group" && route.settings && (group || route.groupId === "new") && (
-				<GroupSettings
-					group={group}
-					onClose={() => (group ? navigate({ name: "group", groupId: group.id, settings: false }) : backToChat())}
-				/>
-			)}
 			{route.name === "bot" && route.pane === "settings" && editing && bot && (
 				<BotSettings bot={bot} onClose={() => navigate({ name: "bot", botId: bot.id, pane: "settings" })} />
 			)}

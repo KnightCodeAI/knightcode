@@ -45,7 +45,7 @@ export function useSearch(query: string): Hit[] {
 				key: `group:${g.id}`,
 				title: g.name,
 				kind: "group",
-				route: { name: "group", groupId: g.id, settings: false },
+				route: { name: "group", groupId: g.id },
 			})),
 		];
 		const seen = new Set(local.map((h) => h.key));
@@ -71,7 +71,7 @@ function toHit(hit: SearchHit): Hit | undefined {
 				key: `group:${hit.id}`,
 				title: hit.title,
 				kind: "group",
-				route: { name: "group", groupId: hit.id, settings: false },
+				route: { name: "group", groupId: hit.id },
 			};
 		case "message":
 			return hit.botId

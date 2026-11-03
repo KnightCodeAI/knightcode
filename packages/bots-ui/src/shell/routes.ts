@@ -4,13 +4,15 @@ import { useSyncExternalStore } from "react";
 /** The tabs of a bot's details pane, and the pages pushed inside it. */
 export type PaneView = "details" | "library" | "computer" | "settings" | "memory" | "routines" | "routine-new";
 
+export type GroupPaneView = "details" | "library" | "members";
+
 export type SettingsSection =
 	"account" | "approvals" | "vault" | "payments" | "channels" | "billing" | "usage" | "computer";
 
 export type Route =
 	| { name: "home" }
 	| { name: "bot"; botId: string; pane: PaneView | "closed"; routineId?: string }
-	| { name: "group"; groupId: string; settings: boolean }
+	| { name: "group"; groupId: string; pane?: GroupPaneView | "closed" }
 	| { name: "new"; tab: "create" | "templates" | "import" }
 	| { name: "connectors"; appId?: string }
 	| { name: "skills" }
@@ -45,7 +47,14 @@ export function parseRoute(pathname: string, search = ""): Route {
 		if (third && PANES.has(third)) return { name: "bot", botId: second, pane: third as PaneView };
 		if (!third) return { name: "bot", botId: second, pane: query.get("pane") === "closed" ? "closed" : "details" };
 	}
-	if (first === "groups" && second) return { name: "group", groupId: second, settings: third === "settings" };
+	if (first === "groups" && second && !third) {
+		const pane = query.get("pane");
+		return {
+			name: "group",
+			groupId: second,
+			...(pane === "details" || pane === "library" || pane === "members" || pane === "closed" ? { pane } : {}),
+		};
+	}
 	if (first === "new") {
 		const tab = query.get("tab");
 		return { name: "new", tab: tab === "templates" || tab === "import" ? tab : "create" };
@@ -74,7 +83,7 @@ export function formatRoute(route: Route): string {
 				return `/bots/${enc(route.botId)}/routines/${enc(route.routineId)}`;
 			return `/bots/${enc(route.botId)}/${route.pane}`;
 		case "group":
-			return `/groups/${enc(route.groupId)}${route.settings ? "/settings" : ""}`;
+			return `/groups/${enc(route.groupId)}${route.pane ? `?pane=${route.pane}` : ""}`;
 		case "new":
 			return route.tab === "create" ? "/new" : `/new?tab=${route.tab}`;
 		case "connectors":

@@ -22,7 +22,9 @@ import {
 	Users,
 } from "lucide-react";
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useState } from "react";
-import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { BotAvatar } from "../avatar/BotAvatar.tsx";
+import { StarBadge } from "../avatar/StarBadge.tsx";
+import { GroupAvatar } from "../groups/GroupAvatar.tsx";
 import { IconButton } from "../primitives/IconButton.tsx";
 import { Menu, MenuItem, MenuSeparator, MenuSub } from "../primitives/Menu.tsx";
 import { usePlatform } from "../platform.ts";
@@ -59,10 +61,11 @@ export function Sidebar({ route, onSearch, header }: SidebarProps) {
 	const loose = [...bots.filter((b) => !placed.has(b.id)), ...groups.filter((g) => !placed.has(g.id))].sort(
 		byPinnedThenRecent,
 	);
+	const allBots = new Map((data?.bots ?? []).map((bot) => [bot.id, bot]));
 	const byId = new Map<string, Bot | Group>([...bots, ...groups].map((item) => [item.id, item]));
 	const row = (item: Bot | Group) =>
 		"memberIds" in item ? (
-			<GroupRow key={item.id} group={item} active={item.id === activeGroup} />
+			<GroupRow key={item.id} group={item} active={item.id === activeGroup} bots={allBots} />
 		) : (
 			<BotRow key={item.id} bot={item} active={item.id === activeBot} sections={sections} />
 		);
@@ -145,7 +148,7 @@ function BotRow({ bot, active, sections }: { bot: Bot; active: boolean; sections
 				href={`/bots/${encodeURIComponent(bot.id)}`}
 				className="kb-row"
 				aria-current={active ? "page" : undefined}
-				aria-label={bot.main ? `${bot.name}, Main Bot` : bot.name}
+				aria-label={bot.main ? `${bot.name}, Main Bot` : bot.manager ? `${bot.name}, Chief of Staff` : bot.name}
 				data-ref="sidebar-row"
 				onClick={(event) => {
 					if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
@@ -154,13 +157,8 @@ function BotRow({ bot, active, sections }: { bot: Bot; active: boolean; sections
 				}}
 			>
 				<span className="kb-row__avatar" data-ref="row-avatar" data-avatar-box="">
-					<BotAvatarView
-						shape={bot.avatar.shape}
-						color={bot.avatar.color}
-						state={bot.status === "working" ? "working" : bot.status === "sleeping" ? "sleeping" : "idle"}
-						size={36}
-					/>
-					{bot.main && <span className="kb-row__badge" role="img" aria-label="Main Bot" data-ref="row-badge" />}
+					<BotAvatar bot={bot} size={36} pointerArea=".kb-row-wrap" />
+					<StarBadge of={bot} data-ref="row-badge" />
 				</span>
 				<span className="kb-row__body">
 					<span className="kb-row__title">
@@ -227,7 +225,7 @@ function BotRow({ bot, active, sections }: { bot: Bot; active: boolean; sections
 				</MenuItem>
 				<MenuItem
 					icon={<Users size={14} />}
-					onSelect={() => navigate(`/groups/new/settings?with=${encodeURIComponent(bot.id)}`)}
+					onSelect={() => navigate(`/groups/new?with=${encodeURIComponent(bot.id)}`)}
 				>
 					New group with {bot.name}
 				</MenuItem>
@@ -265,30 +263,38 @@ function BotRow({ bot, active, sections }: { bot: Bot; active: boolean; sections
 	);
 }
 
-function GroupRow({ group, active }: { group: Group; active: boolean }) {
+function GroupRow({ group, active, bots }: { group: Group; active: boolean; bots: ReadonlyMap<string, Bot> }) {
+	// Archived members drop out of the active list, so the row shows the members it can draw.
+	const members = group.memberIds.map((id) => bots.get(id)).filter((b) => b !== undefined);
 	return (
 		<a
 			href={`/groups/${encodeURIComponent(group.id)}`}
 			className="kb-row"
 			aria-current={active ? "page" : undefined}
+			aria-label={`${group.name}, group of ${group.memberIds.length} bots`}
 			onClick={(event) => {
 				if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
 				event.preventDefault();
-				navigate({ name: "group", groupId: group.id, settings: false });
+				navigate({ name: "group", groupId: group.id });
 			}}
 		>
-			<span className="kb-row__avatar kb-account-avatar" style={{ border: 0 }}>
-				{group.name.slice(0, 1)}
+			<span className="kb-row__avatar">
+				<GroupAvatar members={members} size={36} />
 			</span>
 			<span className="kb-row__body">
 				<span className="kb-row__title">
 					<span className="kb-row__name">{group.name}</span>
+					{group.pinned && <Pin size={12} color="var(--kb-color-text-tertiary)" aria-label="Pinned" />}
 				</span>
 				<span className="kb-row__preview-row">
-					<span className="kb-row__preview">{group.memberIds.length} bots</span>
-					{group.needsYou && (
+					<span className="kb-row__preview">{members.map((b) => b.name).join(", ")}</span>
+					{group.needsYou ? (
 						<span className="kb-row__needs-you" data-testid="needs-you" role="img" aria-label="Needs you" />
-					)}
+					) : group.unread > 0 ? (
+						<span className="kb-row__unread" aria-label={`${group.unread} unread`}>
+							{group.unread}
+						</span>
+					) : null}
 				</span>
 			</span>
 		</a>

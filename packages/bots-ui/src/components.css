@@ -12,6 +12,7 @@
 @import "./settings/settings.css";
 @import "./pages/pages.css";
 @import "./groups/groups.css";
+@import "./groups/create-group.css";
 
 /* Read by screen readers, not shown. */
 .kb-visually-hidden {
@@ -96,7 +97,12 @@
 :where(.kb-app, .kb-layer) :where(:is(*):not(.kb-host, .kb-host *))::selection {
 	background-color: revert;
 }
-:where(.kb-app, .kb-layer) :where(:is(*):not(.kb-host, .kb-host *)):focus-visible {
-	outline: 2px solid var(--kb-color-accent);
+/* Restored focus can match :focus-visible after a click; suppress only the fallback ring, not component feedback. */
+:where(:root[data-kb-input="pointer"]) {
+	--kb-focus-outline: none;
+}
+/* A zero-specificity fallback: components with their own focus feedback take precedence. */
+:where(.kb-app, .kb-layer) :where(:focus-visible:not(.kb-host, .kb-host *)) {
+	outline: var(--kb-focus-outline, 2px solid var(--kb-color-accent));
 	outline-offset: 2px;
 }

@@ -31,7 +31,8 @@ select {
 	font-feature-settings: inherit;
 }
 
-:focus-visible {
-	outline: 2px solid var(--kb-color-accent);
+/* Keep the page fallback weaker than each component's focus styles. */
+:where(:focus-visible) {
+	outline: var(--kb-focus-outline, 2px solid var(--kb-color-accent));
 	outline-offset: 2px;
 }

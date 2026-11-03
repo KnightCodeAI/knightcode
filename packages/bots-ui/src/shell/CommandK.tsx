@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { BotAvatar } from "../avatar/BotAvatar.tsx";
 import { useTopLayer } from "../primitives/layer.tsx";
 import { SETTINGS_NAV } from "../settings/SettingsDialog.tsx";
 import { useBots } from "../state/store.ts";
@@ -72,7 +72,7 @@ export function CommandK({ open, onOpenChange }: CommandKProps) {
 		const botId = route.name === "bot" ? route.botId : undefined;
 		return [
 			action("new-bot", "New Bot", <Plus size={12} />, go({ name: "new", tab: "create" })),
-			action("new-group", "New group chat", <Users size={12} />, () => navigate("/groups/new/settings")),
+			action("new-group", "New group chat", <Users size={12} />, go({ name: "group", groupId: "new" })),
 			action("shortcuts", "Keyboard shortcuts", <Keyboard size={12} />, () => setShortcuts(true), "Help"),
 			...SETTINGS_NAV.map((item) =>
 				action(
@@ -189,7 +189,7 @@ function HitLead({ hit }: { hit: Hit }) {
 		typeof hit.route !== "string" && hit.route.name === "bot" && hit.kind === "bot"
 			? data?.bots.find((b) => b.id === (hit.route as { botId: string }).botId)
 			: undefined;
-	if (bot) return <BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={24} />;
+	if (bot) return <BotAvatar bot={bot} size={24} />;
 	const icons: Record<Hit["kind"], ReactNode> = {
 		bot: <Hash size={12} />,
 		group: <Users size={12} />,

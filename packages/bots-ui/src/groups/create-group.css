@@ -1,0 +1,165 @@
+/* The inline new-group recipient picker. */
+.kb-group-create {
+	height: 100%;
+	overflow-y: auto;
+}
+.kb-group-create__to {
+	display: flex;
+	align-items: baseline;
+	gap: var(--kb-space-8);
+	min-height: 56px;
+	padding: 11px 14px;
+	box-sizing: border-box;
+	border-bottom: 1px solid var(--kb-color-border-faint);
+	font-size: var(--kb-font-size-lg);
+}
+.kb-group-create__to > label {
+	flex: none;
+	color: var(--kb-color-text-tertiary);
+	line-height: 32px;
+}
+.kb-group-create__recipients {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--kb-space-6);
+	min-width: 0;
+}
+.kb-group-create__chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--kb-space-4);
+	max-width: 100%;
+	min-width: 0;
+	height: 30px;
+	padding: 0 7px;
+	border-radius: var(--kb-radius-full);
+	background: var(--kb-color-surface);
+	font-size: var(--kb-font-size-sm);
+	font-weight: var(--kb-font-weight-medium);
+}
+.kb-group-create__chip > button {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 22px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--kb-radius-xs);
+	background: transparent;
+	color: var(--kb-color-text-tertiary);
+	cursor: pointer;
+	transition: color var(--kb-duration-hover);
+}
+.kb-group-create__chip > button:hover {
+	color: var(--kb-color-text);
+}
+.kb-group-create__input {
+	flex: 1;
+	min-width: min(180px, 100%);
+	height: 32px;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--kb-color-text);
+	font: inherit;
+}
+.kb-group-create__input::placeholder {
+	color: var(--kb-color-text-placeholder);
+}
+.kb-group-create__input:focus-visible {
+	outline: none;
+	/* The caret identifies the active field; the hairline keeps focus visible when it blinks. */
+	box-shadow: 0 1px 0 var(--kb-color-border-strong);
+}
+.kb-group-create__suggestions {
+	width: min(620px, calc(100% - 64px));
+	margin: -4px 28px 24px 36px;
+}
+.kb-group-create__results {
+	max-height: min(360px, 60dvh);
+	padding: var(--kb-space-6);
+	overflow-y: auto;
+	border: 1px solid var(--kb-color-border);
+	border-radius: var(--kb-radius-bubble);
+	background: var(--kb-color-surface);
+	box-shadow: var(--kb-shadow-popover);
+}
+.kb-group-create__option {
+	display: flex;
+	align-items: center;
+	gap: var(--kb-space-10);
+	width: 100%;
+	min-height: 40px;
+	padding: 7px 10px;
+	border: 0;
+	border-radius: var(--kb-radius-lg);
+	background: transparent;
+	color: var(--kb-color-text);
+	font: inherit;
+	font-size: var(--kb-font-size-md);
+	text-align: left;
+	cursor: pointer;
+	transition: background-color var(--kb-duration-hover);
+}
+.kb-group-create__option:hover:not(:disabled),
+.kb-group-create__option[aria-selected="true"] {
+	background: var(--kb-color-fill-hover);
+}
+.kb-group-create__option:active:not(:disabled) {
+	background: var(--kb-color-fill-active);
+}
+.kb-group-create__name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.kb-group-create__add {
+	flex: none;
+	margin-left: auto;
+	color: var(--kb-color-text-tertiary);
+	font-size: var(--kb-font-size-xs);
+	opacity: 0;
+	transition: opacity var(--kb-duration-hover);
+}
+.kb-group-create__option:hover .kb-group-create__add,
+.kb-group-create__option:focus-visible .kb-group-create__add,
+.kb-group-create__option[aria-selected="true"] .kb-group-create__add {
+	opacity: 1;
+}
+.kb-group-create__option:disabled,
+.kb-group-create__chip > button:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+.kb-group-create__empty,
+.kb-group-create__error,
+.kb-group-create__hint {
+	margin: 12px 10px;
+	font-size: var(--kb-font-size-sm);
+	line-height: var(--kb-line-height-sm);
+}
+.kb-group-create__empty,
+.kb-group-create__hint {
+	color: var(--kb-color-text-tertiary);
+}
+.kb-group-create__error {
+	color: var(--kb-color-danger);
+}
+@media (width <= 639px) {
+	.kb-group-create__to {
+		padding-top: 56px;
+	}
+	.kb-group-create__suggestions {
+		width: calc(100% - 28px);
+		margin-inline: 14px;
+	}
+	.kb-group-create__add {
+		display: none;
+	}
+}

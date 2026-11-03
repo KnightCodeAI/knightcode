@@ -15,7 +15,11 @@ describe("routes", () => {
 			"/bots/reviewer/routines/new",
 			"/bots/reviewer/routines/rt-1",
 			"/groups/launch",
-			"/groups/launch/settings",
+			"/groups/new",
+			"/groups/launch?pane=closed",
+			"/groups/launch?pane=details",
+			"/groups/launch?pane=library",
+			"/groups/launch?pane=members",
 			"/new",
 			"/new?tab=templates",
 			"/connectors",
@@ -35,5 +39,9 @@ describe("routes", () => {
 
 	it("treats unknown paths as not found", () => {
 		expect(parseRoute("/nope")).toEqual({ name: "not-found", path: "/nope" } satisfies Route);
+		expect(parseRoute("/groups/launch/settings")).toEqual({
+			name: "not-found",
+			path: "/groups/launch/settings",
+		} satisfies Route);
 	});
 });
