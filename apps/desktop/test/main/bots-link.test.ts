@@ -2,7 +2,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { ComputerLink, handleExec, LocalComputerPolicy } from "../../src/main/bots/computer-link.ts";
+import {
+	ComputerLink,
+	connectComputerLink,
+	handleExec,
+	type LinkSocket,
+	LocalComputerPolicy,
+	runInShell,
+} from "../../src/main/bots/computer-link.ts";
 import { connectProviders, providerRules } from "../../src/main/bots/connect.ts";
 import { egressAllowed, routeFor } from "../../src/main/bots/egress-proxy.ts";
 import { createPasskeyRelay } from "../../src/main/bots/passkey-relay.ts";
@@ -195,4 +202,52 @@ test("signs in to KnightCode Bots through the browser, keeping the session encry
 	});
 	bots.signOut();
 	expect(bots.status().signedIn).toBe(false);
+});
+
+test("the computer link signs in with a socket ticket, asks once per session, then runs commands in the shell", async () => {
+	const sent: unknown[] = [];
+	const listeners: Record<string, ((event: { data: unknown }) => void)[]> = {};
+	let opened = "";
+	const socket: LinkSocket = {
+		send: (data) => void sent.push(JSON.parse(data)),
+		close: () => {},
+		addEventListener: (type: string, listener: (event: { data: unknown }) => void) =>
+			void (listeners[type] ??= []).push(listener),
+	};
+	const asked: string[] = [];
+	await connectComputerLink({
+		origin: "https://bots.example",
+		accountId: "acct 1",
+		// A slow ticket, and a socket that opens at once: the auth frame must still go out.
+		ticket: () => new Promise((resolve) => setTimeout(() => resolve("tk-1"), 30)),
+		policy: new LocalComputerPolicy(),
+		ask: async ({ command }) => (asked.push(command), "allow"),
+		run: (command) => runInShell(command, { cwd: tmpdir() }),
+		socket: (url) => {
+			opened = url;
+			queueMicrotask(() => {
+				for (const listener of listeners.open ?? []) listener({ data: undefined });
+			});
+			return socket;
+		},
+	});
+	expect(opened).toBe("wss://bots.example/api/desktop/acct%201/link");
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(sent).toEqual([{ kind: "auth", ticket: "tk-1" }]);
+	const exec = async (id: string, command: string) => {
+		for (const listener of listeners.message ?? [])
+			listener({ data: JSON.stringify({ kind: "exec", id, botId: "b1", session: "s1", command }) });
+		const deadline = Date.now() + 10_000;
+		while (!sent.some((frame) => (frame as { id?: string }).id === id) && Date.now() < deadline)
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		return sent.find((frame) => (frame as { id?: string }).id === id) as { output: string; exitCode: number };
+	};
+	expect(await exec("x1", "echo first")).toMatchObject({
+		kind: "exec-result",
+		exitCode: 0,
+		output: expect.stringContaining("first"),
+	});
+	expect(await exec("x2", "echo second")).toMatchObject({ exitCode: 0, output: expect.stringContaining("second") });
+	// One question for the session.
+	expect(asked).toEqual(["echo first"]);
 });

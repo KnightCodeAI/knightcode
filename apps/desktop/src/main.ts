@@ -113,6 +113,32 @@ const bots = new DesktopBots({
 	keychain: safeStorage,
 	openExternal: (url) => shell.openExternal(url),
 });
+/** "Let bots use this computer": native questions, commands in the user's own shell from their home folder. */
+const computerLink = bots.computerLink({
+	home: app.getPath("home"),
+	confirm: async (message) =>
+		(
+			await dialog.showMessageBox({
+				type: "warning",
+				buttons: ["Let bots use this computer", "Cancel"],
+				defaultId: 1,
+				cancelId: 1,
+				message: "Let bots use this computer?",
+				detail: message,
+			})
+		).response === 0,
+	ask: async ({ botId, command }) => {
+		const { response } = await dialog.showMessageBox({
+			type: "question",
+			buttons: ["Allow", "Allow on this computer", "Deny"],
+			defaultId: 2,
+			cancelId: 2,
+			message: "A bot wants to run a command on this computer",
+			detail: `${botId}:\n\n${command}`,
+		});
+		return response === 0 ? "allow" : response === 1 ? "allow-on-this-computer" : "deny";
+	},
+});
 // An app's frame may sit only in this app's own windows.
 const mcpApps = new McpApps(ORIGIN);
 let server: ServerConnection;
@@ -166,6 +192,7 @@ function connectPort(id: number, open: OpenWindow): void {
 				updates,
 				installUpdate,
 				bots,
+				computerLink,
 			}).then((response) => port1.postMessage(response));
 			return;
 		}
@@ -376,6 +403,8 @@ async function start(): Promise<void> {
 		),
 	);
 	buildMenu();
+	// Bots reach this computer again only if the user had turned that on.
+	void computerLink.start().catch((error: unknown) => console.error("bots computer link", error));
 	const env = await loginShellEnv();
 	// Editors launch with the user's own PATH, as the server's tools run with it.
 	openIn = openInService(env);

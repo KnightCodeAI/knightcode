@@ -19,7 +19,7 @@ import { ToastProvider } from "./primitives/Toast.tsx";
 import { applyThemePreference } from "./theme.ts";
 import { CommandK, useCommandKShortcut } from "./shell/CommandK.tsx";
 import { InfoPane } from "./shell/InfoPane.tsx";
-import { PlatformContext } from "./platform.ts";
+import { type DesktopHost, DesktopHostContext, PlatformContext } from "./platform.ts";
 import { MobileNav, useIsPhone } from "./shell/MobileNav.tsx";
 import { formatRoute, navigate, type Route, routeInMemory, useQueryParam, useRoute } from "./shell/routes.ts";
 import { Sidebar } from "./shell/Sidebar.tsx";
@@ -34,10 +34,12 @@ export interface BotsAppProps {
 	sandboxOrigin?: string;
 	/** Shown at the start of the sidebar's header: the desktop app's product switcher. */
 	sidebarHeader?: ReactNode;
+	/** The desktop app's own settings ("Let bots use this computer"). */
+	desktop?: DesktopHost;
 }
 
 /** The whole UI. The host provides the API, a socket factory and which platform it runs on. */
-export function BotsApp({ api, connect, platform, sandboxOrigin, sidebarHeader }: BotsAppProps) {
+export function BotsApp({ api, connect, platform, sandboxOrigin, sidebarHeader, desktop }: BotsAppProps) {
 	// Before the first render reads a route.
 	useState(() => platform === "desktop" && routeInMemory());
 	const store = useMemo(
@@ -56,15 +58,17 @@ export function BotsApp({ api, connect, platform, sandboxOrigin, sidebarHeader }
 	}, [platform]);
 	return (
 		<PlatformContext.Provider value={platform}>
-			<StoreContext.Provider value={store}>
-				<SandboxOriginContext.Provider value={sandboxOrigin}>
-					<ToastProvider>
-						<div className="kb-app" data-platform={platform} style={{ height: "100%" }}>
-							<Shell sidebarHeader={sidebarHeader} />
-						</div>
-					</ToastProvider>
-				</SandboxOriginContext.Provider>
-			</StoreContext.Provider>
+			<DesktopHostContext.Provider value={desktop}>
+				<StoreContext.Provider value={store}>
+					<SandboxOriginContext.Provider value={sandboxOrigin}>
+						<ToastProvider>
+							<div className="kb-app" data-platform={platform} style={{ height: "100%" }}>
+								<Shell sidebarHeader={sidebarHeader} />
+							</div>
+						</ToastProvider>
+					</SandboxOriginContext.Provider>
+				</StoreContext.Provider>
+			</DesktopHostContext.Provider>
 		</PlatformContext.Provider>
 	);
 }

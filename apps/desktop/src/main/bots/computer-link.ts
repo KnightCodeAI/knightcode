@@ -4,6 +4,8 @@
 // before its first command in a session and before it first uses each app; "Allow on this computer" covers the rest
 // until removed. Windows has no filesystem sandbox here: the setting says bots act with the user's full access.
 
+import { exec } from "node:child_process";
+
 export const ACCESS_WARNING =
 	"Bots will run commands and read and write files on this computer with your full access. There is no sandbox. You can turn this off at any time.";
 
@@ -119,4 +121,66 @@ export class ComputerLink {
 	async start(): Promise<void> {
 		if (this.enabled && !this.#socket) this.#socket = await this.#deps.open();
 	}
+}
+
+/** The socket the link needs: the platform WebSocket's shape. */
+export interface LinkSocket {
+	send(data: string): void;
+	close(): void;
+	addEventListener(type: "open" | "close", listener: () => void): void;
+	addEventListener(type: "message", listener: (event: { data: unknown }) => void): void;
+}
+
+/**
+ * Opens the outbound link to the account's user object: authenticates with a socket ticket in the first frame, then
+ * answers each command through the local policy (asking the owner first when it says so). Other frame kinds (files,
+ * home routing, passkeys) are not handled here.
+ */
+export async function connectComputerLink(input: {
+	origin: string;
+	accountId: string;
+	ticket(): Promise<string>;
+	policy: LocalComputerPolicy;
+	ask(input: { botId: string; command: string }): Promise<ExecAnswer>;
+	run(command: string): Promise<{ output: string; exitCode: number }>;
+	socket?: (url: string) => LinkSocket;
+}): Promise<{ close(): void }> {
+	const url = `${input.origin.replace(/^http/, "ws")}/api/desktop/${encodeURIComponent(input.accountId)}/link`;
+	// The ticket first: a socket opened before its listener is attached would never send the auth frame.
+	const ticket = await input.ticket();
+	const socket = (input.socket ?? ((target) => new WebSocket(target) as unknown as LinkSocket))(url);
+	socket.addEventListener("open", () => socket.send(JSON.stringify({ kind: "auth", ticket } satisfies LinkFrame)));
+	socket.addEventListener("message", (event) => {
+		let frame: LinkFrame;
+		try {
+			frame = JSON.parse(String(event.data)) as LinkFrame;
+		} catch {
+			return;
+		}
+		if (frame.kind !== "exec") return;
+		void handleExec(frame, input.policy, input).then((result) => socket.send(JSON.stringify(result)));
+	});
+	return { close: () => socket.close() };
+}
+
+/** Runs one command in the user's own shell, from their home folder; output is stdout then stderr. */
+export function runInShell(
+	command: string,
+	options: { cwd: string; timeoutMs?: number },
+): Promise<{ output: string; exitCode: number }> {
+	return new Promise((resolve) => {
+		exec(
+			command,
+			{ cwd: options.cwd, timeout: options.timeoutMs ?? 10 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true },
+			(error, stdout, stderr) => {
+				const code =
+					error && typeof (error as { code?: unknown }).code === "number"
+						? (error as { code: number }).code
+						: error
+							? 1
+							: 0;
+				resolve({ output: `${stdout}${stderr}`, exitCode: code });
+			},
+		);
+	});
 }

@@ -4,6 +4,13 @@
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+	ComputerLink,
+	connectComputerLink,
+	type ExecAnswer,
+	LocalComputerPolicy,
+	runInShell,
+} from "./computer-link.ts";
 import { BotsSession, type Keychain } from "./session.ts";
 
 export const BOTS_ORIGIN = process.env.KNIGHTCODE_BOTS_ORIGIN ?? "https://bots.knightcode.dev";
@@ -18,6 +25,7 @@ export interface BotsStatus {
 export class DesktopBots {
 	readonly #session: BotsSession;
 	readonly #accountFile: string;
+	readonly #dir: string;
 	readonly #openExternal: (url: string) => Promise<void>;
 	readonly #fetch: typeof fetch;
 	#pending: { state: string; resolve: (status: BotsStatus) => void; reject: (error: Error) => void } | undefined;
@@ -36,6 +44,7 @@ export class DesktopBots {
 			fetch: this.#fetch,
 		});
 		this.#accountFile = join(input.dir, "bots-account");
+		this.#dir = input.dir;
 		this.#openExternal = input.openExternal;
 	}
 
@@ -92,7 +101,47 @@ export class DesktopBots {
 		return this.#session.ticket(scope);
 	}
 
+	/**
+	 * "Let bots use this computer" (spec section 14): off until the user confirms the native warning; the link opens
+	 * while it is on and the app is signed in. Commands run in the user's shell from `home`, asking first per session.
+	 */
+	computerLink(deps: {
+		confirm(message: string): Promise<boolean>;
+		ask(input: { botId: string; command: string }): Promise<ExecAnswer>;
+		home: string;
+	}): ComputerLink {
+		const file = join(this.#dir, "bots-computer.json");
+		const policy = new LocalComputerPolicy();
+		this.#computer = new ComputerLink({
+			settings: {
+				read: () =>
+					existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { enabled: boolean }) : { enabled: false },
+				write: (settings) => {
+					writeFileSync(file, JSON.stringify(settings), { mode: 0o600 });
+					if (!settings.enabled) policy.reset();
+				},
+			},
+			confirm: deps.confirm,
+			open: async () => {
+				const { accountId } = this.status();
+				if (!accountId) throw new Error("Sign in to KnightCode Bots first.");
+				return connectComputerLink({
+					origin: BOTS_ORIGIN,
+					accountId,
+					ticket: async () => (await this.ticket("socket")).ticket,
+					policy,
+					ask: deps.ask,
+					run: (command) => runInShell(command, { cwd: deps.home }),
+				});
+			},
+		});
+		return this.#computer;
+	}
+	#computer: ComputerLink | undefined;
+
 	signOut(): void {
+		// Signed out, bots can no longer reach this computer.
+		if (this.#computer?.enabled) this.#computer.disable();
 		this.#session.signOut();
 		rmSync(this.#accountFile, { force: true });
 	}

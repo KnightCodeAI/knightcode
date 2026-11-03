@@ -3,6 +3,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ACCESS_WARNING, ComputerLink, connectComputerLink, LocalComputerPolicy, runInShell } from "../../../desktop/src/main/bots/computer-link.ts";
 import { connectProviders, providerRules } from "../../../desktop/src/main/bots/connect.ts";
 import { expect, REAL, test } from "./fixtures.ts";
 import { apiOf, fakeServiceOrigin, installSlack, killWorker, modelRequests, modelSaw, postGitHub, postSlack, postTelegram, script, sendMailToBot, sentMail, telegramSent, threadTexts, until, WEB } from "./stop-helpers.ts";
@@ -544,5 +545,60 @@ test("A bot signs in to a site with a saved login and calls an API with a vault 
 		expect((await threadTexts(api, bot.id)).join("\n")).not.toContain(secret);
 		expect(await page.content()).not.toContain(secret);
 		expect(readFileSync(process.env.E2E_DEV_LOG!, "utf8")).not.toContain(secret);
+	}
+});
+
+test("A user enables Let bots use this computer, and a bot runs a command on their PC after one approval (the desktop app's link code, with its native dialogs answered by the test)", async ({ context, page }) => {
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	const home = mkdtempSync(join(tmpdir(), "kc-mypc-"));
+	const bot = await api.createBot({ name: `Helper${tag}`, purpose: "Does things on the owner's PC" });
+	const { accountId: account } = await api.getAccount({}).then((entity) => ({ accountId: entity.id }));
+	const policy = new LocalComputerPolicy();
+	const questions: string[] = [];
+	let enabled = false;
+	const link = new ComputerLink({
+		settings: { read: () => ({ enabled }), write: (settings) => void (enabled = settings.enabled) },
+		// The native warning, confirmed.
+		confirm: async (message) => message === ACCESS_WARNING,
+		open: () =>
+			connectComputerLink({
+				origin: process.env.E2E_WORKER_URL!,
+				accountId: account,
+				ticket: async () => (await api.issueTicket({ scope: "socket" })).ticket,
+				policy,
+				// The native question before the session's first command, answered Allow.
+				ask: async ({ command }) => (questions.push(command), "allow"),
+				run: (command) => runInShell(command, { cwd: home }),
+			}),
+	});
+	try {
+		expect(await link.enable()).toBe(true);
+		await script(context.request, {
+			[bot.name]: [
+				{ tool: "tool_search", args: { query: "run_on_my_computer" } },
+				{ tool: "run_on_my_computer", args: { command: `echo first-${tag}` } },
+				{ tool: "run_on_my_computer", args: { command: `echo second-${tag}` } },
+				"Ran both commands on your computer.",
+			],
+		});
+		await page.goto(`/bots/${bot.id}`);
+		await page.getByRole("textbox", { name: "Message" }).fill("Run two echo commands on my PC");
+		await page.getByRole("textbox", { name: "Message" }).press("Enter");
+		await expect(page.getByText("Ran both commands on your computer.")).toBeVisible({ timeout: 60_000 });
+		const results = (await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool?.startsWith("exit")).map((request) => request.tool!);
+		expect(results).toEqual([expect.stringMatching(new RegExp(`^exit 0\\n.*first-${tag}`, "s")), expect.stringMatching(new RegExp(`^exit 0\\n.*second-${tag}`, "s"))]);
+		// One approval, on the PC, for the whole session.
+		expect(questions).toEqual([`echo first-${tag}`]);
+		// Turned off, the computer is offline to bots at once.
+		link.disable();
+		await script(context.request, { [bot.name]: [{ tool: "run_on_my_computer", args: { command: "echo third" } }, "It is offline."] });
+		await page.getByRole("textbox", { name: "Message" }).fill("Once more");
+		await page.getByRole("textbox", { name: "Message" }).press("Enter");
+		await expect(page.getByText("It is offline.")).toBeVisible({ timeout: 60_000 });
+		expect((await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool !== undefined).at(-1)?.tool).toContain("offline");
+	} finally {
+		link.disable();
+		rmSync(home, { recursive: true, force: true });
 	}
 });

@@ -1,5 +1,6 @@
 /** Host methods: what a sandboxed renderer cannot do itself (desktop-shell.md section 4.4). */
 
+import type { ComputerLink } from "./bots/computer-link.ts";
 import type { DesktopBots } from "./bots/desktop-bots.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -133,6 +134,8 @@ export interface HostDeps {
 	installUpdate: (window: BrowserWindow) => Promise<void>;
 	/** KnightCode Bots' session and tickets. */
 	bots: DesktopBots;
+	/** "Let bots use this computer". */
+	computerLink: ComputerLink;
 }
 
 export async function handleHost(request: HostRequest, window: BrowserWindow, deps: HostDeps): Promise<HostResponse> {
@@ -170,6 +173,7 @@ async function run(
 		updates,
 		installUpdate,
 		bots,
+		computerLink,
 	}: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
@@ -180,6 +184,14 @@ async function run(
 		case "host/bots/signOut":
 			bots.signOut();
 			return {};
+		case "host/bots/computer":
+			return { enabled: computerLink.enabled };
+		case "host/bots/setComputer":
+			if (params.enabled !== true) {
+				computerLink.disable();
+				return { enabled: false };
+			}
+			return { enabled: computerLink.enabled || (await computerLink.enable()) };
 		case "host/bots/ticket":
 			return bots.ticket(params.scope as "socket" | "screen" | "api");
 		case "host/mcpApp/serve":

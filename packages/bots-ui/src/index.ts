@@ -1,5 +1,6 @@
 // Public entry point of @knightcode/bots-ui. Load "@knightcode/bots-ui/styles.css" once alongside it.
 export { BotsApp, type BotsAppProps } from "./app.tsx";
+export type { DesktopHost } from "./platform.ts";
 export { type AvatarState, BotAvatarView, type BotAvatarViewProps } from "./avatar/BotAvatarView.tsx";
 export { SHAPE_OUTLINES } from "./avatar/shapes.ts";
 export { Badge } from "./primitives/Badge.tsx";

@@ -22,6 +22,7 @@ import { Channels } from "./Channels.tsx";
 import { HomeRouting } from "./HomeRouting.tsx";
 import { Payments } from "./Payments.tsx";
 import { Tailscale } from "./Tailscale.tsx";
+import { ThisComputer } from "./ThisComputer.tsx";
 import { NewVaultItem, Vault } from "./Vault.tsx";
 
 export type SettingsView = SettingsSection | "activity";
@@ -126,6 +127,7 @@ export function SettingsDialog({ view, onClose }: { view: SettingsView; onClose:
 function ComputerSettings() {
 	return (
 		<>
+			<ThisComputer />
 			<HomeRouting />
 			<Tailscale />
 		</>

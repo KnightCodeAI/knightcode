@@ -230,6 +230,10 @@ export const HostMethods = {
 		params: Obj({ scope: Type.Union([Type.Literal("socket"), Type.Literal("screen"), Type.Literal("api")]) }),
 		result: Obj({ ticket: Type.String(), expiresAt: Type.Number() }),
 	},
+	/** "Let bots use this computer": whether it is on. */
+	"host/bots/computer": { params: Obj({}), result: Obj({ enabled: Type.Boolean() }) },
+	/** Turns it on (after the native warning, which the user may decline) or off at once. */
+	"host/bots/setComputer": { params: Obj({ enabled: Type.Boolean() }), result: Obj({ enabled: Type.Boolean() }) },
 	/** The rail's profile: the GitHub account of the KnightCode Remote sign-in the CLI shares. */
 	"host/profile/read": { params: Obj({}), result: Profile },
 	/** GitHub's device flow in the browser; resolves once the sign-in is approved. */
