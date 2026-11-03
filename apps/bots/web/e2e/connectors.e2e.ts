@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/connectors.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("catalog shows apps without source labels and connects with skills", async ({ page }) => {
 	await page.goto("/connectors");

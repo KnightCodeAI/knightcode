@@ -161,7 +161,8 @@ export const ROUTES = [
 		"issueTicket",
 		"POST",
 		"/api/tickets",
-		Obj({ scope: Type.Union([Type.Literal("socket"), Type.Literal("screen")]) }),
+		/** "api" authorizes API calls (the desktop renderer's, which holds no session). */
+		Obj({ scope: Type.Union([Type.Literal("socket"), Type.Literal("screen"), Type.Literal("api")]) }),
 		Obj({ ticket: Type.String(), expiresAt: Type.Number() }),
 	),
 	route("getOnboarding", "GET", "/api/onboarding", None, OnboardingSchema),

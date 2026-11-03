@@ -49,7 +49,7 @@ export class BotsSession {
 	}
 
 	/** A short-lived ticket for the renderer or the computer link (the ticket IPC handler calls this). */
-	async ticket(scope: "socket" | "screen"): Promise<{ ticket: string; expiresAt: number }> {
+	async ticket(scope: "socket" | "screen" | "api"): Promise<{ ticket: string; expiresAt: number }> {
 		const token = this.#token();
 		if (!token) throw new Error("Not signed in to KnightCode Bots.");
 		const response = await this.#fetch(`${this.#origin}/api/tickets`, {

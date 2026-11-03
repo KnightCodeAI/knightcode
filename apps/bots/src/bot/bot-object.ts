@@ -3,7 +3,7 @@
 // bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner. Its own tables share
 // the database with the harness, so every host write goes through the harness's queue (host-sql.ts).
 import type { Bot, ConversationView as ConversationViewProtocol, Entry, Note, Recipe } from "@knightcode/bots-protocol";
-import { addHostEntry, createHostEntriesTable, findCard, hostEntries, hostEntry, patchCard } from "./host-entries.ts";
+import { addCard, addHostEntry, createHostEntriesTable, findCard, hostEntries, hostEntry, patchCard } from "./host-entries.ts";
 import type { ViewExtras } from "./socket.ts";
 import { mintWebhook } from "../routines/webhook.ts";
 import type { VaultInput } from "../user/vault.ts";
@@ -225,6 +225,8 @@ export class BotObject extends DurableObject<Env> {
 					env: () => (this.#settings.read().computerAccess ? this.#computerEnvFor() : undefined),
 					// A failed alarm write resets the object; it arms again when it next starts.
 					onWake: (wake) => {
+						// A purged bot does no more work: nothing to arm, nothing to learn.
+						if (this.#deleted) return;
 						void this.#arm(wake).catch(() => ctx.abort("Alarm write failed"));
 						if (!wake.active) {
 							// Work done: the computer may sleep once nothing else holds it, and memory learns from the run.
@@ -277,6 +279,7 @@ export class BotObject extends DurableObject<Env> {
 	}
 
 	async #arm(wake: Wake): Promise<void> {
+		if (this.#deleted) return;
 		// Deadlines are on the routines' clock; the alarm is set that far from now.
 		const now = routineNow();
 		const deadline = this.#routines.nextDeadline();
@@ -1231,6 +1234,14 @@ export class BotObject extends DurableObject<Env> {
 		this.#deleted = true;
 		await this.ctx.storage.deleteAlarm();
 		await this.ctx.storage.deleteAll();
+		// This instance's memory goes too: the next request meets a fresh object over the empty storage.
+		setTimeout(() => {
+			try {
+				this.ctx.abort("purged");
+			} catch {
+				// The reset is under way; its unwinding is not an error.
+			}
+		}, 0);
 	}
 
 	walletCustomer(principal: Principal): string | undefined {
@@ -1589,7 +1600,7 @@ export class BotObject extends DurableObject<Env> {
 	/** Imports a recipe's ticked parts into this new bot; returns the plugins that matched nothing in the catalog. */
 	async importRecipeParts(
 		principal: Principal,
-		request: { recipe: Recipe; origin: "self" | "other"; memory: number[]; sharedMemory: number[]; skills: number[]; routines: number[]; plugins: number[] },
+		request: { recipe: Recipe; origin: "self" | "other"; memory: number[]; sharedMemory: number[]; skills: number[]; routines: number[]; plugins: number[]; runSetup?: boolean },
 	): Promise<string[]> {
 		this.#check(principal, this.#id);
 		const { recipe } = request;
@@ -1612,6 +1623,11 @@ export class BotObject extends DurableObject<Env> {
 		const plugins = recipe.plugins.filter((_, index) => request.plugins.includes(index));
 		const matched = plugins.map((plugin) => catalog.find((entry) => entry.id === plugin.pluginId || entry.name.toLowerCase() === plugin.name.toLowerCase())?.id);
 		await this.#settings.write({ ...this.#settings.read(), appIds: matched.filter((id): id is string => id !== undefined) });
+		// A recipe's getting-started skill: a card offers to run it, and it runs at once when the importer asked.
+		if (recipe.gettingStarted) {
+			await addCard(this.#write, { type: "run-setup", skill: recipe.gettingStarted.skill });
+			if (request.runSetup) await this.submit(principal, `Run the setup skill "${recipe.gettingStarted.skill}".`, `setup:${this.#id}`);
+		}
 		return plugins.filter((_, index) => matched[index] === undefined).map((plugin) => plugin.name);
 	}
 
@@ -1624,7 +1640,12 @@ export class BotObject extends DurableObject<Env> {
 		await this.create(principal, part.bot);
 		await this.#setMeta("created_at", String(part.bot.createdAt));
 		if (part.reply) await this.#setMeta("seed_reply", part.reply);
-		for (const entry of part.thread?.entries ?? []) await addHostEntry(this.#write, entry);
+		// Approval cards come from real approvals (projected), so the thread's own copies are not stored.
+		const approvals = new Map(part.approvals.map((approval) => [approval.id, approval]));
+		for (const entry of part.thread?.entries ?? []) {
+			if (entry.kind === "card" && entry.card.type === "approval") approvals.set(entry.card.approval.id, entry.card.approval);
+			else await addHostEntry(this.#write, entry);
+		}
 		const reactions = Object.fromEntries((part.thread?.entries ?? []).flatMap((entry) => (entry.kind === "message" && entry.reactions?.length ? [[entry.id, entry.reactions]] : [])));
 		await this.#setMeta("reactions", JSON.stringify(reactions));
 		for (const note of part.notes) await this.memory.notes.write({ name: note.name, description: note.description, type: note.type, body: note.body, outside: note.outside });
@@ -1632,13 +1653,40 @@ export class BotObject extends DurableObject<Env> {
 		for (const routine of part.routines)
 			await this.createRoutine(principal, { name: routine.name, prompt: routine.prompt, triggers: routine.triggers, grant: routine.grant, active: routine.active, ...(routine.note ? { note: routine.note } : {}) } as RoutineInput);
 		// Seeded approvals become real pending approvals with their cards.
-		for (const approval of part.approvals) {
+		for (const approval of approvals.values()) {
 			if (approval.state !== "pending") continue;
 			const intent = { ...approval.action, args: {} };
 			const record = await this.#write((sql) => recordAction(sql, this.#id, intent));
 			const created = await createApproval(this.ctx.storage.sql, { botId: this.#id, actionId: record.id, action: intent, policyVersion: this.#policyVersion, ttlMs: APPROVAL_TTL_MS });
 			await this.#write((sql) => void sql.exec("UPDATE actions SET approval_id = ? WHERE id = ?", created.id, record.id));
 		}
+	}
+
+	/**
+	 * This bot's turn in a group chat (only from the account's own user object): one answer from its own model and
+	 * instructions to the messages since its last turn, or a pass when it has nothing to add.
+	 */
+	async groupTurn(accountId: string, input: { group: string; peers: string[]; since: { author: string; text: string }[]; windingDown: boolean }): Promise<{ reply: string } | { pass: true }> {
+		if (this.#owner !== accountId) throw new Unauthorized();
+		const settings = this.#settings.read();
+		const ref = settings.model ?? this.#model;
+		const models = modelsFor({ env: this.env, accountId });
+		const model = ref ? models.getModel(ref.provider, ref.modelId) : undefined;
+		if (!model) throw new Error("this bot's model is unavailable");
+		const system = [
+			`You are ${settings.name}${settings.purpose ? `, ${settings.purpose}` : ""}.`,
+			...(settings.instructions ? [settings.instructions] : []),
+			`You are in the group chat "${input.group}" with ${input.peers.join(", ")} and the owner.`,
+			input.windingDown ? "The group's turns are almost spent: wrap up briefly." : "",
+			"Reply with your message to the group, or with exactly PASS if you have nothing to add.",
+		]
+			.filter(Boolean)
+			.join("\n\n");
+		const transcript = input.since.map((message) => `${message.author}: ${message.text}`).join("\n");
+		const reply = await models.completeSimple(model, { systemPrompt: system, messages: [{ role: "user", content: transcript, timestamp: Date.now() }] });
+		if (reply.stopReason === "error") throw new Error(reply.errorMessage ?? "the model failed");
+		const text = reply.content.filter((block) => block.type === "text").map((block) => block.text).join("").trim();
+		return /^pass\.?$/i.test(text) || !text ? { pass: true } : { reply: text };
 	}
 
 	/** The wallet this bot's purchases draw on (the owner links it once). */

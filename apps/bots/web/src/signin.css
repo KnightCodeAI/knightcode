@@ -1,0 +1,43 @@
+/* The sign-in and handle screens: one centred card on the app's background, in the app's own tokens. */
+.kb-signin {
+	display: grid;
+	place-items: center;
+	min-height: 100dvh;
+	padding: var(--kb-space-16, 16px);
+	background: var(--kb-color-bg, Canvas);
+}
+
+.kb-signin__card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--kb-space-12, 12px);
+	width: min(360px, 100%);
+}
+
+.kb-signin__title {
+	margin: 0 0 var(--kb-space-8, 8px);
+	font-size: 20px;
+	font-weight: 600;
+}
+
+.kb-signin__form {
+	display: flex;
+	flex-direction: column;
+	gap: var(--kb-space-8, 8px);
+}
+
+.kb-signin__or,
+.kb-signin__hint {
+	color: var(--kb-color-text-secondary, GrayText);
+	font-size: 13px;
+}
+
+.kb-signin__or {
+	text-align: center;
+}
+
+.kb-signin__error {
+	margin: 0;
+	color: var(--kb-color-danger, #c0392b);
+	font-size: 13px;
+}

@@ -1,5 +1,5 @@
 // Behaviours the Part 1 review found missing or broken, each driven the way a person would hit it.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 
 test("a bot's computer access can be turned off, with the warning about connector blocks", async ({ page }) => {
 	await page.goto("/bots/reviewer/settings?edit=1");
@@ -50,7 +50,9 @@ test("closing Teach a task mid-recording stops it and hands control back", async
 	await expect(page.getByText("You have control")).toHaveCount(0);
 });
 
-test("a link to an entry opens the chat at that entry", async ({ page }) => {
+test.describe("with the reference world", () => {
+	test.use({ seedName: "reference" });
+	test("a link to an entry opens the chat at that entry", async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 420 });
 	await page.goto("/bots/finley?seed=reference&pane=closed");
 	const first = page.locator("[data-entry]").first();
@@ -61,6 +63,7 @@ test("a link to an entry opens the chat at that entry", async ({ page }) => {
 	const target = page.locator(`[data-entry="${id}"]`).first();
 	await expect(target).toBeInViewport();
 	await expect(target).toHaveAttribute("data-highlighted", "");
+	});
 });
 
 test("Log out ends the session on the server and leaves the app", async ({ page }) => {

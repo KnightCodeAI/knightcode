@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/computer.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("take control, release, maintenance and teach", async ({ page }) => {
 	await page.goto("/bots/reviewer/computer");

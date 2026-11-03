@@ -168,13 +168,20 @@ it("13: a deleted account's bots cannot be claimed, and an alarm left behind rem
 	expect(claimed).toBe("Unauthorized");
 	// The user object's pending alarm fires: it purges itself.
 	await runInDurableObject(user, (instance) => (instance as unknown as { alarm(): Promise<void> }).alarm());
-	const rows = await runInDurableObject(user, (_instance, state) =>
+	// The purged instance resets itself; the next look meets a fresh one.
+	await new Promise((resolve) => setTimeout(resolve, 50));
+	const rowsOf = (stub: typeof user) =>
+		runInDurableObject(stub, (_instance, state) =>
 		state.storage.sql
 			.exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
 			.toArray()
+			// Full-text indexes keep bookkeeping rows in their shadow tables even when empty; the index itself is counted.
+			.filter((table) => !/_(data|idx|config|docsize|content)$/.test(table.name))
 			.filter((table) => state.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM "${table.name}"`).one().n > 0),
-	);
-	expect(rows).toEqual([]);
+		);
+	// Nothing beyond what a brand-new user object holds.
+	// A stub to the reset object is spent; a new one reaches the fresh instance.
+	expect(await rowsOf(env.USER.get(env.USER.idFromName(gone.accountId)))).toEqual(await rowsOf(env.USER.get(env.USER.idFromName(`pristine-${crypto.randomUUID()}`))));
 });
 
 it("14: a revocation that fails stops the deletion before anything is deleted, so it can run again", async () => {

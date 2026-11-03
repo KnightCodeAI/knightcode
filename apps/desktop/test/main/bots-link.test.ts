@@ -155,3 +155,44 @@ test("the session is kept only through the keychain, and passkeys relay on Windo
 		reason: "unavailable",
 	});
 });
+
+test("signs in to KnightCode Bots through the browser, keeping the session encrypted and handing out tickets", async () => {
+	const { DesktopBots } = await import("../../src/main/bots/desktop-bots.ts");
+	const root = mkdtempSync(join(tmpdir(), "kc-bots-desktop-"));
+	dir = root;
+	const opened: string[] = [];
+	const calls: { url: string; authorization: string | null; body: string }[] = [];
+	const fakeFetch = (async (url: string, init: RequestInit) => {
+		calls.push({ url, authorization: new Headers(init.headers).get("authorization"), body: String(init.body ?? "") });
+		if (url.endsWith("/auth/desktop/exchange")) return Response.json({ token: "desktop-session", accountId: "acc-1" });
+		return Response.json({ ticket: "api-ticket", expiresAt: 1 });
+	}) as never;
+	const keychain = {
+		isEncryptionAvailable: () => true,
+		encryptString: (text: string) => Buffer.from([...Buffer.from(text)].map((byte) => byte ^ 0x2a)),
+		decryptString: (data: Buffer) => Buffer.from([...data].map((byte) => byte ^ 0x2a)).toString(),
+	};
+	const bots = new DesktopBots({
+		dir: root,
+		keychain,
+		openExternal: async (url) => void opened.push(url),
+		fetch: fakeFetch,
+	});
+	expect(bots.status().signedIn).toBe(false);
+	const signedIn = bots.signIn();
+	const state = new URL(opened[0]!).searchParams.get("state")!;
+	expect(opened[0]).toMatch(/\/auth\/desktop\?state=/);
+	// A link for another sign-in is ignored.
+	await bots.complete("knightcode://bots-signin?code=stolen&state=not-ours");
+	expect(calls).toEqual([]);
+	await bots.complete(`knightcode://bots-signin?code=good&state=${state}`);
+	expect(await signedIn).toMatchObject({ signedIn: true, accountId: "acc-1" });
+	expect(readFileSync(join(root, "bots-session")).toString()).not.toContain("desktop-session");
+	expect(await bots.ticket("api")).toEqual({ ticket: "api-ticket", expiresAt: 1 });
+	expect(calls.at(-1)).toMatchObject({
+		authorization: "Bearer desktop-session",
+		body: JSON.stringify({ scope: "api" }),
+	});
+	bots.signOut();
+	expect(bots.status().signedIn).toBe(false);
+});

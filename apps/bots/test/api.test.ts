@@ -58,3 +58,46 @@ it("streams a reply over the UI's one socket, through the account's hub", async 
 	expect(frames.some((frame) => (frame.type === "view" || frame.type === "ops") && "botId" in frame && frame.botId === bot.id)).toBe(true);
 	socket.close();
 });
+
+it("takes and releases control of a bot's screen", async () => {
+	const client = api();
+	await client.updateAccount({ defaultModel: { provider: "fake", modelId: "fake-model" } });
+	const bot = await client.createBot({ name: "Screen" });
+	const taken = await client.setControl({ botId: bot.id, take: true });
+	expect(taken.screens).toContainEqual({ botId: bot.id, controller: "user" });
+	const released = await client.setControl({ botId: bot.id, take: false });
+	expect(released.screens).toContainEqual({ botId: bot.id, controller: "bot" });
+	expect(await client.getComputer({})).toMatchObject({ status: expect.any(String), hoursIncluded: expect.any(Number) });
+});
+
+it("signs the desktop app in through the browser, and lets its renderer call the API with a short-lived ticket", async () => {
+	const state = "desktop-state-0123456789";
+	const handoff = await SELF.fetch(`${ORIGIN}/auth/desktop?state=${state}`, { headers: { cookie }, redirect: "manual" });
+	expect(handoff.status).toBe(302);
+	const link = new URL(handoff.headers.get("location")!);
+	expect(link.protocol).toBe("knightcode:");
+	const code = link.searchParams.get("code")!;
+	const exchange = (body: unknown) => SELF.fetch(`${ORIGIN}/auth/desktop/exchange`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+	expect((await exchange({ code, state: "another-state-0123456789" })).status).toBe(401);
+	// The wrong state spent the code: only a fresh one works, and only once.
+	const again = new URL((await SELF.fetch(`${ORIGIN}/auth/desktop?state=${state}`, { headers: { cookie }, redirect: "manual" })).headers.get("location")!).searchParams.get("code")!;
+	const signedIn = (await (await exchange({ code: again, state })).json()) as { token: string; accountId: string };
+	expect(signedIn.token).toBeTruthy();
+	expect((await exchange({ code: again, state })).status).toBe(401);
+
+	// The main process trades its session for an API ticket; the renderer calls the API with it from its own origin.
+	const ticketResponse = await SELF.fetch(`${ORIGIN}/api/tickets`, { method: "POST", headers: { authorization: `Bearer ${signedIn.token}`, "content-type": "application/json" }, body: JSON.stringify({ scope: "api" }) });
+	const { ticket } = (await ticketResponse.json()) as { ticket: string };
+	const preflight = await SELF.fetch(`${ORIGIN}/api/account`, { method: "OPTIONS", headers: { origin: "app://desktop", "access-control-request-method": "PATCH" } });
+	expect(preflight.status).toBe(204);
+	expect(preflight.headers.get("access-control-allow-headers")).toContain("authorization");
+	const account = await SELF.fetch(`${ORIGIN}/api/account`, { headers: { origin: "app://desktop", authorization: `Ticket ${ticket}` } });
+	expect(account.status).toBe(200);
+	expect(account.headers.get("access-control-allow-origin")).toBe("app://desktop");
+	expect(((await account.json()) as { id: string }).id).toBe(signedIn.accountId);
+	// A socket ticket is not an API ticket.
+	const { ticket: socketTicket } = (await (await SELF.fetch(`${ORIGIN}/api/tickets`, { method: "POST", headers: { authorization: `Bearer ${signedIn.token}`, "content-type": "application/json" }, body: JSON.stringify({ scope: "socket" }) })).json()) as { ticket: string };
+	expect((await SELF.fetch(`${ORIGIN}/api/account`, { headers: { authorization: `Ticket ${socketTicket}` } })).status).toBe(401);
+	// Another site gets no CORS.
+	expect((await SELF.fetch(`${ORIGIN}/api/account`, { headers: { origin: "https://evil.example", authorization: `Ticket ${ticket}` } })).headers.get("access-control-allow-origin")).toBeNull();
+});

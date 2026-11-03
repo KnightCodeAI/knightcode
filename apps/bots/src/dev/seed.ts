@@ -13,6 +13,9 @@ export const devSeedEnabled = (env: Env) => env.BOTS_DEV_SEED === "1";
 export async function importSeed(env: Env, principal: Principal, seed: FakeSeed): Promise<{ bots: number }> {
 	if (!devSeedEnabled(env)) throw new HttpError(404, "not_found");
 	const user = userOf(env, principal);
+	// A seeded world is past sign-up: its handle, or a made-up one when the seed has none.
+	const handle = seed.account.handle ?? `seed-${crypto.randomUUID().slice(0, 8)}`;
+	await env.DB.prepare("INSERT OR IGNORE INTO handles (handle, account_id, created_at) VALUES (?, ?, ?)").bind(handle, principal.accountId, Date.now()).run();
 	await user.importSeed(seed);
 	for (const bot of seed.bots) {
 		await botOf(env, bot.id).importSeed(principal, {

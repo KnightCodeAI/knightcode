@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/pages.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("page blocks render safely and the inbox spans bots", async ({ page }) => {
 	await page.goto("/pages/weekly");

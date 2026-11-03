@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/groups.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("group mentions, everyone, passes and a 2-to-10 member limit", async ({ page }) => {
 	await page.goto("/groups/launch");

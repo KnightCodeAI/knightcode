@@ -73,5 +73,12 @@ export default defineConfig({
 			output: { entryFileNames: (chunk) => (chunk.name === "sw" ? "sw.js" : "assets/[name]-[hash].js") },
 		},
 	},
-	server: { port: 5190, strictPort: true },
+	server: {
+		port: 5190,
+		strictPort: true,
+		// Against the real Worker (BOTS_API_URL, the browser tests' wrangler dev): its paths go to it, sockets included.
+		...(process.env.BOTS_API_URL
+			? { proxy: Object.fromEntries(["/api", "/auth", "/hooks", "/__dev"].map((path) => [path, { target: process.env.BOTS_API_URL, ws: true }])) }
+			: {}),
+	},
 });

@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/bot.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("create from a template, import a recipe, and export it again", async ({ page }) => {
 	await page.goto("/new");

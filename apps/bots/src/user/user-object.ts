@@ -14,6 +14,7 @@ import { createCredentialsTable, SealedCredentialStore } from "./credentials.ts"
 import { beginEnrollment, createEnrollmentTable, spendEnrollment } from "./enrollment.ts";
 import { BANK_FEE_PERIOD_MS, BANK_GRACE_MS, type BankAccount, linkBank, PlaidClient } from "../finance/plaid.ts";
 import { isDeleted } from "../account/deletion.ts";
+import { withDevModels } from "../dev/model.ts";
 import type {
 	Account,
 	ApprovalSettings,
@@ -42,7 +43,9 @@ import { curatedEntries, mergeCatalog } from "../connectors/catalog.ts";
 import { issueLinkCode } from "../channels/linking.ts";
 import { paymentsAvailable, StripeLinkProvider } from "../payments/link.ts";
 import { financeAvailable } from "../finance/plaid.ts";
-import { catchUp } from "../inbox/catch-up.ts";
+import { AWAY_MS } from "../inbox/catch-up.ts";
+
+const ONBOARDING = ["providers", "bot", "app", "approvals", "chat-app"] as const;
 import { AccountState, type BotFlags, type GroupFlags } from "./account-state.ts";
 import { createDocsTable, readDoc, updateDoc, writeDoc } from "./docs.ts";
 import { ThreadHub } from "./hub.ts";
@@ -230,7 +233,7 @@ export class UserObject extends DurableObject<Env> {
 
 	/** Whether `provider` has usable auth, refreshing an expired OAuth token (once, however many ask at a time). */
 	async resolveAuth(provider: string): Promise<boolean> {
-		const models = builtinModels({ credentials: this.credentials() });
+		const models = withDevModels(this.env, builtinModels({ credentials: this.credentials() }));
 		return (await models.getAuth(provider)) !== undefined;
 	}
 
@@ -351,24 +354,24 @@ export class UserObject extends DurableObject<Env> {
 		this.#state.addSharedNotes(notes);
 	}
 
-	async onboarding(): Promise<Onboarding> {
-		const count = async (query: string) => ((await this.env.DB.prepare(query).bind(this.#accountId).first<{ n: number }>())?.n ?? 0) > 0;
-		const providers = (await this.credentialList()).some((item) => !item.providerId.startsWith("plaid:"));
-		const connections = Object.values(this.#connections()).some((connection) => connection.status === "connected");
-		return {
-			items: [
-				{ id: "providers", done: providers },
-				{ id: "bot", done: await count("SELECT COUNT(*) AS n FROM bots WHERE account_id = ?") },
-				{ id: "app", done: connections },
-				{ id: "approvals", done: readDoc(this.#sql, "approvals", () => null) !== null },
-				{ id: "chat-app", done: await count("SELECT COUNT(*) AS n FROM channel_links WHERE account_id = ?") },
-			],
-		};
+	/** The getting-started checklist: what the user has done since signing up, each step marked when it happens. */
+	onboarding(): Onboarding {
+		const done = readDoc(this.#sql, "onboarding", () => ({}) as Record<string, boolean>);
+		return { items: ONBOARDING.map((id) => ({ id, done: done[id] === true })) };
+	}
+	markOnboarding(id: (typeof ONBOARDING)[number]): void {
+		updateDoc(this.#sql, "onboarding", () => ({}) as Record<string, boolean>, (done) => {
+			done[id] = true;
+		});
 	}
 
 	/** The catch-up for the time the user was away (none when they were not away long). */
 	async catchUpNow() {
-		const since = this.touch();
+		const now = Date.now();
+		const seen = this.#sql.exec<{ value: string }>("SELECT value FROM user_meta WHERE key = 'last_activity'").toArray()[0]?.value;
+		// Since the user was last here (an account never seen: the last four hours, the catch-up's own window).
+		const since = seen ? Number(seen) : now - AWAY_MS;
+		this.touch(now);
 		const items = this.inbox.since(since);
 		if (items.length === 0) return null;
 		return {
@@ -390,7 +393,7 @@ export class UserObject extends DurableObject<Env> {
 	// ─── Providers and models ─────────────────────────────────────────────────
 
 	async providers(): Promise<ProviderConnection[]> {
-		const models = builtinModels({ credentials: this.credentials() });
+		const models = withDevModels(this.env, builtinModels({ credentials: this.credentials() }));
 		const held = new Set((await this.credentialList()).map((item) => item.providerId));
 		return models.getProviders().map((provider) => ({
 			provider: provider.id,
@@ -402,6 +405,7 @@ export class UserObject extends DurableObject<Env> {
 	}
 	async connectApiKey(provider: string, key: string): Promise<ProviderConnection> {
 		await this.credentials().modify(provider, async () => ({ type: "api_key", key }) as Credential);
+		this.markOnboarding("providers");
 		const found = (await this.providers()).find((candidate) => candidate.provider === provider);
 		return found ?? { provider, name: provider, kind: "api_key", status: "connected" };
 	}
@@ -409,11 +413,12 @@ export class UserObject extends DurableObject<Env> {
 		const enrolled = await spendEnrollment(this.#sql, token);
 		if (!enrolled || enrolled !== provider) return undefined;
 		await this.credentials().modify(provider, async () => credential);
+		this.markOnboarding("providers");
 		return (await this.providers()).find((candidate) => candidate.provider === provider);
 	}
 	/** The models the account's connected providers offer; the user picks each model. */
 	async models(): Promise<ModelOption[]> {
-		const models = await builtinModels({ credentials: this.credentials() }).getAvailable();
+		const models = await withDevModels(this.env, builtinModels({ credentials: this.credentials() })).getAvailable();
 		return models.map((model) => ({
 			provider: model.provider,
 			modelId: model.id,
@@ -482,6 +487,7 @@ export class UserObject extends DurableObject<Env> {
 		return this.#state.approvalSettings();
 	}
 	updateApprovalSettings(patch: Partial<ApprovalSettings>): ApprovalSettings {
+		this.markOnboarding("approvals");
 		return this.#state.updateApprovalSettings(patch);
 	}
 	homeRouting(): HomeRouting {
@@ -581,6 +587,7 @@ export class UserObject extends DurableObject<Env> {
 		await this.env.DB.prepare("INSERT OR REPLACE INTO channel_links (channel, external_chat, account_id, bot_id, mode, created_at) VALUES ('slack', ?, ?, ?, 'direct', ?)")
 			.bind(externalChat, this.#accountId, botId, now)
 			.run();
+		this.markOnboarding("chat-app");
 		return { id: `slack:${externalChat}`, channel: "slack", botId, externalId: externalChat, label: "Slack direct messages", createdAt: now };
 	}
 	async updateChannelLink(id: string, patch: { botId?: string; mode?: "mentions" | "listen"; rules?: string }): Promise<ProtocolChannelLink | undefined> {
@@ -696,6 +703,7 @@ export class UserObject extends DurableObject<Env> {
 		updateDoc(this.#sql, "connections", () => ({}) as ReturnType<UserObject["connectionsDoc"]>, (connections) => {
 			connections[appId] = { ...connections[appId], status: "connected", connectedAt: Date.now() };
 		});
+		this.markOnboarding("app");
 		if (options.skills)
 			for (const skill of entry.skills)
 				if (!this.skillList({ scope: "app" }).some((existing) => existing.appId === appId && existing.name === skill.name))
@@ -745,8 +753,10 @@ export class UserObject extends DurableObject<Env> {
 	async importSeed(seed: FakeSeed): Promise<void> {
 		if (this.env.BOTS_DEV_SEED !== "1") throw new Error("seeding is off");
 		this.#state.importSeed(seed);
+		writeDoc(this.#sql, "onboarding", Object.fromEntries(seed.onboarding.items.map((item) => [item.id, item.done])));
+		// The world's own "last here": the catch-up shows what happened since.
+		if (seed.catchUp) this.#sql.exec("INSERT OR REPLACE INTO user_meta (key, value) VALUES ('last_activity', ?)", String(Math.min(seed.catchUp.since, Date.now() - AWAY_MS)));
 		for (const page of seed.pages) {
-			this.#sql.exec("DELETE FROM pages WHERE id = ?", page.id);
 			this.pages.import(page);
 		}
 		for (const skill of seed.skills) this.skillAdd({ name: skill.name, description: skill.description, content: skill.content, scope: skill.scope, ...(skill.botId ? { botId: skill.botId } : {}), ...(skill.appId ? { appId: skill.appId } : {}) });
@@ -787,6 +797,14 @@ export class UserObject extends DurableObject<Env> {
 		this.#deleted = true;
 		await this.ctx.storage.deleteAlarm();
 		await this.ctx.storage.deleteAll();
+		// This instance's memory goes too: the next request meets a fresh object over the empty storage.
+		setTimeout(() => {
+			try {
+				this.ctx.abort("purged");
+			} catch {
+				// The reset is under way; its unwinding is not an error.
+			}
+		}, 0);
 	}
 
 	/**

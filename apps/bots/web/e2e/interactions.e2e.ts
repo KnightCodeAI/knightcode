@@ -1,5 +1,5 @@
 // Interaction states against the reference: menus, hovers, a tooltip and the avatar picker, each in both themes.
-import { test } from "@playwright/test";
+import { test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 
 const STATES = [

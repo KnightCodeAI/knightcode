@@ -38,9 +38,13 @@ export function sessionCookie(token: string): string {
 /** The Set-Cookie value that clears the session cookie. */
 export const CLEAR_SESSION_COOKIE = cookie(SESSION_COOKIE, "", { maxAgeSeconds: 0 });
 
-/** The principal behind the request's session cookie, if it is live. */
+/**
+ * The principal behind the request's session, if it is live: the web app's cookie, or a native client's bearer token
+ * (the desktop app's main process, which keeps its session in the OS keychain).
+ */
 export async function readSession(env: Env, request: Request): Promise<Principal | undefined> {
-	const token = readCookie(request, SESSION_COOKIE);
+	const bearer = /^Bearer (\S+)$/.exec(request.headers.get("authorization") ?? "")?.[1];
+	const token = bearer ?? readCookie(request, SESSION_COOKIE);
 	if (!token) return undefined;
 	const sessionId = await sha256(token);
 	const row = await env.DB.prepare(

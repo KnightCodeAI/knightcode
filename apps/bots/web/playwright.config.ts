@@ -4,12 +4,17 @@ import { defineConfig } from "@playwright/test";
 import { REFERENCE_DIR } from "./vite.config.ts";
 
 const PORT = 5190;
+/** BOTS_BACKEND=real runs against the real Worker (e2e/global-setup.ts); the default is the in-memory fake. */
+const REAL = process.env.BOTS_BACKEND === "real";
 const REFERENCE_TITLE = /matches the reference/;
 
 export default defineConfig({
 	testDir: "e2e",
 	testMatch: "**/*.e2e.ts",
-	fullyParallel: true,
+	// The real backend shares one wrangler dev, and every test seeds the same bot ids: one at a time there.
+	fullyParallel: !REAL,
+	// wrangler dev has been seen to exit mid-run; it is restarted (global-setup.ts) and the test in flight runs again.
+	...(REAL ? { workers: 1, retries: 1, globalSetup: "./e2e/global-setup.ts" } : {}),
 	forbidOnly: Boolean(process.env.CI),
 	// Never write a missing snapshot: in the reference project that would put our own screen where the reference
 	// capture belongs. New baselines are made explicitly with --update-snapshots.
@@ -41,8 +46,9 @@ export default defineConfig({
 	webServer: {
 		command: `bunx vite --port ${PORT} --strictPort`,
 		url: `http://localhost:${PORT}`,
-		env: { VITE_FAKE: "1", BOTS_REFERENCE_DIR: REFERENCE_DIR },
-		reuseExistingServer: !process.env.CI,
+		env: REAL ? { BOTS_API_URL: "http://127.0.0.1:8799", BOTS_REFERENCE_DIR: REFERENCE_DIR } : { VITE_FAKE: "1", BOTS_REFERENCE_DIR: REFERENCE_DIR },
+		// A server left from the other mode would serve the wrong backend.
+		reuseExistingServer: !process.env.CI && !REAL,
 		timeout: 60_000,
 	},
 });

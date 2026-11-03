@@ -56,6 +56,7 @@ async function createBot(env: Env, principal: Principal, fields: Partial<Bot> & 
 	const bot = botOf(env, botId);
 	await bot.create(principal, { ...defined(fields), name: fields.name, model });
 	const user = userOf(env, principal);
+	await user.markOnboarding("bot");
 	const sidebar = await user.sidebar();
 	// The account's first bot is its main bot.
 	if (!Object.values(sidebar.bots).some((flags) => flags.main)) await user.setBotFlags(botId, { main: true });

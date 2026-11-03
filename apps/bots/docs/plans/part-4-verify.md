@@ -22,18 +22,18 @@ Spec sections: 15, 17, 23, Stop condition.
   a ticketed WebSocket unless `VITE_FAKE=1`; the desktop mount using tickets
   from the main process.
 
-- [ ] **Step 1: Write the failing test**: sign in through the GitHub
+- [x] **Step 1: Write the failing test**: sign in through the GitHub
   emulator, add the fake model server as an OpenAI-compatible provider,
   create a bot, send a message, see the streamed reply, reload the page and
   see the same thread.
-- [ ] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui real-backend`)
-- [ ] **Step 3: Switch both clients and add the global setup**
-- [ ] **Step 4: Run the whole `ui` project against the real backend**
+- [x] **Step 2: Run it to verify it fails** (`bunx playwright test --project ui real-backend`)
+- [x] **Step 3: Switch both clients and add the global setup**
+- [x] **Step 4: Run the whole `ui` project against the real backend**
 
 Run: `BOTS_BACKEND=real bunx playwright test --project ui`
 Expected: every Part 1 behaviour test passes against the real backend.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/bots/web/src/client.ts apps/bots/web/playwright.config.ts apps/bots/web/e2e/global-setup.ts apps/bots/web/e2e/real-backend.e2e.ts apps/bots/test/fake-model-server.ts apps/desktop/src/renderer/bots/mount.tsx

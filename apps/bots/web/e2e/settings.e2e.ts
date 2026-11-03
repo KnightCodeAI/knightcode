@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/settings.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("billing enforces the $5 minimum and shows the fee", async ({ page }) => {
 	await page.goto("/settings/billing");

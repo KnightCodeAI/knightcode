@@ -25,8 +25,42 @@ export function parse<S extends TSchema>(schema: S, value: unknown): Static<S> {
 	const unknownTag = unknownDiscriminator(schema, value);
 	if (unknownTag)
 		throw new ProtocolError(`/${unknownTag.key}`, `unknown ${unknownTag.key} ${JSON.stringify(unknownTag.value)}`);
+	// A tagged union's error comes from inside the branch its tag selects (the closest one, when nested unions leave
+	// several with that tag, such as a thread frame's bot and group forms).
+	const branches = taggedBranches(schema, value);
+	if (branches.length > 0) {
+		const errors = branches.map((branch) => validatorFor(branch).errors(value)).sort((a, b) => a.length - b.length);
+		const [closest] = errors[0] ?? [];
+		if (closest) throw new ProtocolError(closest.path, closest.message);
+	}
 	const [first] = validator.errors(value);
 	throw new ProtocolError(first?.path ?? "", first?.message ?? "invalid value");
+}
+
+function validatorFor(schema: TSchema): Validator<unknown> {
+	let validator = validators.get(schema);
+	if (!validator) validators.set(schema, (validator = compile(schema as unknown as JsonSchema)));
+	return validator;
+}
+
+/** The union's leaf branches whose `type` or `kind` tag is the value's, through nested unions. */
+function taggedBranches(schema: TSchema, value: unknown): TSchema[] {
+	if (typeof value !== "object" || value === null || !("anyOf" in schema)) return [];
+	for (const key of ["type", "kind"]) {
+		const tag = (value as Record<string, unknown>)[key];
+		if (tag === undefined) continue;
+		const matching = leaves(schema).filter((branch) => {
+			const field = (branch as { properties?: Record<string, { const?: unknown }> }).properties?.[key];
+			return field !== undefined && "const" in field && field.const === tag;
+		});
+		if (matching.length > 0) return matching;
+	}
+	return [];
+}
+
+function leaves(schema: TSchema): TSchema[] {
+	const branches = (schema as { anyOf?: TSchema[] }).anyOf;
+	return branches ? branches.flatMap(leaves) : [schema];
 }
 
 /** For a union tagged by `type` or `kind`, the tag key when the value's tag matches no branch. */

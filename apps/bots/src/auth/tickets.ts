@@ -4,7 +4,7 @@ import type { Env } from "../env.ts";
 import { type Principal, sessionLive } from "./session.ts";
 import { base64url, fromBase64url, hmac, hmacVerify, randomToken } from "./util.ts";
 
-export type TicketScope = "socket" | "screen";
+export type TicketScope = "socket" | "screen" | "api";
 
 interface TicketBody {
 	principal: Principal;

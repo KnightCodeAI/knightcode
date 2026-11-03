@@ -276,6 +276,14 @@ export class ComputerObject extends DurableObject<Env> {
 		this.#deleted = true;
 		await this.ctx.storage.deleteAlarm();
 		await this.ctx.storage.deleteAll();
+		// This instance's memory goes too: the next request meets a fresh object over the empty storage.
+		setTimeout(() => {
+			try {
+				this.ctx.abort("purged");
+			} catch {
+				// The reset is under way; its unwinding is not an error.
+			}
+		}, 0);
 	}
 	#deleted = false;
 

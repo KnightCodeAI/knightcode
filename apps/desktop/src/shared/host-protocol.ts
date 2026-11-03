@@ -184,6 +184,11 @@ const TerminalInfo = Obj({
 	exitCode: Type.Optional(Type.Integer()),
 });
 export type TerminalInfo = Static<typeof TerminalInfo>;
+export const BotsStatus = Obj({
+	signedIn: Type.Boolean(),
+	accountId: Type.Optional(Type.String()),
+	origin: Type.String(),
+});
 
 /** Where updating stands, for Settings › About and the title bar (desktop-shell.md section 15). */
 export const UpdateState = Type.Union([
@@ -215,6 +220,16 @@ export const HostMethods = {
 	"host/shell/showInFolder": { params: Obj({ path: Type.String() }), result: Obj({}) },
 	/** Open a file in the system's default app ("Open in editor"); program and script files are refused. */
 	"host/shell/openPath": { params: Obj({ path: Type.String() }), result: Obj({}) },
+	/** KnightCode Bots: whether the app is signed in (the session stays in the main process), and to which account. */
+	"host/bots/status": { params: Obj({}), result: BotsStatus },
+	/** Signs in through the system browser; resolves once the browser hands the app back its one-time code. */
+	"host/bots/signIn": { params: Obj({}), result: BotsStatus },
+	"host/bots/signOut": { params: Obj({}), result: Obj({}) },
+	/** A short-lived ticket: "api" for API calls, "socket" for the realtime socket's first frame, "screen" for screens. */
+	"host/bots/ticket": {
+		params: Obj({ scope: Type.Union([Type.Literal("socket"), Type.Literal("screen"), Type.Literal("api")]) }),
+		result: Obj({ ticket: Type.String(), expiresAt: Type.Number() }),
+	},
 	/** The rail's profile: the GitHub account of the KnightCode Remote sign-in the CLI shares. */
 	"host/profile/read": { params: Obj({}), result: Profile },
 	/** GitHub's device flow in the browser; resolves once the sign-in is approved. */

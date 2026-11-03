@@ -1,6 +1,7 @@
 // Group chats: the group in D1 (members, lead, rules, turn budget), its sidebar flags with the account, and its
 // thread from the group's messages.
-import type { ConversationView, Entry, Group } from "@knightcode/bots-protocol";
+import type { ConversationView, Group } from "@knightcode/bots-protocol";
+import { groupEntries, pageOf } from "../team/group-view.ts";
 import type { Principal } from "../auth/session.ts";
 import type { Env } from "../env.ts";
 import { MAX_MEMBERS, MIN_MEMBERS } from "../team/groups.ts";
@@ -46,23 +47,8 @@ export async function groupEntity(env: Env, principal: Principal, groupId: strin
 /** The group's thread: its messages, the user's as user rows and each bot's as that bot's. */
 export async function groupView(env: Env, principal: Principal, groupId: string, before?: string, limit = 50): Promise<ConversationView> {
 	await groupRow(env, principal, groupId);
-	const rows = await env.DB.prepare("SELECT seq, author, text, at FROM group_messages WHERE group_id = ? ORDER BY seq")
-		.bind(groupId)
-		.all<{ seq: number; author: string; text: string; at: number }>();
-	const reactions = await userOf(env, principal).reactions(`group:${groupId}`);
-	const entries: Entry[] = rows.results.map((row) => ({
-		kind: "message",
-		id: `${groupId}-${row.seq}`,
-		role: row.author === "user" ? "user" : "assistant",
-		...(row.author === "user" ? {} : { botId: row.author }),
-		text: row.text,
-		createdAt: row.at,
-		...(reactions[`${groupId}-${row.seq}`] ? { reactions: reactions[`${groupId}-${row.seq}`] } : {}),
-	}));
-	const end = before ? entries.findIndex((entry) => entry.id === before) : entries.length;
-	const stop = end < 0 ? entries.length : end;
-	const start = Math.max(0, stop - limit);
-	return { entries: entries.slice(start, stop), running: false, hasEarlier: start > 0 };
+	const entries = await groupEntries(env.DB, groupId, await userOf(env, principal).reactions(`group:${groupId}`));
+	return pageOf(entries, false, before, limit);
 }
 
 async function changed(env: Env, principal: Principal, groupId: string): Promise<Group> {

@@ -1,3 +1,8 @@
+import { sha256 } from "./auth/util.ts";
+import { randomToken } from "./auth/util.ts";
+import { verifyTicket } from "./auth/tickets.ts";
+import { deleteAccount } from "./account/deletion.ts";
+import { createAccount } from "./auth/accounts.ts";
 import type { FakeSeed } from "@knightcode/bots-protocol";
 import { CLEAR_SESSION_COOKIE, issueSession, readSession, revokeSession, sessionCookie } from "./auth/session.ts";
 import { sendEmailCode, TooManyCodes, verifyEmailCode } from "./auth/email-code.ts";
@@ -49,6 +54,10 @@ function crossOrigin(request: Request): boolean {
 	// the desktop app's renderer and native clients, whose Origin is not this site, can open them.
 	if (request.headers.get("upgrade")?.toLowerCase() === "websocket") return false;
 	if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return false;
+	// A bearer session or a ticket is sent deliberately, never by the browser on its own: no cross-site risk.
+	if (request.headers.get("authorization")) return false;
+	// The desktop app trades a one-time code here; the code is the credential, not a cookie.
+	if (new URL(request.url).pathname === "/auth/desktop/exchange") return false;
 	return request.headers.get("origin") !== new URL(request.url).origin;
 }
 
@@ -64,6 +73,27 @@ async function auth(request: Request, env: Env, pathname: string): Promise<Respo
 	if (request.method === "GET" && (provider === "github" || provider === "google")) {
 		if (pathname === `/auth/${provider}`) return startOAuth(env, provider, url.searchParams.get("next") ?? "/");
 		if (pathname === `/auth/${provider}/callback`) return completeOAuth(env, request);
+	}
+	// The desktop app signs in through the browser: a signed-in browser hands it a one-time code for its state.
+	if (request.method === "GET" && pathname === "/auth/desktop") {
+		const state = url.searchParams.get("state") ?? "";
+		if (!/^[A-Za-z0-9_-]{16,128}$/.test(state)) return json({ error: "bad_request" }, 400);
+		const principal = await readSession(env, request);
+		if (!principal) return Response.redirect(new URL(`/signin?next=${encodeURIComponent(`/auth/desktop?state=${state}`)}`, url).href, 302);
+		const code = randomToken(24);
+		await env.DB.prepare("INSERT INTO desktop_codes (code_hash, account_id, state, expires_at) VALUES (?, ?, ?, ?)")
+			.bind(await sha256(code), principal.accountId, state, Date.now() + 5 * 60_000)
+			.run();
+		return new Response(null, { status: 302, headers: { location: `knightcode://bots-signin?code=${code}&state=${state}` } });
+	}
+	if (request.method === "POST" && pathname === "/auth/desktop/exchange") {
+		const { code, state } = (await request.json().catch(() => ({}))) as { code?: string; state?: string };
+		if (typeof code !== "string" || typeof state !== "string") return json({ error: "bad_request" }, 400);
+		const row = await env.DB.prepare("DELETE FROM desktop_codes WHERE code_hash = ? RETURNING account_id, state, expires_at")
+			.bind(await sha256(code))
+			.first<{ account_id: string; state: string; expires_at: number }>();
+		if (!row || row.state !== state || row.expires_at <= Date.now()) return json({ error: "invalid_code" }, 401);
+		return json({ token: await issueSession(env, row.account_id, "desktop"), accountId: row.account_id });
 	}
 	if (request.method === "POST" && pathname === "/auth/email") {
 		const { email } = (await request.json().catch(() => ({}))) as { email?: string };
@@ -136,7 +166,9 @@ async function api(request: Request, env: Env, pathname: string): Promise<Respon
 	const match = matchRoute(request.method, pathname);
 	const handler = match && (HANDLERS[match.route.name] as Handler<RouteName> | undefined);
 	if (!match || !handler) return json({ error: "not_found" }, 404);
-	const principal = await readSession(env, request);
+	// The web app's cookie, the desktop main process's bearer session, or the desktop renderer's short-lived ticket.
+	const ticket = /^Ticket (\S+)$/.exec(request.headers.get("authorization") ?? "")?.[1];
+	const principal = ticket ? await verifyTicket(env, ticket, "api") : await readSession(env, request);
 	if (!principal) return json({ error: "unauthorized" }, 401);
 	const body =
 		request.method === "GET" || request.method === "DELETE"
@@ -207,6 +239,8 @@ async function hooks(request: Request, env: Env, pathname: string): Promise<Resp
 				continue;
 			}
 			const linked = await consumeLinkCode(env.DB, { channel: "telegram", code: message.text, externalChat: message.externalChat });
+			// A chat app linked: the getting-started step is done.
+			if (linked) await env.USER.get(env.USER.idFromName(linked.accountId)).markOnboarding("chat-app");
 			await telegramNotice(
 				env,
 				message.externalChat,
@@ -284,47 +318,105 @@ export async function receiveEmail(env: Env, mail: InboundMail): Promise<number>
 	return 0;
 }
 
+/** The desktop renderer's origin: its API calls (with a ticket) are allowed across origins, nothing else is. */
+const desktopOrigin = (env: Env) => env.DESKTOP_ORIGIN ?? "app://desktop";
+
+function withCors(response: Response, origin: string): Response {
+	const headers = new Headers(response.headers);
+	headers.set("access-control-allow-origin", origin);
+	headers.set("vary", "origin");
+	return new Response(response.body, { status: response.status, statusText: response.statusText, headers, webSocket: response.webSocket });
+}
+
+/** Every request but the desktop renderer's preflight. */
+async function handle(request: Request, env: Env): Promise<Response> {
+	const { pathname } = new URL(request.url);
+	if (pathname === "/health") return json({ ok: true });
+	const isApi = pathname === "/api" || pathname.startsWith("/api/");
+	const isAuth = pathname.startsWith("/auth/");
+	if ((isApi || isAuth) && crossOrigin(request)) return json({ error: "forbidden_origin" }, 403);
+	if (isAuth) return auth(request, env, pathname);
+	if (pathname.startsWith("/hooks/")) return hooks(request, env, pathname);
+	// A screen: the token in the URL is the capability; its account picks the computer, which checks it fully.
+	const screen = /^\/api\/computer\/screen\/([^/]+)$/.exec(pathname);
+	if (screen && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+		const grant = await verifyScreenToken(env.SESSION_SECRET, screen[1]!);
+		if (!grant) return json({ error: "expired" }, 403);
+		return env.COMPUTER.get(env.COMPUTER.idFromName(grant.accountId)).fetch(request);
+	}
+	// The desktop app's computer link: the account's user object checks the ticket in its first frame.
+	const desktop = /^\/api\/desktop\/([^/]+)\/link$/.exec(pathname);
+	if (desktop && request.headers.get("upgrade")?.toLowerCase() === "websocket")
+		return env.USER.get(env.USER.idFromName(decodeURIComponent(desktop[1]!))).fetch(request);
+	// The UI's one realtime socket: the account's user object checks the ticket in its first frame. The web app's
+	// cookie names the account; the desktop names it in the query (the ticket must still be that account's).
+	if (pathname === "/api/socket" && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+		const accountId = (await readSession(env, request))?.accountId ?? new URL(request.url).searchParams.get("account");
+		if (!accountId) return json({ error: "unauthorized" }, 401);
+		return env.USER.get(env.USER.idFromName(accountId)).fetch(request);
+	}
+	const content = /^\/api\/files\/([^/]+)\/content$/.exec(pathname);
+	if (content && request.method === "GET") return fileContent(request, env, decodeURIComponent(content[1]!));
+	// Development and browser tests only: a session for a fresh test account, and that account's deletion.
+	if (pathname === "/__dev/session" && request.method === "POST" && devSeedEnabled(env)) {
+		const input = (await request.json().catch(() => ({}))) as { email?: string; name?: string };
+		const account = await createAccount(env.DB, { email: input.email ?? `${crypto.randomUUID()}@example.com`, name: input.name ?? "Test" });
+		const token = await issueSession(env, account.accountId);
+		return new Response(JSON.stringify({ accountId: account.accountId }), { headers: { "content-type": "application/json", "set-cookie": sessionCookie(token) } });
+	}
+	if (pathname === "/__dev/delete" && request.method === "POST" && devSeedEnabled(env)) {
+		// By id: a test may have signed out already.
+		const { accountId } = (await request.json().catch(() => ({}))) as { accountId?: string };
+		if (!accountId) return json({ error: "bad_request" }, 400);
+		const principal: Principal = { accountId, workspaceId: "", client: "web" };
+		try {
+			const report = await deleteAccount(env, principal);
+			// The purged objects reset themselves just after answering; the next test reuses their names.
+			await new Promise((resolve) => setTimeout(resolve, 250));
+			return json(report);
+		} catch (error) {
+			return json({ error: "delete_failed", message: error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error) }, 500);
+		}
+	}
+	// Development and browser tests only: loads a seed world into the signed-in account.
+	if (pathname === "/__dev/seed" && request.method === "POST" && devSeedEnabled(env)) {
+		const principal = await readSession(env, request);
+		if (!principal) return json({ error: "unauthorized" }, 401);
+		try {
+			return json(await importSeed(env, principal, (await request.json()) as FakeSeed));
+		} catch (error) {
+			// Development only: the reason, for the test that seeded.
+			return json({ error: "seed_failed", message: error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error) }, 500);
+		}
+	}
+	// A bot's live socket: the bot object checks the ticket in its first frame.
+	const socket = /^\/api\/bots\/([^/]+)\/socket$/.exec(pathname);
+	if (socket && request.headers.get("upgrade")?.toLowerCase() === "websocket")
+		return env.BOT.get(env.BOT.idFromName(decodeURIComponent(socket[1]!))).fetch(request);
+	if (isApi) return api(request, env, pathname);
+	return env.ASSETS.fetch(request);
+}
+
 export default {
 	async fetch(request, env): Promise<Response> {
-		const { pathname } = new URL(request.url);
-		if (pathname === "/health") return json({ ok: true });
-		const isApi = pathname === "/api" || pathname.startsWith("/api/");
-		const isAuth = pathname.startsWith("/auth/");
-		if ((isApi || isAuth) && crossOrigin(request)) return json({ error: "forbidden_origin" }, 403);
-		if (isAuth) return auth(request, env, pathname);
-		if (pathname.startsWith("/hooks/")) return hooks(request, env, pathname);
-		// A screen: the token in the URL is the capability; its account picks the computer, which checks it fully.
-		const screen = /^\/api\/computer\/screen\/([^/]+)$/.exec(pathname);
-		if (screen && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-			const grant = await verifyScreenToken(env.SESSION_SECRET, screen[1]!);
-			if (!grant) return json({ error: "expired" }, 403);
-			return env.COMPUTER.get(env.COMPUTER.idFromName(grant.accountId)).fetch(request);
+		const origin = request.headers.get("origin");
+		const api = new URL(request.url).pathname.startsWith("/api/");
+		// The desktop renderer calls the API from its own origin, with a ticket: answered with CORS, nothing else is.
+		if (origin && origin === desktopOrigin(env) && api && request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+			if (request.method === "OPTIONS")
+				return new Response(null, {
+					status: 204,
+					headers: {
+						"access-control-allow-origin": origin,
+						"access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE",
+						"access-control-allow-headers": "authorization, content-type",
+						"access-control-max-age": "600",
+						vary: "origin",
+					},
+				});
+			return withCors(await handle(request, env), origin);
 		}
-		// The desktop app's computer link: the account's user object checks the ticket in its first frame.
-		const desktop = /^\/api\/desktop\/([^/]+)\/link$/.exec(pathname);
-		if (desktop && request.headers.get("upgrade")?.toLowerCase() === "websocket")
-			return env.USER.get(env.USER.idFromName(decodeURIComponent(desktop[1]!))).fetch(request);
-		// The UI's one realtime socket: the account's user object checks the ticket in its first frame. The web app's
-		// cookie names the account; the desktop names it in the query (the ticket must still be that account's).
-		if (pathname === "/api/socket" && request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-			const accountId = (await readSession(env, request))?.accountId ?? new URL(request.url).searchParams.get("account");
-			if (!accountId) return json({ error: "unauthorized" }, 401);
-			return env.USER.get(env.USER.idFromName(accountId)).fetch(request);
-		}
-		const content = /^\/api\/files\/([^/]+)\/content$/.exec(pathname);
-		if (content && request.method === "GET") return fileContent(request, env, decodeURIComponent(content[1]!));
-		// Development and browser tests only: loads a seed world into the signed-in account.
-		if (pathname === "/__dev/seed" && request.method === "POST" && devSeedEnabled(env)) {
-			const principal = await readSession(env, request);
-			if (!principal) return json({ error: "unauthorized" }, 401);
-			return json(await importSeed(env, principal, (await request.json()) as FakeSeed));
-		}
-		// A bot's live socket: the bot object checks the ticket in its first frame.
-		const socket = /^\/api\/bots\/([^/]+)\/socket$/.exec(pathname);
-		if (socket && request.headers.get("upgrade")?.toLowerCase() === "websocket")
-			return env.BOT.get(env.BOT.idFromName(decodeURIComponent(socket[1]!))).fetch(request);
-		if (isApi) return api(request, env, pathname);
-		return env.ASSETS.fetch(request);
+		return handle(request, env);
 	},
 	queue: (batch, env) => consumeOutbound(batch, env),
 	async email(message, env) {

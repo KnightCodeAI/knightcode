@@ -1,5 +1,6 @@
 /** Host methods: what a sandboxed renderer cannot do itself (desktop-shell.md section 4.4). */
 
+import type { DesktopBots } from "./bots/desktop-bots.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
@@ -130,6 +131,8 @@ export interface HostDeps {
 	updates: Updates;
 	/** host/update/install: asks over running threads, then quits the way the quit question does. */
 	installUpdate: (window: BrowserWindow) => Promise<void>;
+	/** KnightCode Bots' session and tickets. */
+	bots: DesktopBots;
 }
 
 export async function handleHost(request: HostRequest, window: BrowserWindow, deps: HostDeps): Promise<HostResponse> {
@@ -154,9 +157,31 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openIn, terminals, mcpApps, windowId, openWindow, zoom, role, updates, installUpdate }: HostDeps,
+	{
+		state,
+		server,
+		openIn,
+		terminals,
+		mcpApps,
+		windowId,
+		openWindow,
+		zoom,
+		role,
+		updates,
+		installUpdate,
+		bots,
+	}: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
+		case "host/bots/status":
+			return bots.status();
+		case "host/bots/signIn":
+			return bots.signIn();
+		case "host/bots/signOut":
+			bots.signOut();
+			return {};
+		case "host/bots/ticket":
+			return bots.ticket(params.scope as "socket" | "screen" | "api");
 		case "host/mcpApp/serve":
 			return mcpApps.serve(params.html as string, params.csp as DeclaredCsp | undefined, windowId);
 		case "host/mcpApp/release":

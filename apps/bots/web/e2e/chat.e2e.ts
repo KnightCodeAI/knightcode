@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/chat.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("send, stream, stop, react, reply, quote, attach, mention and skill", async ({ page }) => {
 	await page.goto("/bots/reviewer");

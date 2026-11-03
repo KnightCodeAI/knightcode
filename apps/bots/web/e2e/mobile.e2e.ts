@@ -1,5 +1,6 @@
 // apps/bots/web/e2e/mobile.e2e.ts
-import { devices, expect, test } from "@playwright/test";
+import { devices } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 // The iPhone 15 profile in Chromium: Playwright's WebKit on Windows folds the display's scaling into the phone window
 // (innerWidth 355 against a 393 px layout viewport, even on a blank page), so every page would "scroll" there.
 test.use({ ...devices["iPhone 15"], defaultBrowserType: "chromium" });

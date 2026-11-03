@@ -3,6 +3,7 @@
  * one MessagePort each, and the host methods a sandboxed renderer cannot run itself.
  */
 
+import { BOTS_ORIGIN, DesktopBots, isBotsSignInLink } from "./main/bots/desktop-bots.ts";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -17,6 +18,7 @@ import {
 	nativeTheme,
 	net,
 	protocol,
+	safeStorage,
 	session,
 	shell,
 } from "electron";
@@ -42,7 +44,8 @@ const ORIGIN = DEV_URL ? new URL(DEV_URL).origin : "app://desktop";
 const RENDERER_DIR = join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const CSP =
 	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; " +
-	"font-src 'self'; connect-src 'self'; frame-src kc-mcp-app:; worker-src 'self' blob:";
+	// KnightCode Bots: its API and sockets, and its screen viewer, at the bots origin.
+	`font-src 'self'; connect-src 'self' ${BOTS_ORIGIN} ${BOTS_ORIGIN.replace(/^http/, "ws")}; frame-src kc-mcp-app: ${BOTS_ORIGIN}; worker-src 'self' blob:`;
 
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
@@ -104,6 +107,12 @@ const router = new Router({
 });
 
 const state = new StateFile(app.getPath("userData"));
+/** KnightCode Bots' session, kept with the OS keychain; the browser's sign-in link comes back through openLink. */
+const bots = new DesktopBots({
+	dir: app.getPath("userData"),
+	keychain: safeStorage,
+	openExternal: (url) => shell.openExternal(url),
+});
 // An app's frame may sit only in this app's own windows.
 const mcpApps = new McpApps(ORIGIN);
 let server: ServerConnection;
@@ -156,6 +165,7 @@ function connectPort(id: number, open: OpenWindow): void {
 				role: () => roleOf(id),
 				updates,
 				installUpdate,
+				bots,
 			}).then((response) => port1.postMessage(response));
 			return;
 		}
@@ -173,6 +183,7 @@ function connectPort(id: number, open: OpenWindow): void {
  * window holds) in the window used last; a new window when none is open.
  */
 function openLink(url: string): void {
+	if (isBotsSignInLink(url)) return void bots.complete(url);
 	const encoded = /^knightcode:\/\/thread\/([^/?#]+)/.exec(url)?.[1];
 	let threadId: string | undefined;
 	try {

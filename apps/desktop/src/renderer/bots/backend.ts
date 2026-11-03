@@ -1,30 +1,107 @@
-// KnightCode Bots' backend in the desktop app: for now the in-memory fake the web app develops against, seeded with
-// the template gallery (Task 4.1 swaps in the real API and socket). Light enough to load with the coding app, so the
-// switcher's badge can count what needs the user in either product.
-import { createApiClient, createFakeBackend, defaultSeed, realtimeClock } from "@knightcode/bots-protocol";
+// KnightCode Bots' backend in the desktop app: the real API and socket at bots.knightcode.dev once the app is signed in.
+// The main process keeps the session; the renderer only ever holds short-lived tickets, one for API calls and one for
+// each socket's first frame. The in-memory fake stays for development (KNIGHTCODE_BOTS_FAKE=1 in the main process).
+import {
+	type ApiClient,
+	createApiClient,
+	createFakeBackend,
+	defaultSeed,
+	realtimeClock,
+	type WebSocketLike,
+} from "@knightcode/bots-protocol";
 import { TEMPLATES } from "@knightcode/bots-ui/templates";
 import { useEffect, useState } from "react";
+import { client } from "../client.ts";
 
-const seed = defaultSeed();
-if (seed.templates.length === 0) seed.templates = TEMPLATES;
-const fake = createFakeBackend(seed, { clock: realtimeClock() });
+export interface BotsBackend {
+	api: ApiClient;
+	connect: () => WebSocketLike;
+}
 
-/** The API client and socket factory BotsApp takes. The fake answers in memory; nothing goes to the network. */
-export const botsBackend = {
-	api: createApiClient(fake.fetch, "https://bots.knightcode.dev"),
-	connect: () => fake.connect(),
-};
+export type BotsState = { kind: "loading" } | { kind: "signed-out" } | { kind: "ready"; backend: BotsBackend };
 
-// ponytail: polls; the real backend's socket pushes needs-you changes once Task 4.1 lands.
-const POLL_MS = 15_000;
+function fakeBackend(): BotsBackend {
+	const seed = defaultSeed();
+	if (seed.templates.length === 0) seed.templates = TEMPLATES;
+	const fake = createFakeBackend(seed, { clock: realtimeClock() });
+	return { api: createApiClient(fake.fetch, "https://bots.knightcode.dev"), connect: () => fake.connect() };
+}
 
-/** How many bots and groups need the user now. */
-export function useNeedsYou(): number {
-	const [count, setCount] = useState(0);
+/** The real backend at `origin` for `accountId`: every API call carries a fresh-enough "api" ticket. */
+function realBackend(origin: string, accountId: string): BotsBackend {
+	let ticket: { ticket: string; expiresAt: number } | undefined;
+	const apiTicket = async () => {
+		if (!ticket || ticket.expiresAt - Date.now() < 10_000)
+			ticket = await client.host("host/bots/ticket", { scope: "api" });
+		return ticket.ticket;
+	};
+	const send: typeof fetch = async (input, init) => {
+		const headers = new Headers(init?.headers);
+		headers.set("authorization", `Ticket ${await apiTicket()}`);
+		return fetch(input, { ...init, headers });
+	};
+	const sockets = origin.replace(/^http/, "ws");
+	return {
+		api: createApiClient(send, origin),
+		// The socket's first frame carries a socket ticket, which the UI asks the API for.
+		connect: () =>
+			new WebSocket(`${sockets}/api/socket?account=${encodeURIComponent(accountId)}`) as unknown as WebSocketLike,
+	};
+}
+
+let current: Promise<BotsState> | undefined;
+const listeners = new Set<(state: BotsState) => void>();
+
+async function load(): Promise<BotsState> {
+	const status = await client.host("host/bots/status", {});
+	if (status.origin === "fake") return { kind: "ready", backend: fakeBackend() };
+	if (!status.signedIn || !status.accountId) return { kind: "signed-out" };
+	return { kind: "ready", backend: realBackend(status.origin, status.accountId) };
+}
+
+/** Loads (once) the backend's state; `reload` reads it again, after signing in or out. */
+export function botsState(reload = false): Promise<BotsState> {
+	if (reload || !current) {
+		current = load().catch((): BotsState => ({ kind: "signed-out" }));
+		void current.then((state) => {
+			for (const listener of listeners) listener(state);
+		});
+	}
+	return current;
+}
+
+export function useBotsState(): BotsState {
+	const [state, setState] = useState<BotsState>({ kind: "loading" });
 	useEffect(() => {
 		let live = true;
-		const load = () =>
-			void botsBackend.api
+		void botsState().then((loaded) => live && setState(loaded));
+		const listener = (next: BotsState) => live && setState(next);
+		listeners.add(listener);
+		return () => {
+			live = false;
+			listeners.delete(listener);
+		};
+	}, []);
+	return state;
+}
+
+export async function signInToBots(): Promise<void> {
+	await client.host("host/bots/signIn", {});
+	await botsState(true);
+}
+
+// ponytail: polls; the account socket's bot events could push needs-you changes instead.
+const POLL_MS = 15_000;
+
+/** How many bots and groups need the user now (none while signed out). */
+export function useNeedsYou(): number {
+	const state = useBotsState();
+	const [count, setCount] = useState(0);
+	useEffect(() => {
+		if (state.kind !== "ready") return setCount(0);
+		let live = true;
+		const refresh = () =>
+			void state.backend.api
 				.listBots({})
 				.then(({ bots, groups }) => {
 					if (live)
@@ -33,12 +110,12 @@ export function useNeedsYou(): number {
 						);
 				})
 				.catch(() => {});
-		load();
-		const timer = setInterval(load, POLL_MS);
+		refresh();
+		const timer = setInterval(refresh, POLL_MS);
 		return () => {
 			live = false;
 			clearInterval(timer);
 		};
-	}, []);
+	}, [state]);
 	return count;
 }

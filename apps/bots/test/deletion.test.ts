@@ -41,6 +41,8 @@ const leftovers = (stub: DurableObjectStub) =>
 			.exec<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'")
 			.toArray();
 		const rows = tables
+			// Full-text indexes keep bookkeeping rows in their shadow tables even when empty; the index itself is counted.
+			.filter((table) => !/_(data|idx|config|docsize|content)$/.test(table.name))
 			.map((table) => [table.name, state.storage.sql.exec<{ n: number }>(`SELECT COUNT(*) AS n FROM "${table.name}"`).one().n] as const)
 			.filter(([, count]) => count > 0);
 		return { rows, keys: [...(await state.storage.list({ limit: 20 })).keys()] };
@@ -106,7 +108,11 @@ it("exports every class, then deletes the account completely and revokes its con
 	// No D1 row, Durable Object storage or R2 object remains; the tombstone does.
 	expect(await d1Rows(accountId)).toEqual([]);
 	expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM deleted_accounts WHERE account_id = ?").bind(accountId).first()).toEqual({ n: 1 });
-	for (const stub of [bot(), user(), computer()]) expect(await leftovers(stub as never)).toEqual({ rows: [], keys: [] });
+	// Exactly what a brand-new object of the same kind holds (its constructor's defaults), and nothing more.
+	const pristine = (namespace: DurableObjectNamespace) => namespace.get(namespace.idFromName(`pristine-${crypto.randomUUID()}`));
+	expect(await leftovers(bot() as never)).toEqual(await leftovers(pristine(env.BOT as never) as never));
+	expect(await leftovers(user() as never)).toEqual(await leftovers(pristine(env.USER as never) as never));
+	expect(await leftovers(computer() as never)).toEqual(await leftovers(pristine(env.COMPUTER as never) as never));
 	for (const prefix of [`files/${accountId}/`, `computers/${accountId}/`]) expect((await env.FILES.list({ prefix })).objects).toEqual([]);
 
 	// The connections are revoked at the providers.
@@ -132,7 +138,7 @@ it("does not let a recovery alarm or a late webhook recreate the deleted account
 		body: raw,
 	});
 	expect(response.status).toBe(200);
-	expect(await leftovers(user() as never)).toEqual({ rows: [], keys: [] });
+	expect(await leftovers(user() as never)).toEqual(await leftovers(env.USER.get(env.USER.idFromName(`pristine-${crypto.randomUUID()}`)) as never));
 
 	// A recovery job that still holds journal entries (a lost instance's) writes nothing back.
 	await runInDurableObject(user(), async (_instance, state) => {

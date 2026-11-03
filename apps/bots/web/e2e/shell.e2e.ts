@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/shell.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("sidebar lists bots, groups, sections and needs-you markers", async ({ page }) => {
 	await page.goto("/");

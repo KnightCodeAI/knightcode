@@ -1,4 +1,4 @@
-// Builds the API client and socket the UI talks to: the in-memory fake when VITE_FAKE is set.
+// Builds the API client and socket the UI talks to: the Worker, or the in-memory fake when VITE_FAKE is set.
 import {
 	type ApiClient,
 	createApiClient,
@@ -16,10 +16,17 @@ export interface Client {
 	connect: () => WebSocketLike;
 }
 
-/** The fake backend, seeded with the reference seed when the URL asks for `?seed=reference`. */
+/**
+ * The Worker's API on this origin (the session cookie signs requests in) and its one realtime socket, which the UI
+ * authenticates with a ticket in its first frame. With VITE_FAKE=1, the in-memory fake, seeded with the reference seed
+ * when the URL asks for `?seed=reference`.
+ */
 export async function createClient(): Promise<Client> {
 	if (import.meta.env.VITE_FAKE !== "1")
-		throw new Error("the real backend client arrives with the Worker; run with VITE_FAKE=1");
+		return {
+			api: createApiClient((input, init) => fetch(input, { ...init, credentials: "same-origin" }), location.origin),
+			connect: () => new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/socket`) as unknown as WebSocketLike,
+		};
 	const seed = await chooseSeed();
 	// The fake serves the template gallery the real backend will serve.
 	if (seed.templates.length === 0) seed.templates = TEMPLATES;

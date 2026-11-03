@@ -2,6 +2,7 @@
 // replace the factory with a scripted provider; nothing here chooses a model, the bot's settings do.
 import type { Credential, CredentialInfo, CredentialStore, Models } from "@knightcode/ai";
 import { builtinModels } from "@knightcode/ai/providers/all";
+import { withDevModels } from "../dev/model.ts";
 import type { Env } from "../env.ts";
 
 export type ModelsFactory = (input: { env: Env; accountId: string }) => Models;
@@ -17,8 +18,7 @@ function userCredentials(env: Env, accountId: string): CredentialStore {
 	};
 }
 
-const defaultFactory: ModelsFactory = ({ env, accountId }) =>
-	builtinModels({ credentials: userCredentials(env, accountId) });
+const defaultFactory: ModelsFactory = ({ env, accountId }) => withDevModels(env, builtinModels({ credentials: userCredentials(env, accountId) }));
 
 let factory: ModelsFactory = defaultFactory;
 

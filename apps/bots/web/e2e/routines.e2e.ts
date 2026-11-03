@@ -1,5 +1,5 @@
 // apps/bots/web/e2e/routines.e2e.ts
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { compareToReference } from "./reference/compare.ts";
 test("create a routine with a grant and every trigger kind available", async ({ page }) => {
 	await page.goto("/bots/reviewer/routines/new");
