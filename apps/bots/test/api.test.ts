@@ -112,6 +112,10 @@ it("makes a bot from the Chief of Staff template a manager, with the management 
 		runInDurableObject(env.BOT.get(env.BOT.idFromName(id)), (instance) => (instance as unknown as BotObject).managerFlag());
 	expect(await manager(chief.id)).toBe(true);
 	expect(await manager(plain.id)).toBe(false);
+	// The client sees it (the avatar's star), from the create reply on.
+	expect(chief.manager).toBe(true);
+	expect((await client.getBot({ botId: chief.id })).manager).toBe(true);
+	expect(plain.manager).toBeUndefined();
 	// The client cannot make a bot a manager by editing it.
 	await client.updateBot({ botId: plain.id, ...({ manager: true } as object) });
 	expect(await manager(plain.id)).toBe(false);

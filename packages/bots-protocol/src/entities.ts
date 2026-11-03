@@ -163,6 +163,8 @@ export const BotSchema = Type.Object({
 	needsYou: Type.Boolean(),
 	/** The bot that manages this one, when a manager created it or was assigned it. */
 	managedBy: Opt(Id),
+	/** A Chief of Staff: it gets the management tools, and its avatar wears a star. Only the server sets it. */
+	manager: Opt(Type.Boolean()),
 	/** The account's main bot (its first), marked in the sidebar. */
 	main: Opt(Type.Boolean()),
 	email: Opt(Type.String()),
@@ -209,6 +211,8 @@ export const TemplateSchema = Type.Object({
 	avatar: AvatarSchema,
 	connectors: Type.Array(Id),
 	routines: Type.Array(Type.Object({ name: Type.String(), prompt: Type.String() })),
+	/** Bots made from it are a Chief of Staff (see Bot.manager). */
+	manager: Opt(Type.Boolean()),
 });
 export type Template = Static<typeof TemplateSchema>;
 

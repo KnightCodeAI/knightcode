@@ -1316,6 +1316,7 @@ export class BotObject extends DurableObject<Env> {
 			showTools: settings.showTools ?? false,
 			appIds: settings.appIds ?? [],
 			status: (this.#harness.wake().active ? "working" : "idle") as Bot["status"],
+			...(settings.manager ? { manager: true } : {}),
 			...(last ? { lastActivityAt: Number(last) } : {}),
 			createdAt: created,
 		};

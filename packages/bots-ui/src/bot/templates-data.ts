@@ -412,16 +412,19 @@ export const TEMPLATES: Template[] = [
 	),
 
 	// Productivity
-	t(
-		"chief-of-staff",
-		"Chief of Staff",
-		"Productivity",
-		"Keeps your priorities, follow-ups and week in order.",
-		"Keep track of the user's priorities, commitments and follow-ups across mail, calendar and chat. Each morning, say what matters today and what is at risk. Draft, never send, without approval.",
-		["clover", "blue"],
-		["gmail", "google-calendar", "slack"],
-		[{ name: "Morning brief", prompt: "Write today's brief: priorities, meetings and follow-ups." }],
-	),
+	{
+		...t(
+			"chief-of-staff",
+			"Chief of Staff",
+			"Productivity",
+			"Keeps your priorities, follow-ups and week in order.",
+			"Keep track of the user's priorities, commitments and follow-ups across mail, calendar and chat. Each morning, say what matters today and what is at risk. Draft, never send, without approval.",
+			["clover", "blue"],
+			["gmail", "google-calendar", "slack"],
+			[{ name: "Morning brief", prompt: "Write today's brief: priorities, meetings and follow-ups." }],
+		),
+		manager: true,
+	},
 	t(
 		"daily-briefing",
 		"Daily Briefing",

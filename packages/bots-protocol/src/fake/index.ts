@@ -64,6 +64,11 @@ const CREDIT_MARKUP = 1.1;
 /** Builds a fake backend from a seed (the default world when omitted). */
 export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clock?: FakeClock } = {}): FakeBackend {
 	const state: FakeSeed = structuredClone(seed);
+	// A seeded bot that manages others is a Chief of Staff, as the Worker's dev seed marks it.
+	for (const managerId of Object.keys(state.managed)) {
+		const manager = state.bots.find((b) => b.id === managerId);
+		if (manager) manager.manager = true;
+	}
 	const clock = options.clock ?? manualClock();
 	const executions = new Map<string, number>();
 	const enrollments = new Map<string, { provider: string; expiresAt: number }>();
@@ -318,6 +323,7 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 							instructions: template.instructions,
 							avatar: template.avatar,
 							appIds: template.connectors,
+							...(template.manager ? { manager: true } : {}),
 						}
 					: {}),
 				...defined(fields),
@@ -340,7 +346,7 @@ export function createFakeBackend(seed: FakeSeed = defaultSeed(), options: { clo
 		getBot: ({ botId }) => bot(botId),
 		updateBot: ({ botId, ...patch }) => updateBot(botId, patch),
 		duplicateBot: ({ botId }) => {
-			const { id: _id, email: _email, ...source } = bot(botId);
+			const { id: _id, email: _email, manager: _manager, ...source } = bot(botId);
 			return makeBot({
 				...structuredClone(source),
 				name: `${source.name} copy`,
