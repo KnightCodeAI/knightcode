@@ -40,5 +40,51 @@
 	"secrets_store_secrets": [{ "binding": "KEK", "store_id": "00000000000000000000000000000000", "secret_name": "bots-kek" }],
 	// Daily: re-index the plugin marketplaces for the connector catalog.
 	"triggers": { "crons": ["17 4 * * *"] },
-	"observability": { "enabled": true }
+	"observability": { "enabled": true },
+	// The top level above is development only. Production (`--env production`) declares every binding again, since
+	// bindings do not inherit into environments. The ids below are placeholders filled in when the resources are
+	// created (DEPLOYING.md, human tasks); nothing here is deployed by the repository's checks.
+	"env": {
+		"production": {
+			"name": "knightcode-bots",
+			"workers_dev": false,
+			"routes": [{ "pattern": "bots.knightcode.dev", "custom_domain": true }],
+			"vars": {
+				"APP_ORIGIN": "https://bots.knightcode.dev",
+				"PAYMENTS_COUNTRIES": "US",
+				"DESKTOP_ORIGIN": "app://desktop"
+			},
+			"assets": { "directory": "./web/dist", "binding": "ASSETS", "run_worker_first": true, "html_handling": "none" },
+			"durable_objects": {
+				"bindings": [
+					{ "name": "BOT", "class_name": "BotObject" },
+					{ "name": "USER", "class_name": "UserObject" },
+					{ "name": "COMPUTER", "class_name": "ComputerObject" }
+				]
+			},
+			"containers": [
+				{
+					"class_name": "ComputerObject",
+					"image": "./computer/Dockerfile",
+					"image_build_context": "../..",
+					"instance_type": { "vcpu": 2, "memory_mib": 6144, "disk_mb": 16000 },
+					"max_instances": 100
+				}
+			],
+			"d1_databases": [
+				{ "binding": "DB", "database_name": "knightcode-bots", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+			],
+			"r2_buckets": [{ "binding": "FILES", "bucket_name": "knightcode-bots-files" }],
+			"queues": {
+				"producers": [{ "binding": "OUTBOUND", "queue": "bots-outbound" }],
+				"consumers": [{ "queue": "bots-outbound", "dead_letter_queue": "bots-outbound-dlq" }]
+			},
+			"secrets_store_secrets": [{ "binding": "KEK", "store_id": "00000000000000000000000000000000", "secret_name": "bots-kek" }],
+			// Bots send from their own addresses on bots.knightcode.dev; mail to those addresses reaches the Worker's email
+			// handler through an Email Routing catch-all rule (DEPLOYING.md).
+			"send_email": [{ "name": "EMAIL" }],
+			"triggers": { "crons": ["17 4 * * *"] },
+			"observability": { "enabled": true }
+		}
+	}
 }

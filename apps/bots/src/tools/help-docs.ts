@@ -1,9 +1,27 @@
 // The bundled help documents, imported as text modules (wrangler's Text rule for .md).
 import approvals from "../../docs/help/approvals.md";
 import billing from "../../docs/help/billing.md";
+import channels from "../../docs/help/channels.md";
+import computer from "../../docs/help/computer.md";
+import connectors from "../../docs/help/connectors.md";
 import gettingStarted from "../../docs/help/getting-started.md";
 import memory from "../../docs/help/memory.md";
+import pages from "../../docs/help/pages.md";
+import payments from "../../docs/help/payments.md";
 import routines from "../../docs/help/routines.md";
+import skills from "../../docs/help/skills.md";
 import type { HelpDocs } from "./help-skill.ts";
 
-export const HELP_DOCS: HelpDocs = { approvals, billing, "getting-started": gettingStarted, memory, routines };
+export const HELP_DOCS: HelpDocs = {
+	approvals,
+	billing,
+	channels,
+	computer,
+	connectors,
+	"getting-started": gettingStarted,
+	memory,
+	pages,
+	payments,
+	routines,
+	skills,
+};

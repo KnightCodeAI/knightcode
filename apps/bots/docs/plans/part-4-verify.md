@@ -101,19 +101,19 @@ git commit -m "test(bots): add the MVP stop-condition suite"
   binding, secret, DNS record, Email Routing rule and SPF, DKIM and DMARC
   record the human tasks need; help pages for the help skill.
 
-- [ ] **Step 1: Validate the configuration without deploying**
+- [x] **Step 1: Validate the configuration without deploying**
 
 Run: `bunx wrangler deploy --dry-run --env production --outdir .wrangler/dry` in `apps/bots`
 Expected: exit 0, and the bundle in `.wrangler/dry` is under 10 MB
 compressed.
 
-- [ ] **Step 2: Lint the workflow**
+- [x] **Step 2: Lint the workflow**
 
 Run: `bunx actionlint .github/workflows/deploy-bots.yml` (or the repo's
 existing workflow check)
 Expected: no findings; the only trigger is `workflow_dispatch`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/bots/wrangler.jsonc .github/workflows/deploy-bots.yml apps/bots/DEPLOYING.md apps/bots/docs/help
