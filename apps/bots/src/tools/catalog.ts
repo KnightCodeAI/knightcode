@@ -29,7 +29,14 @@ export interface Knowledge {
 	read(name: string): Promise<string | undefined>;
 }
 
+/** The skills this bot may use (the owner's, its own and its apps'): one line each in the prompt, read when used. */
+export interface Skills {
+	list(): Promise<{ name: string; description: string }[]>;
+	read(name: string): Promise<string | undefined>;
+}
+
 export interface BotToolDeps {
+	skills?: Skills;
 	settings: SettingsStore;
 	memory: BotMemory;
 	knowledge: Knowledge;
@@ -74,6 +81,20 @@ function memoryTools(memory: BotMemory, outside: () => boolean) {
 	];
 }
 
+function skillTool(skills: Skills) {
+	return defineTool({
+		name: "read_skill",
+		description: "Read one of your skills by name before doing what it describes.",
+		deferred: true,
+		parameters: obj({ name: str() }),
+		execute: async ({ name }) => {
+			const content = await skills.read(name);
+			if (content === undefined) return text(`No skill named ${name}.`, true);
+			return text(content.length > KNOWLEDGE_MAX ? `${content.slice(0, KNOWLEDGE_MAX)}\n…(truncated)` : content);
+		},
+	});
+}
+
 function knowledgeTool(knowledge: Knowledge) {
 	return defineTool({
 		name: "read_knowledge",
@@ -95,7 +116,7 @@ export function botTools(deps: BotToolDeps): ToolRegistration[] {
 		updateBotTool(deps.settings, deps.settingsChanged, () => deps.settingsRules?.() ?? {}),
 		...memoryTools(deps.memory, () => deps.provenance?.outside() ?? false),
 		...historyTools(deps.memory.history),
-		knowledgeTool(deps.knowledge),
+		knowledgeTool(deps.knowledge), ...(deps.skills ? [skillTool(deps.skills)] : []),
 		...webTools(() => deps.provenance?.enter("web") ?? Promise.resolve()),
 		...(deps.gate ? [sendEmailTool(deps.gate), githubCommentTool(deps.gate)] : []),
 		...(deps.extraTools ?? []),
@@ -157,6 +178,15 @@ export function botExtensions(deps: BotToolDeps): { core: Extension; toolSearch:
 					const files = await deps.knowledge.list().catch(() => []);
 					return files.length > 0
 						? `Your knowledge files (read one with read_knowledge):\n${files.map((file) => `- ${file.name}`).join("\n")}`
+						: undefined;
+				}),
+				section("skills", async () => {
+					const skills = (await deps.skills?.list().catch(() => [])) ?? [];
+					return skills.length > 0
+						? `Your skills (read one with read_skill before using it):\n${skills
+								.slice(0, 50)
+								.map((skill) => `- ${skill.name}: ${skill.description.slice(0, 200)}`)
+								.join("\n")}`
 						: undefined;
 				}),
 				// Last: it changes the most, and the provider's cached prefix ends before it.

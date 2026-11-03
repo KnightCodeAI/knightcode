@@ -1,8 +1,10 @@
 // apps/bots/test/skills.test.ts
-import { env, runInDurableObject } from "cloudflare:test";
+import { env, runInDurableObject, SELF } from "cloudflare:test";
 import { afterEach, expect, it } from "vitest";
 import type { Principal } from "../src/auth/session.ts";
+import type { BotObject } from "../src/bot/bot-object.ts";
 import { setModelsFactory } from "../src/bot/models.ts";
+import { InputRecorder } from "../src/computer/screens.ts";
 import { importFromGitHub, NoSkills, parseSkillFile } from "../src/skills/github-import.ts";
 import { draftFromRun } from "../src/skills/save-as-skill.ts";
 import { Teaching } from "../src/skills/teach.ts";
@@ -115,4 +117,72 @@ it("drafts a skill from a finished run", async () => {
 		helper: async () => '```json\n{"name": "CRM export", "description": "weekly", "content": "1. Open the CRM\\n2. Export"}\n```',
 	});
 	expect(draft).toEqual({ name: "CRM export", description: "weekly", content: "1. Open the CRM\n2. Export" });
+});
+
+it("reads clicks, typed text and named keys from a control screen's RFB stream", () => {
+	const recorder = new InputRecorder();
+	// Handshake: version, the security type, ClientInit; then encodings and a pixel request, which are not steps.
+	expect(recorder.feed(new Uint8Array([...new TextEncoder().encode("RFB 003.008\n"), 1, 1]))).toEqual([]);
+	expect(recorder.feed(new Uint8Array([2, 0, 0, 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 5, 0, 3, 32]))).toEqual([]);
+	const pointer = (buttons: number, x: number, y: number) => [5, buttons, x >> 8, x & 255, y >> 8, y & 255];
+	const key = (keysym: number) => [4, 1, 0, 0, (keysym >>> 24) & 255, (keysym >>> 16) & 255, (keysym >>> 8) & 255, keysym & 255, 4, 0, 0, 0, (keysym >>> 24) & 255, (keysym >>> 16) & 255, (keysym >>> 8) & 255, keysym & 255];
+	const typed = [..."Q3x"].flatMap((char) => key(char.charCodeAt(0)));
+	// A press and its release are one click; a backspace removes the typo; Enter ends the text. Split mid-message.
+	const stream = new Uint8Array([...pointer(1, 300, 40), ...pointer(0, 300, 40), ...typed, ...key(0xff08), ...key(0xff0d)]);
+	const events = [...recorder.feed(stream.subarray(0, 9)), ...recorder.feed(stream.subarray(9))];
+	expect(events).toEqual([{ kind: "click", x: 300, y: 40 }, { kind: "type", text: "Q3" }, { kind: "key", keys: ["Enter"] }]);
+	recorder.feed(new Uint8Array(key("r".charCodeAt(0))));
+	expect(recorder.flush()).toEqual([{ kind: "type", text: "r" }]);
+});
+
+it("records the owner's demonstration on the bot's control screen into the teaching session", async () => {
+	const seen: string[] = [];
+	const models = fakeModels([{ text: "" }]);
+	setModelsFactory(() => ({
+		...models,
+		getModel: models.getModel.bind(models),
+		completeSimple: async (_model: unknown, context: { messages: { content: string }[] }) => {
+			seen.push(context.messages[0]!.content);
+			return { role: "assistant", stopReason: "stop", content: [{ type: "text", text: JSON.stringify({ name: "Open the report", description: "weekly", content: "1. Click Reports" }) }] };
+		},
+	}) as never);
+	const owner: Principal = { accountId: "acct-teach-screen", workspaceId: "acct-teach-screen", client: "web" };
+	await env.USER.get(env.USER.idFromName(owner.accountId)).grantCredits(1_000, "teach-grant");
+	const bot = env.BOT.get(env.BOT.idFromName("teach-screen-bot"));
+	await bot.claim(owner, { provider: "fake", modelId: "fake-model" });
+	const computer = env.COMPUTER.get(env.COMPUTER.idFromName(owner.accountId));
+	const { url } = await computer.screenUrl(owner, "teach-screen-bot", "control");
+	const response = await SELF.fetch(url, { headers: { upgrade: "websocket" } });
+	const socket = response.webSocket!;
+	socket.accept();
+	const { sessionId } = await bot.startTeaching(owner, "open this week's report");
+	// As noVNC sends them: ArrayBuffers.
+	const send = (bytes: number[]) => socket.send(new Uint8Array(bytes).buffer);
+	send([...new TextEncoder().encode("RFB 003.008\n")]);
+	send([1]);
+	send([1]);
+	send([5, 1, 0, 20, 0, 30, 5, 0, 0, 20, 0, 30]);
+	for (const char of "Q3") send([4, 1, 0, 0, 0, 0, 0, char.charCodeAt(0)]);
+	await new Promise((resolve) => setTimeout(resolve, 200));
+	const draft = await bot.stopTeaching(owner, sessionId);
+	socket.close();
+	expect(draft.name).toBe("Open the report");
+	// The steps the model drafted from: the click, then the typed text (flushed when recording stopped).
+	expect(seen.at(-1)).toContain("click at 20,30");
+	expect(seen.at(-1)).toContain('type "Q3"');
+});
+
+it("a bot reads its saved skills with read_skill; the owner's skills too, other bots' not", async () => {
+	setModelsFactory(() => fakeModels([{ text: "ok" }]));
+	const bot = env.BOT.get(env.BOT.idFromName("skill-reader"));
+	await bot.claim(principal, { provider: "fake", modelId: "fake-model" });
+	await user().skillAdd({ name: "Open the report", description: "weekly report", content: "1. Click Reports", scope: "bot", botId: "skill-reader" });
+	await user().skillAdd({ name: "Someone else's", description: "x", content: "secret steps", scope: "bot", botId: "another-bot" });
+	const read = (name: string) =>
+		runInDurableObject(bot, async (instance) => {
+			const tool = (instance as unknown as BotObject).tools().find((candidate) => candidate.name === "read_skill")!;
+			return (await tool.execute({ name } as never, undefined as never, undefined as never)) as { output: { text: string }[]; isError?: boolean };
+		});
+	expect((await read("Open the report")).output[0]!.text).toBe("1. Click Reports");
+	expect(await read("Someone else's")).toMatchObject({ isError: true });
 });

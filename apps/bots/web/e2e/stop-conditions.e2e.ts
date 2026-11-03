@@ -706,3 +706,53 @@ test("A bot builds a page whose chart refreshes when its routine runs, and a but
 	await until(async () => (await executed()).length === before + 1, "the connector action");
 	expect((await executed()).at(-1)!.arguments).toEqual({ to: "team@example.com", subject: "Signups" });
 });
+
+test("A user teaches a task by recording it, saves the drafted skill, and a routine runs it (fake computer provider; the demonstration is sent as the screen viewer's RFB input)", async ({ context, page }) => {
+	test.setTimeout(180_000);
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	const bot = await api.createBot({ name: `Clerk${tag}`, purpose: "Does the weekly exports" });
+	await api.updateBot({ botId: bot.id, computerAccess: true, approvals: "never" });
+	const skillName = `Weekly export ${tag}`;
+	const steps = "1. Click Export.\n2. Type the quarter (Q3).\n3. Press Enter.";
+	// The drafting model's answer (its request carries the recorded steps, checked below).
+	await context.request.post(`${process.env.BOTS_FAKE_MODEL_URL!.replace(/\/v1$/, "")}/__script`, {
+		data: { replies: [JSON.stringify({ name: skillName, description: "Export this week's list", content: steps })] },
+	});
+	await page.goto(`/bots/${bot.id}/computer?teach=1`);
+	await page.getByRole("textbox", { name: "What are you teaching?" }).fill("export this week's list");
+	await page.getByRole("button", { name: "Start recording" }).click();
+	await until(async () => (await api.getComputer({})).screens.some((screen) => screen.botId === bot.id && screen.controller === "user"), "control of the screen");
+	// The owner's demonstration, as their screen viewer sends it: a click, "Q3" typed, Enter.
+	const { url } = await api.getScreen({ botId: bot.id, mode: "control" });
+	const screen = new WebSocket(url.replace(/^http/, "ws"));
+	screen.binaryType = "arraybuffer";
+	await new Promise((resolve, reject) => {
+		screen.addEventListener("open", resolve);
+		screen.addEventListener("error", reject);
+	});
+	const send = (bytes: number[]) => screen.send(new Uint8Array(bytes).buffer);
+	send([...new TextEncoder().encode("RFB 003.008\n")]);
+	send([1]);
+	send([1]);
+	send([5, 1, 1, 44, 0, 80, 5, 0, 1, 44, 0, 80]);
+	for (const char of "Q3") send([4, 1, 0, 0, 0, 0, 0, char.charCodeAt(0)]);
+	send([4, 1, 0, 0, 0, 0, 0xff, 0x0d]);
+	await new Promise((resolve) => setTimeout(resolve, 500));
+	await page.getByRole("button", { name: "Stop recording" }).click();
+	await expect(page.getByRole("textbox", { name: "Skill name" })).toHaveValue(skillName);
+	screen.close();
+	const drafted = (await modelRequests(context.request)).find((request) => request.user.startsWith("Result shown: export this week's list"));
+	expect(drafted?.user).toContain("click at 300,80");
+	expect(drafted?.user).toContain('type "Q3"');
+	expect(drafted?.user).toContain("press Enter");
+	await page.getByRole("button", { name: "Save skill" }).click();
+	await until(async () => (await api.listSkills({ botId: bot.id })).skills.some((skill) => skill.name === skillName), "the saved skill");
+	// A routine that does the task: its run reads the skill and follows it.
+	const routine = await api.createRoutine({ botId: bot.id, name: "Weekly export", prompt: "Do this week's export.", triggers: [], grant: { actions: [], targets: [], limits: {} }, active: true });
+	await script(context.request, { [bot.name]: [{ tool: "tool_search", args: { query: "read_skill" } }, { tool: "read_skill", args: { name: skillName } }, "Exported this week's list."] });
+	await api.testRoutine({ id: routine.id });
+	await until(async () => (await threadTexts(api, bot.id)).includes("Exported this week's list."), "the routine's run", 60_000);
+	const run = (await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool !== undefined).at(-1);
+	expect(run?.tool).toBe(steps);
+});

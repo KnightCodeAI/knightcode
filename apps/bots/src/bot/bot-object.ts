@@ -573,9 +573,18 @@ export class BotObject extends DurableObject<Env> {
 
 	// ─── Teaching by showing ──────────────────────────────────────────────────
 
-	startTeaching(principal: Principal, goal: string): Promise<{ sessionId: string }> {
+	async startTeaching(principal: Principal, goal: string): Promise<{ sessionId: string }> {
 		this.#check(principal, this.#id);
-		return this.#teaching.startTeaching(goal);
+		const session = await this.#teaching.startTeaching(goal);
+		// The computer records the owner's input on this bot's control screen into the session.
+		await this.#computer().startRecording(this.#id, session.sessionId);
+		return session;
+	}
+
+	/** A step the computer recorded from the owner's input on this bot's screen (only the account's own computer). */
+	recordStepFromComputer(accountId: string, sessionId: string, event: TeachEvent, screenshot?: string, snapshot?: string): Promise<boolean> {
+		if (accountId !== this.#owner) throw new Unauthorized();
+		return this.#teaching.recordStep(sessionId, event, screenshot, snapshot);
 	}
 
 	/** One demonstrated step (the client sends the event, the screen's screenshot and the page snapshot). */
@@ -587,6 +596,7 @@ export class BotObject extends DurableObject<Env> {
 	/** Drafts the skill on the bot's own model. */
 	async stopTeaching(principal: Principal, sessionId: string): Promise<SkillDraft> {
 		this.#check(principal, this.#id);
+		await this.#computer().stopRecording(this.#id);
 		const helper = this.#helper();
 		if (!helper) throw new Error("The bot has no model to draft with.");
 		return this.#teaching.stopTeaching(sessionId, helper);
@@ -629,6 +639,10 @@ export class BotObject extends DurableObject<Env> {
 			settings: this.#settings,
 			memory: this.memory,
 			help: HELP_DOCS,
+			skills: {
+				list: async () => (await user.skillList({ botId })).map((skill) => ({ name: skill.name, description: skill.description })),
+				read: async (name) => (await user.skillList({ botId })).find((skill) => skill.name === name)?.content,
+			},
 			knowledge: {
 				list: () => user.listFiles({ botId, kind: "knowledge" }),
 				read: async (name) => {

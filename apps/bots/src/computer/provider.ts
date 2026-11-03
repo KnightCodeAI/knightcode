@@ -25,6 +25,8 @@ export interface ComputerProvider {
 	/** A knightcode-env connection running as `botUser`. */
 	transport(id: string, botUser: string): Promise<Transport>;
 	screen(id: string, botId: string, mode: "view" | "control"): Promise<CapabilityUrl>;
+	/** The VNC server's socket for `botUser`'s display, which the screen proxy relays (not yet accepted). */
+	vnc?(id: string, botUser: string): Promise<WebSocket | undefined>;
 	/** The workspace (home directories, saves excluded) as a tar stream, after browsers are quiesced. */
 	exportWorkspace(id: string): AsyncIterable<Uint8Array>;
 	importWorkspace(id: string, data: AsyncIterable<Uint8Array>): Promise<void>;
@@ -150,6 +152,31 @@ export class FakeComputerProvider implements ComputerProvider {
 
 	screen(id: string, botId: string, mode: "view" | "control") {
 		return this.screens(id, botId, mode);
+	}
+
+	/** A VNC server that completes the handshake (no security, a 1280x800 desktop) and ignores input after it. */
+	async vnc(_id: string, _botUser: string): Promise<WebSocket> {
+		const { 0: proxySide, 1: server } = new WebSocketPair();
+		server.accept();
+		server.send(new TextEncoder().encode("RFB 003.008\n"));
+		let stage = 0;
+		server.addEventListener("message", () => {
+			if (stage === 0) server.send(new Uint8Array([1, 1]));
+			else if (stage === 1) server.send(new Uint8Array([0, 0, 0, 0]));
+			else if (stage === 2) {
+				const name = new TextEncoder().encode("fake");
+				const init = new Uint8Array(24 + name.length);
+				const view = new DataView(init.buffer);
+				view.setUint16(0, 1280);
+				view.setUint16(2, 800);
+				init.set([32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0], 4);
+				view.setUint32(20, name.length);
+				init.set(name, 24);
+				server.send(init);
+			}
+			stage++;
+		});
+		return proxySide;
 	}
 
 	/** The disk as a save carries it: every file with its owner and mode. */

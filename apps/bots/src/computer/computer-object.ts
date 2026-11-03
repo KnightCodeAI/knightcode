@@ -3,6 +3,7 @@
 // control and open viewer, and sleeps after 10 minutes with none of them (one idle timer for the whole computer). It
 // reserves computer time in 5-minute blocks; a block it cannot reserve stops the computer, and chat keeps working.
 // Every save goes through the save coordinator; the workspace is sealed by the user object with the user's data key.
+import type { BotObject } from "../bot/bot-object.ts";
 import type { ComputerState as ProtocolComputerState } from "@knightcode/bots-protocol";
 import { isDeleted } from "../account/deletion.ts";
 import type { Transport } from "@knightcode/env";
@@ -23,7 +24,7 @@ import { CloudflareComputerProvider } from "./cloudflare.ts";
 import { type MaintenanceKind, runMaintenance } from "./maintenance.ts";
 import { botUserFor, type CapabilityUrl, type ComputerProvider, FakeComputerProvider } from "./provider.ts";
 import { type Lease, SaveCoordinator } from "./save-coordinator.ts";
-import { issueScreenToken, type ScreenGrant, type ScreenMode, verifyScreenToken, ViewOnlyFilter } from "./screens.ts";
+import { InputRecorder, issueScreenToken, type ScreenGrant, type ScreenMode, verifyScreenToken, ViewOnlyFilter } from "./screens.ts";
 
 export const IDLE_MS = 10 * 60_000;
 export const BLOCK_MS = 5 * 60_000;
@@ -472,13 +473,10 @@ export class ComputerObject extends DurableObject<Env> {
 	async #screenSocket(request: Request, token: string): Promise<Response> {
 		const grant = await this.checkScreen(token);
 		if (!grant) return new Response("expired", { status: 403 });
-		if (!(this.#provider instanceof CloudflareComputerProvider)) return new Response("no screen", { status: 501 });
+		if (!this.#provider.vnc) return new Response("no screen", { status: 501 });
 		const held = await this.acquire(grant.botId, grant.mode === "control" ? "control" : "viewer");
 		if ("refused" in held) return new Response(held.refused, { status: 409 });
-		const upstream = await this.#provider.bridge(`/vnc?user=${encodeURIComponent(await botUserFor(grant.botId))}`, {
-			headers: { upgrade: "websocket" },
-		});
-		const vnc = upstream.webSocket;
+		const vnc = await this.#provider.vnc(this.#account, await botUserFor(grant.botId));
 		if (!vnc) {
 			await this.release(held.leaseId);
 			return new Response("screen unavailable", { status: 502 });
@@ -486,7 +484,12 @@ export class ComputerObject extends DurableObject<Env> {
 		vnc.accept();
 		const { 0: client, 1: server } = new WebSocketPair();
 		server.accept();
+		// Binary frames as bytes (the runtime's default is Blob, which the relay and the filters cannot read).
+		vnc.binaryType = "arraybuffer";
+		server.binaryType = "arraybuffer";
 		const filter = grant.mode === "view" ? new ViewOnlyFilter() : undefined;
+		// The owner's input while a teaching session records this bot (the stream is read from its start).
+		const recorder = grant.mode === "control" ? new InputRecorder() : undefined;
 		const open = this.#screens.get(grant.botId) ?? new Set<WebSocket>();
 		this.#screens.set(grant.botId, open.add(server));
 		// An open screen keeps its hold for as long as it is open, watched or not.
@@ -496,7 +499,15 @@ export class ComputerObject extends DurableObject<Env> {
 			const data = event.data;
 			const bytes = typeof data === "string" ? new TextEncoder().encode(data) : new Uint8Array(data as ArrayBuffer);
 			// A view grant's input never reaches the computer: anything but pixel requests closes the connection.
-			if (!filter) return vnc.send(bytes);
+			if (!filter) {
+				const events = recorder?.feed(bytes) ?? [];
+				const recording = this.#recording.get(grant.botId);
+				if (recording) {
+					recording.recorder = recorder;
+					for (const event of events) this.#recordStep(grant.botId, recording, event);
+				}
+				return vnc.send(bytes);
+			}
 			const allowed = filter.feed(bytes);
 			if (allowed === undefined) return close();
 			if (allowed.length > 0) vnc.send(allowed);
@@ -514,6 +525,36 @@ export class ComputerObject extends DurableObject<Env> {
 		vnc.addEventListener("close", close);
 		server.addEventListener("close", close);
 		return new Response(null, { status: 101, webSocket: client });
+	}
+
+	// ─── Teaching ─────────────────────────────────────────────────────────────
+
+	/** Teaching sessions in progress, per bot: steps go to the bot in order, each with a screenshot and the page. */
+	readonly #recording = new Map<string, { sessionId: string; chain: Promise<void>; recorder?: InputRecorder }>();
+
+	/** The bot's teaching session started: the owner's input on its control screen is recorded from now on. */
+	startRecording(botId: string, sessionId: string): void {
+		this.#recording.set(botId, { sessionId, chain: Promise.resolve() });
+	}
+
+	/** The session stopped: text typed since the last step is recorded, and every step has reached the bot. */
+	async stopRecording(botId: string): Promise<void> {
+		const recording = this.#recording.get(botId);
+		if (!recording) return;
+		for (const event of recording.recorder?.flush() ?? []) this.#recordStep(botId, recording, event);
+		this.#recording.delete(botId);
+		await recording.chain;
+	}
+
+	#recordStep(botId: string, recording: { sessionId: string; chain: Promise<void> }, event: Parameters<BotObject["recordStepFromComputer"]>[2]): void {
+		recording.chain = recording.chain.then(async () => {
+			const botUser = await botUserFor(botId);
+			const shot = await this.#provider.desktop?.(this.#account, botUser, { action: "screenshot" }).catch(() => undefined);
+			const page = await this.#provider.browser?.(this.#account, botUser, { action: "snapshot" }).catch(() => undefined);
+			await this.env.BOT.get(this.env.BOT.idFromName(botId))
+				.recordStepFromComputer(this.#account, recording.sessionId, event, shot?.image?.data, page?.snapshot)
+				.catch((error: unknown) => console.error("teach step", error));
+		});
 	}
 
 	/** Open screen connections per bot, so revoking closes them. */

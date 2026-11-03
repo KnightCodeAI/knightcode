@@ -105,3 +105,89 @@ export class ViewOnlyFilter {
 		return out;
 	}
 }
+
+/** A demonstrated step, as the teaching session records it (skills/teach.ts). */
+type RecordedEvent = { kind: "click"; x: number; y: number } | { kind: "type"; text: string } | { kind: "key"; keys: string[] };
+
+const KEY_NAMES: Record<number, string> = { 0xff0d: "Enter", 0xff09: "Tab", 0xff1b: "Escape" };
+
+/**
+ * The owner's input on a control screen, read from the viewer's RFB stream as teaching steps (spec section 18): a
+ * click when a button goes down, typed text gathered until the next click or named key, and Enter, Tab and Escape.
+ * Passwords never pass here: they go through Protected input.
+ */
+export class InputRecorder {
+	#buffer = new Uint8Array(0);
+	#stage: "version" | "security" | "auth" | "init" | "messages" | "lost" = "version";
+	#buttons = 0;
+	#text = "";
+
+	feed(bytes: Uint8Array): RecordedEvent[] {
+		const events: RecordedEvent[] = [];
+		if (this.#stage === "lost") return events;
+		const joined = new Uint8Array(this.#buffer.length + bytes.length);
+		joined.set(this.#buffer, 0);
+		joined.set(bytes, this.#buffer.length);
+		let offset = 0;
+		const have = (length: number) => joined.length - offset >= length;
+		for (;;) {
+			if (this.#stage === "version") {
+				if (!have(12)) break;
+				offset += 12;
+				this.#stage = "security";
+			} else if (this.#stage === "security") {
+				if (!have(1)) break;
+				this.#stage = joined[offset] === 2 ? "auth" : "init";
+				offset += 1;
+			} else if (this.#stage === "auth") {
+				if (!have(16)) break;
+				offset += 16;
+				this.#stage = "init";
+			} else if (this.#stage === "init") {
+				if (!have(1)) break;
+				offset += 1;
+				this.#stage = "messages";
+			} else {
+				if (!have(1)) break;
+				const type = joined[offset]!;
+				let length: number;
+				if (type === 0) length = 20;
+				else if (type === 3) length = 10;
+				else if (type === 4) length = 8;
+				else if (type === 5) length = 6;
+				else if (type === 2 || type === 6) {
+					if (!have(8)) break;
+					length = type === 2 ? 4 + 4 * ((joined[offset + 2]! << 8) | joined[offset + 3]!) : 8 + new DataView(joined.buffer, joined.byteOffset + offset + 4, 4).getUint32(0);
+				} else {
+					// A message this reader does not know: it cannot tell where the next one starts, so it stops reading.
+					this.#stage = "lost";
+					break;
+				}
+				if (!have(length)) break;
+				const message = joined.subarray(offset, offset + length);
+				offset += length;
+				if (type === 5) {
+					const buttons = message[1]!;
+					if (this.#buttons === 0 && buttons !== 0) events.push(...this.flush(), { kind: "click", x: (message[2]! << 8) | message[3]!, y: (message[4]! << 8) | message[5]! });
+					this.#buttons = buttons;
+				} else if (type === 4 && message[1] === 1) {
+					const keysym = new DataView(message.buffer, message.byteOffset + 4, 4).getUint32(0);
+					if (keysym >= 0x20 && keysym <= 0x7e) this.#text += String.fromCharCode(keysym);
+					else if (keysym === 0xff08) this.#text = this.#text.slice(0, -1);
+					else if (KEY_NAMES[keysym]) events.push(...this.flush(), { kind: "key", keys: [KEY_NAMES[keysym]!] });
+				}
+			}
+		}
+		this.#buffer = joined.slice(offset);
+		if (this.#buffer.length > 65_536) this.#stage = "lost";
+		return events;
+	}
+
+	/** Text typed since the last step. */
+	flush(): RecordedEvent[] {
+		if (!this.#text) return [];
+		const text = this.#text;
+		this.#text = "";
+		return [{ kind: "type", text }];
+	}
+}

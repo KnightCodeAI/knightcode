@@ -107,6 +107,10 @@ export class CloudflareComputerProvider implements ComputerProvider {
 		return this.#options.screenUrl(botId, mode);
 	}
 
+	async vnc(_id: string, botUser: string): Promise<WebSocket | undefined> {
+		return (await this.bridge(`/vnc?user=${encodeURIComponent(botUser)}`, { headers: { upgrade: "websocket" } })).webSocket ?? undefined;
+	}
+
 	async *exportWorkspace(_id: string): AsyncIterable<Uint8Array> {
 		// The bridge closes every Chrome first, so profiles are consistent on disk.
 		const response = await this.bridge("/export", { method: "POST" });
