@@ -52,6 +52,9 @@ export default defineConfig({
 	],
 	test: {
 		include: ["test/**/*.test.ts"],
+		// Durable Object tests are bound by storage fsyncs: under the full parallel run the slowest take ~3 s, and one
+		// disk stall pushed a 0.4 s test past the 5 s default. A real hang still fails.
+		testTimeout: 20_000,
 		setupFiles: ["./test/apply-migrations.ts"],
 		globalSetup: ["./test/global-setup.ts"],
 	},
