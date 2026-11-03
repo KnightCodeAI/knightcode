@@ -1,5 +1,6 @@
 // Helpers for the stop-condition suite: the API as the signed-in test account, the fake model's script, waiting, and
 // signing webhooks the way each service does.
+import { spawnSync } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { type ApiClient, createApiClient } from "@knightcode/bots-protocol";
@@ -124,4 +125,12 @@ export async function telegramSent(request: APIRequestContext, chatId: number): 
 	const base = process.env.E2E_TELEGRAM_URL!.replace(/\/bot[^/]*$/, "");
 	const all = (await (await request.get(`${base}/test/sent`)).json()) as { chat_id: string | number; text: string }[];
 	return all.filter((message) => String(message.chat_id) === String(chatId)).map((message) => message.text);
+}
+
+/** Kills the running Worker (wrangler dev and its workerd); the test setup starts it again on the same state. */
+export function killWorker(): void {
+	const pid = readFileSync(process.env.E2E_WORKER_PID_FILE!, "utf8").trim();
+	if (!pid) throw new Error("no Worker pid");
+	if (process.platform === "win32") spawnSync("taskkill", ["/T", "/F", "/PID", pid]);
+	else process.kill(-Number(pid), "SIGKILL");
 }

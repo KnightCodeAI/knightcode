@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectProviders, providerRules } from "../../../desktop/src/main/bots/connect.ts";
 import { expect, REAL, test } from "./fixtures.ts";
-import { apiOf, installSlack, modelRequests, postGitHub, postSlack, postTelegram, script, sendMailToBot, sentMail, telegramSent, threadTexts, until, WEB } from "./stop-helpers.ts";
+import { apiOf, installSlack, killWorker, modelRequests, postGitHub, postSlack, postTelegram, script, sendMailToBot, sentMail, telegramSent, threadTexts, until, WEB } from "./stop-helpers.ts";
 
 test.skip(!REAL, "the stop conditions run against the real backend (BOTS_BACKEND=real)");
 test.describe.configure({ timeout: 120_000 });
@@ -406,4 +406,27 @@ test.describe("a bot with a long past", () => {
 		const searched = (await modelRequests(context.request)).filter((request) => request.bot === "Archivist" && request.tool !== undefined).at(-1);
 		expect(searched?.tool).toContain("555-0142");
 	});
+});
+
+test("Killing the Worker mid-run resumes the run, and no email or comment is sent twice", async ({ context, page }) => {
+	test.setTimeout(240_000);
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	const bot = await api.createBot({ name: `Notifier${tag}`, purpose: "Sends updates" });
+	await api.updateBot({ botId: bot.id, approvals: "never" });
+	const recipient = `team-${tag}@example.com`;
+	const long = Array.from({ length: 120 }, (_, index) => `word${index}`).join(" ");
+	await script(context.request, {
+		[bot.name]: [{ tool: "send_email", args: { to: recipient, subject: "Status", body: "The release is out." } }, `Sent. ${long}`, "Resumed and finished."],
+	});
+	await page.goto(`/bots/${bot.id}`);
+	await page.getByRole("textbox", { name: "Message" }).fill("Tell the team the release is out");
+	await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	// The mail went, and the reply after it is streaming: kill the Worker now.
+	await until(async () => sentMail().some((mail) => mail.to.includes(recipient)), "the email");
+	await until(async () => (await modelRequests(context.request)).some((request) => request.bot === bot.name && request.tool !== undefined && request.end === undefined), "the reply streaming");
+	killWorker();
+	// It comes back (the test setup restarts it) and the run finishes on its own.
+	await until(async () => (await threadTexts(api, bot.id)).includes("Resumed and finished."), "the resumed run", 180_000);
+	expect(sentMail().filter((mail) => mail.to.includes(recipient))).toHaveLength(1);
 });
