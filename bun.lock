@@ -228,7 +228,6 @@
         "@fontsource-variable/libre-franklin": "5.3.0",
         "@knightcode/bots-protocol": "workspace:*",
         "@knightcode/chord": "workspace:*",
-        "bot-avatars": "0.2.2",
         "lucide-react": "1.37.0",
         "marked": "18.0.11",
         "mermaid": "12.2.0",

@@ -1,4 +1,4 @@
-// The primitives gallery (development only, at /__gallery): every primitive and every avatar shape.
+// The primitives gallery (development only, at /__gallery): every primitive, every avatar shape and every avatar state.
 import { AVATAR_COLORS, AVATAR_SHAPES } from "@knightcode/bots-protocol";
 import {
 	Badge,
@@ -13,6 +13,7 @@ import {
 	MenuSeparator,
 	Select,
 	Skeleton,
+	STATE_GROUPS,
 	Tabs,
 	Textarea,
 	ToastProvider,
@@ -143,6 +144,27 @@ export function Gallery() {
 						</span>
 					))}
 				</Row>
+				{STATE_GROUPS.map((group) => (
+					<Row key={group.label} title={`Avatar states: ${group.label}`}>
+						{group.states.map((state, i) => (
+							<span
+								key={state}
+								title={state}
+								style={{ display: "inline-grid", justifyItems: "center", gap: 4, fontSize: 11 }}
+							>
+								<BotAvatarView
+									shape={AVATAR_SHAPES[(i * 7) % AVATAR_SHAPES.length]!}
+									color={AVATAR_COLORS[(i * 3) % AVATAR_COLORS.length]!}
+									state={state}
+									size={56}
+									isFollowingPointer
+									isInteractive
+								/>
+								{state}
+							</span>
+						))}
+					</Row>
+				))}
 			</main>
 		</ToastProvider>
 	);
