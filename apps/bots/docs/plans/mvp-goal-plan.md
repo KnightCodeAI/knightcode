@@ -197,14 +197,15 @@ never does them; it appends to this list when it meets a new one.
   secrets, the first production deploy, DNS and Email Routing for
   `bots.knightcode.dev`.
 - Reviewing the `feat/bots-mvp` branch and deciding how it merges.
-- Live development credentials (Task 4.4). The Claude in Chrome extension was
-  not connected during the run, and parts of each also need the owner (typing
-  a secret into a dashboard field, messaging BotFather, accepting terms). Each
-  value goes into `apps/bots/.dev.vars` (already created, gitignored, with
-  local secrets and commented slots):
-  - GitHub: an OAuth app (callback
-    `http://localhost:5173/auth/github/callback`) for `GITHUB_CLIENT_ID` and
-    `GITHUB_CLIENT_SECRET`; a GitHub App with pull request and issue write,
+- Live development credentials (Task 4.4). Secret values are copied by the
+  owner: the run may create development resources but never reads a secret
+  out of a dashboard into its session, types one into a field, messages
+  BotFather or accepts terms. Each value goes into `apps/bots/.dev.vars`
+  (gitignored; local secrets and commented slots already there). Done so far:
+  the GitHub OAuth app "KnightCode Bots (local)" exists with callback
+  `http://localhost:5173/auth/github/callback`, and its client id and secret
+  are in `.dev.vars`. Still to do:
+  - GitHub: a GitHub App with pull request and issue write,
     contents read, events `pull_request` and `issue_comment`, a webhook
     secret you choose, and a private key, for `GITHUB_APP_ID`,
     `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_WEBHOOK_SECRET`.

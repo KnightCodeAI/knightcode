@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
@@ -6,6 +7,12 @@ import { emulatorBindings } from "./test/emulators.ts";
 // Secrets are miniflare bindings so the suite runs on a clean checkout. web/dist does not
 // exist until the web app is built, so the assets binding points at a committed fixture.
 // KEK (Secrets Store) is not emulated; tests read the plain TEST_KEK binding instead.
+/** The keys of a developer's .dev.vars, which the pool also reads: tests never run with someone's real credentials. */
+const devVarKeys = (): string[] => {
+	const file = fileURLToPath(new URL("./.dev.vars", import.meta.url));
+	return existsSync(file) ? [...readFileSync(file, "utf8").matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map((match) => match[1]!) : [];
+};
+
 export default defineConfig({
 	plugins: [
 		cloudflareTest(async () => ({
@@ -20,6 +27,8 @@ export default defineConfig({
 					assetConfig: { html_handling: "none" },
 				},
 				bindings: {
+					// Unset (empty) unless a test binding below sets it.
+					...Object.fromEntries(devVarKeys().map((key) => [key, ""])),
 					// The emulated GitHub, Google and the rest, started here in Node; test/global-setup.ts stops them.
 					...(await emulatorBindings()),
 					SESSION_SECRET: "test-session-secret",

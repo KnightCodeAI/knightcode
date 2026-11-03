@@ -185,15 +185,15 @@ git commit -m "docs(bots): record the remaining human tasks"
   failure count is 0; otherwise it prints `MVP NOT VERIFIED: <n> failures`
   and exits 1.
 
-- [ ] **Step 1: Write `verify.ts`**
-- [ ] **Step 2: Run it**
+- [x] **Step 1: Write `verify.ts`**
+- [x] **Step 2: Run it**
 
 Run: `bun run verify` in `apps/bots`
 Expected: the last line is `MVP VERIFIED`. On any failure, fix the cause in
 the owning task's code (rerunning that task's tests), commit, and run
 `verify` again until it passes.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/bots/scripts/verify.ts apps/bots/package.json
