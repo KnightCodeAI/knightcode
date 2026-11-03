@@ -373,6 +373,11 @@ export class BotObject extends DurableObject<Env> {
 	 * The owner's change to the bot's settings (from the settings screen, never from chat): it may grant powers, such as
 	 * computer access. The tools are rebuilt to match, and a model change reaches the conversation.
 	 */
+	/** Whether this bot is a Chief of Staff (gets the management tools); set only by the Worker, never by a client edit. */
+	managerFlag(): boolean {
+		return this.#settings.read().manager === true;
+	}
+
 	async updateSettings(principal: Principal, patch: Partial<BotSettings>): Promise<BotSettings> {
 		this.#check(principal, this.#id);
 		const before = this.#settings.read();

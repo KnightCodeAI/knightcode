@@ -47,6 +47,8 @@ async function changed(env: Env, principal: Principal, botId: string): Promise<B
 	return bot;
 }
 
+const MANAGER_TEMPLATES = new Set(["chief-of-staff"]);
+
 /** Creates a bot: a fresh id from its name, claimed by the account, with its first settings. */
 async function createBot(env: Env, principal: Principal, fields: Partial<Bot> & { name: string; model?: Bot["model"] }, id?: string): Promise<Bot> {
 	const account = await userOf(env, principal).account();
@@ -85,6 +87,8 @@ export const botHandlers: Handlers = {
 			...defined(fields),
 			name: fields.name,
 		});
+		// A Chief of Staff (spec section 11) is the template that uses the management tools.
+		if (template && MANAGER_TEMPLATES.has(template.id)) await botOf(env, bot.id).updateSettings(principal, { manager: true });
 		// A template's routines arrive paused, with no trigger until the user adds one.
 		for (const routine of template?.routines ?? [])
 			await botOf(env, bot.id).createRoutine(principal, { name: routine.name, prompt: routine.prompt, triggers: [], grant: { actions: [], targets: [], limits: {} }, active: false });

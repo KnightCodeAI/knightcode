@@ -6,7 +6,8 @@
 //   { replies: Reply[] }                 the next replies of any request
 //   { byBot: { [botName]: string } }     what a bot answers whenever nothing else is scripted
 //   { passInGroups: string[] }           bots that pass on their group turns
-// A Reply is text, or { tool, args } for a tool call. With nothing scripted the server answers "You said: <message>".
+// A Reply is text, or { tool, args } for a tool call; an argument "{{last.<field>}}" takes that field of the previous tool
+// result (JSON). With nothing scripted the server answers "You said: <message>".
 // GET /__requests lists what each request asked (bot, last user text, tool result) and when it ran, for tests to check.
 import { createServer, type IncomingMessage, type Server } from "node:http";
 
@@ -27,12 +28,26 @@ type Message = { role: string; content?: string | { type: string; text?: string 
 const textOf = (message: Message | undefined) =>
 	typeof message?.content === "string" ? message.content : (message?.content ?? []).map((part) => part.text ?? "").join("");
 
+/** Arguments with "{{last.<field>}}" replaced by that field of the previous tool result. */
+function fill(args: Record<string, unknown>, previous: Message | undefined): Record<string, unknown> {
+	let result: Record<string, unknown> = {};
+	try {
+		result = JSON.parse(textOf(previous)) as Record<string, unknown>;
+	} catch {}
+	return Object.fromEntries(
+		Object.entries(args).map(([key, value]) => {
+			const field = typeof value === "string" ? /^\{\{last\.(\w+)\}\}$/.exec(value)?.[1] : undefined;
+			return [key, field ? result[field] : value];
+		}),
+	);
+}
+
 export async function startFakeModelServer(port = 0): Promise<{ url: string; server: Server; close(): Promise<void> }> {
 	const scripted: Reply[] = [];
 	const forBot = new Map<string, Reply[]>();
 	const byBot = new Map<string, string>();
 	const passing = new Set<string>();
-	const requests: { bot?: string; user: string; tool?: string; start: number; end?: number }[] = [];
+	const requests: { bot?: string; user: string; tool?: string; tools: string[]; start: number; end?: number }[] = [];
 	const server = createServer(async (request, response) => {
 		const url = new URL(request.url ?? "/", "http://fake");
 		const json = (status: number, body: unknown) => response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
@@ -53,13 +68,13 @@ export async function startFakeModelServer(port = 0): Promise<{ url: string; ser
 		if (request.method === "GET" && url.pathname === "/v1/models")
 			return json(200, { object: "list", data: FAKE_MODELS.map((id) => ({ id, object: "model", owned_by: "fake" })) });
 		if (request.method !== "POST" || url.pathname !== "/v1/chat/completions") return json(404, { error: { message: "not found" } });
-		const body = JSON.parse(await read(request)) as { model: string; messages: Message[]; stream?: boolean };
+		const body = JSON.parse(await read(request)) as { model: string; messages: Message[]; stream?: boolean; tools?: { function?: { name?: string } }[] };
 		const lastUser = [...body.messages].reverse().find((message) => message.role === "user");
 		const last = body.messages.at(-1);
 		const system = body.messages.filter((message) => message.role === "system" || message.role === "developer").map(textOf).join("\n");
 		const names = new Set([...forBot.keys(), ...byBot.keys(), ...passing]);
 		const bot = [...names].find((name) => system.includes(`You are ${name}`));
-		const logged: (typeof requests)[number] = { ...(bot ? { bot } : {}), user: textOf(lastUser), ...(last?.role === "tool" ? { tool: textOf(last) } : {}), start: Date.now() };
+		const logged: (typeof requests)[number] = { ...(bot ? { bot } : {}), user: textOf(lastUser), ...(last?.role === "tool" ? { tool: textOf(last) } : {}), tools: (body.tools ?? []).map((tool) => tool.function?.name ?? ""), start: Date.now() };
 		requests.push(logged);
 		response.on("finish", () => (logged.end = Date.now()));
 		const inGroup = system.includes("You are in the group chat");
@@ -70,7 +85,8 @@ export async function startFakeModelServer(port = 0): Promise<{ url: string; ser
 		const id = `chatcmpl-${Date.now()}`;
 		const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
 		if (typeof reply !== "string") {
-			const call = { id: `call_${Math.random().toString(36).slice(2, 10)}`, type: "function", function: { name: reply.tool, arguments: JSON.stringify(reply.args) } };
+			const previous = [...body.messages].reverse().find((message) => message.role === "tool");
+			const call = { id: `call_${Math.random().toString(36).slice(2, 10)}`, type: "function", function: { name: reply.tool, arguments: JSON.stringify(fill(reply.args, previous)) } };
 			if (!body.stream)
 				return json(200, { id, object: "chat.completion", model: body.model, choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [call] } }], usage });
 			response.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });

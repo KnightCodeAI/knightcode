@@ -1,9 +1,10 @@
 // apps/bots/test/api.test.ts: the contract's routes and the UI's one socket, end to end through the Worker.
 import { createApiClient, decodeFrame, encodeFrame, type ServerFrame } from "@knightcode/bots-protocol";
-import { env, SELF } from "cloudflare:test";
+import { env, runInDurableObject, SELF } from "cloudflare:test";
 import { afterEach, beforeAll, expect, it } from "vitest";
 import { createAccount } from "../src/auth/accounts.ts";
 import { issueSession, SESSION_COOKIE } from "../src/auth/session.ts";
+import type { BotObject } from "../src/bot/bot-object.ts";
 import { setModelsFactory } from "../src/bot/models.ts";
 import { fakeModels } from "./fake-model.ts";
 
@@ -100,4 +101,18 @@ it("signs the desktop app in through the browser, and lets its renderer call the
 	expect((await SELF.fetch(`${ORIGIN}/api/account`, { headers: { authorization: `Ticket ${socketTicket}` } })).status).toBe(401);
 	// Another site gets no CORS.
 	expect((await SELF.fetch(`${ORIGIN}/api/account`, { headers: { origin: "https://evil.example", authorization: `Ticket ${ticket}` } })).headers.get("access-control-allow-origin")).toBeNull();
+});
+
+it("makes a bot from the Chief of Staff template a manager, with the management tools; other bots are not", async () => {
+	const client = api();
+	await client.updateAccount({ defaultModel: { provider: "fake", modelId: "fake-model" } });
+	const chief = await client.createBot({ name: "Chief", templateId: "chief-of-staff" });
+	const plain = await client.createBot({ name: "Plain" });
+	const manager = (id: string) =>
+		runInDurableObject(env.BOT.get(env.BOT.idFromName(id)), (instance) => (instance as unknown as BotObject).managerFlag());
+	expect(await manager(chief.id)).toBe(true);
+	expect(await manager(plain.id)).toBe(false);
+	// The client cannot make a bot a manager by editing it.
+	await client.updateBot({ botId: plain.id, ...({ manager: true } as object) });
+	expect(await manager(plain.id)).toBe(false);
 });

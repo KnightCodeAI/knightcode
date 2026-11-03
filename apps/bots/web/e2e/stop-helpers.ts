@@ -31,7 +31,7 @@ export async function script(request: APIRequestContext, forBot: Record<string, 
 }
 
 /** What the fake model was asked, per bot. */
-export type ModelRequest = { bot?: string; user: string; tool?: string; start: number; end?: number };
+export type ModelRequest = { bot?: string; user: string; tool?: string; tools: string[]; start: number; end?: number };
 export async function modelRequests(request: APIRequestContext): Promise<ModelRequest[]> {
 	return ((await (await request.get(`${modelServer()}/__requests`)).json()) as { requests: ModelRequest[] }).requests;
 }
