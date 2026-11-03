@@ -29,6 +29,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 		service: "github",
 		port: 0,
 		seed: {
+			// The test acts on GitHub as ada-test (opening the pull request) with this token.
+			tokens: { "e2e-ada-token": { login: "ada-test", scopes: ["repo", "user"] } },
 			github: {
 				users: [{ login: "ada-test", name: "Ada Test", email: "ada@example.com" }],
 				repos: [{ owner: "ada-test", name: "widgets", auto_init: true }],
@@ -103,6 +105,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 				migrations: [{ tag: "v1", new_sqlite_classes: ["BotObject", "UserObject", "ComputerObject"] }],
 				d1_databases: [{ binding: "DB", database_name: "knightcode-bots", database_id: "00000000-0000-0000-0000-000000000000", migrations_dir: at("migrations") }],
 				r2_buckets: [{ binding: "FILES", bucket_name: "knightcode-bots-files" }],
+				// Sent mail is written under the local state and logged (dev.log), where the tests read it.
+				send_email: [{ name: "EMAIL" }],
 				queues: { producers: [{ binding: "OUTBOUND", queue: "bots-outbound" }], consumers: [{ queue: "bots-outbound" }] },
 				vars: {
 					...bindings,
@@ -182,6 +186,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 	process.env.E2E_GITHUB_WEBHOOK_SECRET = githubWebhookSecret;
 	process.env.E2E_SLACK_SIGNING_SECRET = slackSigningSecret;
 	process.env.E2E_WORKER_PID_FILE = `${state}/worker.pid`;
+	process.env.E2E_WORKER_URL = WORKER_URL;
+	process.env.E2E_DEV_LOG = logFile;
 	return async () => {
 		stopping = true;
 		// The whole tree: wrangler starts workerd under it.

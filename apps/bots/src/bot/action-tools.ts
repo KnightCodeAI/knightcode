@@ -2,7 +2,7 @@
 // allow and block lists, the outside mark and the routine's grant). A refused action stops; one that needs the owner
 // becomes an approval card while the bot carries on; one allowed is delivered through its adapter.
 import { defineTool } from "@knightcode/durable";
-import { obj, str } from "@knightcode/schema";
+import { num, obj, str } from "@knightcode/schema";
 import type { ActionIntent, ActionState } from "./actions.ts";
 
 export type GateResult =
@@ -31,6 +31,22 @@ export function gateMessage(result: GateResult): { text: string; isError: boolea
 					? { text: "Sent, but whether it arrived is unknown; it will not be resent. Tell the owner.", isError: true }
 					: { text: "Queued for delivery.", isError: false };
 	}
+}
+
+/** A comment on a pull request or issue, posted as the GitHub App (spec section 12); deferred until a bot needs it. */
+export function githubCommentTool(gate: Gate) {
+	return defineTool({
+		name: "comment_on_github",
+		description: "Comment on a GitHub pull request or issue as the KnightCode Bots app. The owner's approval rules and the routine's grant apply.",
+		deferred: true,
+		parameters: obj({ repo: str(), number: num(), body: str() }),
+		execute: async (args) => {
+			const repo = args.repo.toLowerCase();
+			const result = await gate({ tool: "github.comment", title: `Comment on ${repo}#${args.number}`, target: repo, args: { ...args, repo } });
+			const message = gateMessage(result);
+			return text(message.text, message.isError);
+		},
+	});
 }
 
 export function sendEmailTool(gate: Gate) {

@@ -1,6 +1,6 @@
 // apps/bots/test/connectors.test.ts
 import type { CatalogEntry } from "@knightcode/bots-protocol";
-import { env } from "cloudflare:test";
+import { env, runInDurableObject } from "cloudflare:test";
 import { afterEach, expect, it } from "vitest";
 import { type CatalogSource, curatedEntries, mergeCatalog } from "../src/connectors/catalog.ts";
 import { COMPOSIO_NOTICE, ComposioClient } from "../src/connectors/composio.ts";
@@ -9,6 +9,7 @@ import { callMcpTool, listMcpTools } from "../src/connectors/mcp.ts";
 import { panelPolicy } from "../src/connectors/mcp-apps.ts";
 import { connectorGate, DEFAULT_PERMISSIONS, permissionFor } from "../src/connectors/permissions.ts";
 import { indexMarketplace, safePath } from "../src/connectors/plugin-indexer.ts";
+import type { UserObject } from "../src/user/user-object.ts";
 import { MCP_TEST_TOKEN } from "./emulators/mcp-server.ts";
 
 const realFetch = globalThis.fetch;
@@ -164,3 +165,21 @@ const entry = (id: string, description: string): CatalogEntry => ({
 const curated = (ids: string[]): CatalogSource => ({ kind: "curated", entries: ids.map((id) => entry(id, "from curated")) });
 const plugins = (ids: string[]): CatalogSource => ({ kind: "plugins", entries: ids.map((id) => entry(id, "from plugins")) });
 const composio = (ids: string[]): CatalogSource => ({ kind: "composio", entries: ids.map((id) => entry(id, "from composio")) });
+
+it("lists Gmail (Composio), HubSpot and Notion in one catalog; a Composio app connects on Composio's page and is revoked on disconnect", async () => {
+	const user = env.USER.get(env.USER.idFromName("acct-catalog"));
+	await runInDurableObject(user, async (instance) => {
+		const object = instance as unknown as UserObject;
+		const catalog = await object.catalog();
+		for (const id of ["gmail", "hubspot", "notion"]) expect(catalog.map((entry) => entry.id)).toContain(id);
+		const connected = await object.connectApp("gmail", { skills: false });
+		expect(connected.authorizeUrl).toMatch(/\/connect\/ca_\d+\?next=/);
+		expect(connected.entry.connection?.status).toBe("connected");
+		const held = () => env.DB.prepare("SELECT app_id FROM composio_accounts WHERE account_id = ?").bind("acct-catalog").all<{ app_id: string }>();
+		expect((await held()).results).toEqual([{ app_id: "gmail" }]);
+		// An app with its own server connects without Composio.
+		expect((await object.connectApp("notion", { skills: false })).authorizeUrl).toBeUndefined();
+		await object.disconnectApp("gmail");
+		expect((await held()).results).toEqual([]);
+	});
+});

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectProviders, providerRules } from "../../../desktop/src/main/bots/connect.ts";
 import { expect, REAL, test } from "./fixtures.ts";
-import { apiOf, postSlack, threadTexts, until, WEB } from "./stop-helpers.ts";
+import { apiOf, postGitHub, postSlack, script, sendMailToBot, sentMail, threadTexts, until, WEB } from "./stop-helpers.ts";
 
 test.skip(!REAL, "the stop conditions run against the real backend (BOTS_BACKEND=real)");
 test.describe.configure({ timeout: 120_000 });
@@ -132,4 +132,104 @@ test("A Slack message containing a routine's keyword, and a webhook call, each f
 	expect((await context.request.post(`${WEB}${hook.pathname}`, { data: { text: "deploy finished" } })).ok()).toBe(true);
 	await until(async () => (await api.listRuns({ routineId: routine.id })).runs.length >= 2, "the webhook-fired run");
 	expect(await threadTexts(api, "reviewer")).toEqual(expect.arrayContaining([expect.stringContaining("Deploy watch")]));
+});
+
+test("They create a PR-review bot, install the GitHub App, and a new PR receives a review comment from the app without the user doing anything", async ({ page, context }) => {
+	const github = process.env.E2E_GITHUB_URL!;
+	// Sign up with GitHub: the account the app's installation will be bound to.
+	await page.goto("/signin");
+	await page.getByRole("button", { name: "Continue with GitHub" }).click();
+	await page.getByRole("button", { name: /ada-test/ }).click();
+	await expect(page.getByRole("heading", { name: "Choose your handle" })).toBeVisible();
+	await page.getByRole("textbox", { name: "Handle" }).fill(`ada-${Date.now().toString(36).slice(-6)}`);
+	await page.getByRole("button", { name: "Continue" }).click();
+	await page.waitForURL((url) => !url.pathname.startsWith("/handle"));
+	const api = apiOf(context.request);
+	const account = await api.getAccount({});
+	try {
+		await api.updateAccount({ defaultModel: { provider: "fake", modelId: "fake-model" } });
+		const bot = await api.createBot({ name: "PR Critic", purpose: "Reviews pull requests" });
+		await api.createRoutine({
+			botId: bot.id,
+			name: "Review new PRs",
+			prompt: "Review the pull request and leave one comment.",
+			triggers: [{ kind: "github", repo: "ada-test/widgets", events: ["pr.opened"] }],
+			grant: { actions: ["github.comment"], targets: ["ada-test/widgets"], limits: {} },
+			active: true,
+		});
+		// The app is installed on ada-test's account: GitHub tells the Worker who installed it.
+		const user = (await (await context.request.get(`${github}/users/ada-test`)).json()) as { id: number };
+		expect((await postGitHub(context.request, "installation", { action: "created", installation: { id: 7701 }, sender: { id: user.id, login: "ada-test" } })).ok()).toBe(true);
+		await script(context.request, {
+			"PR Critic": [
+				{ tool: "tool_search", args: { query: "comment_on_github" } },
+				{ tool: "comment_on_github", args: { repo: "ada-test/widgets", number: 1, body: "Looks good. One note: name the helper after what it returns." } },
+				"Reviewed.",
+			],
+		});
+		// Someone opens a PR on GitHub; nothing else is done by the user.
+		const as = { authorization: "token e2e-ada-token" };
+		const main = (await (await context.request.get(`${github}/repos/ada-test/widgets/git/ref/heads/main`, { headers: as })).json()) as { object: { sha: string } };
+		const ref = await context.request.post(`${github}/repos/ada-test/widgets/git/refs`, { headers: as, data: { ref: "refs/heads/helper", sha: main.object.sha } });
+		expect(ref.ok(), await ref.text()).toBe(true);
+		const pull = await context.request.post(`${github}/repos/ada-test/widgets/pulls`, { headers: as, data: { title: "Add the widget helper", head: "helper", base: "main", body: "Adds a helper." } });
+		expect(pull.ok(), await pull.text()).toBe(true);
+		const { number } = (await pull.json()) as { number: number };
+		const comment = await until(async () => {
+			const comments = (await (await context.request.get(`${github}/repos/ada-test/widgets/issues/${number}/comments`)).json()) as { body: string; user: { login: string; type: string } }[];
+			return comments.find((candidate) => candidate.body.includes("name the helper"));
+		}, "the app's review comment", 60_000);
+		expect(comment.user.type).toBe("Bot");
+		expect(comment.user.login).toBe("knightcode-bots[bot]");
+	} finally {
+		await context.request.post("/__dev/delete", { data: { accountId: account.id } });
+	}
+});
+
+test("A bot replies to an email sent to its address, in the same mail thread", async ({ context }) => {
+	const api = apiOf(context.request);
+	const bot = await api.createBot({ name: "Mailroom", purpose: "Answers mail" });
+	expect(bot.email).toMatch(/@bots\.knightcode\.dev$/);
+	await script(context.request, { Mailroom: ["Thursday at 3 works. See you then."] });
+	const sent = await sendMailToBot(context.request, {
+		from: "dana@example.com",
+		to: bot.email!,
+		subject: "Meeting this week",
+		messageId: "<meeting-1@example.com>",
+		text: "Can we meet Thursday at 3?",
+	});
+	expect(sent.ok(), await sent.text()).toBe(true);
+	const reply = await until(async () => sentMail().find((mail) => mail.to.includes("dana@example.com") && mail.text.includes("Thursday at 3 works")), "the bot's reply");
+	// A reply in the same thread: from the bot's own address, "Re:" the mail it answers.
+	expect(reply.from).toContain(bot.email!);
+	expect(reply.subject).toBe("Re: Meeting this week");
+	// The mail and the answer are in the bot's thread.
+	expect(await threadTexts(api, bot.id)).toEqual(expect.arrayContaining([expect.stringContaining("Can we meet Thursday at 3?"), "Thursday at 3 works. See you then."]));
+});
+
+test("A user connects Gmail, HubSpot and Notion from one catalog in which no entry names a marketplace or where it came from", async ({ context, page }) => {
+	const api = apiOf(context.request);
+	// One catalog, three sources behind it (Composio for Gmail, the makers' own servers for HubSpot and Notion).
+	const { entries } = await api.listCatalog({});
+	for (const name of ["Gmail", "HubSpot", "Notion"]) expect(entries.map((entry) => entry.name)).toContain(name);
+	// The seeded account may hold some of them already; start from none.
+	for (const entry of entries) if (["Gmail", "HubSpot", "Notion"].includes(entry.name) && entry.connection) await api.disconnectApp({ appId: entry.id });
+	for (const name of ["Gmail", "HubSpot", "Notion"]) {
+		await page.goto("/connectors");
+		await expect(page.getByRole("main")).not.toContainText(/Claude|xAI|Anthropic|Composio|marketplace|imported from/i);
+		await page.getByRole("link", { name }).click();
+		await page.getByRole("button", { name: "Connect", exact: true }).click();
+		const popup = name === "Gmail" ? page.waitForEvent("popup") : undefined;
+		await page.getByRole("button", { name: `Connect ${name}` }).click();
+		// Gmail signs in on the hosted page of the service holding its tokens, which sends the user back.
+		if (popup) {
+			const signIn = await popup;
+			await signIn.getByRole("link", { name: "Allow" }).click();
+			await signIn.waitForURL(/\/connectors\/gmail/);
+			await signIn.close();
+		}
+		await expect(page.getByRole("button", { name: "Disconnect" })).toBeVisible();
+	}
+	const connected = (await api.listCatalog({})).entries.filter((entry) => entry.connection?.status === "connected").map((entry) => entry.name);
+	expect(connected).toEqual(expect.arrayContaining(["Gmail", "HubSpot", "Notion"]));
 });

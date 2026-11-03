@@ -1,6 +1,7 @@
 // Helpers for the stop-condition suite: the API as the signed-in test account, the fake model's script, waiting, and
 // signing webhooks the way each service does.
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { type ApiClient, createApiClient } from "@knightcode/bots-protocol";
 import type { APIRequestContext, BrowserContext } from "@playwright/test";
 import type { Reply } from "../../test/fake-model-server.ts";
@@ -74,4 +75,25 @@ export function postSlack(request: APIRequestContext, payload: unknown) {
 /** The account id of the test's session. */
 export async function accountId(context: BrowserContext): Promise<string> {
 	return ((await (await context.request.get(`${WEB}/api/account`)).json()) as { id: string }).id;
+}
+
+/** Mail to a bot, through the Worker's email handler (wrangler's local trigger). */
+export function sendMailToBot(request: APIRequestContext, mail: { from: string; to: string; subject: string; messageId: string; text: string }) {
+	const raw = [`From: ${mail.from}`, `To: ${mail.to}`, `Subject: ${mail.subject}`, `Message-ID: ${mail.messageId}`, "Content-Type: text/plain; charset=utf-8", "", mail.text, ""].join("\r\n");
+	const url = `${process.env.E2E_WORKER_URL}/cdn-cgi/local/email?from=${encodeURIComponent(mail.from)}&to=${encodeURIComponent(mail.to)}`;
+	return request.post(url, { headers: { "content-type": "message/rfc822" }, data: raw });
+}
+
+export type SentMail = { from: string; to: string; subject: string; text: string };
+
+/** Mail the Worker has sent (the local send_email binding logs each one; its text is kept in a file). */
+export function sentMail(): SentMail[] {
+	const log = readFileSync(process.env.E2E_DEV_LOG!, "utf8").replace(/\x1b\[[0-9;]*m/g, "");
+	const mails: SentMail[] = [];
+	for (const block of log.split("send_email binding called with MessageBuilder:").slice(1)) {
+		const field = (name: string) => block.match(new RegExp(`^${name}: (.*)$`, "m"))?.[1]?.trim() ?? "";
+		const textFile = field("Text");
+		mails.push({ from: field("From"), to: field("To"), subject: field("Subject"), text: textFile ? readFileSync(textFile, "utf8") : "" });
+	}
+	return mails;
 }

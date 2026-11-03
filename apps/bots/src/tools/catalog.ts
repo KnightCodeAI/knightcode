@@ -8,7 +8,7 @@ import type { FileRef } from "@knightcode/bots-protocol";
 import { defineExtension, defineTool, type Extension, GenerationTask, hook, section, type ToolRegistration } from "@knightcode/durable";
 import { createToolSearchExtension } from "@knightcode/durable/tool-search";
 import { createBashTool, createEditTool, createReadTool, createWriteTool } from "@knightcode/durable/tools";
-import { type Gate, sendEmailTool } from "../bot/action-tools.ts";
+import { type Gate, githubCommentTool, sendEmailTool } from "../bot/action-tools.ts";
 import { type ComputerAccess, computerTools } from "../computer/browser-tools.ts";
 import { lit, obj, opt, str, union } from "@knightcode/schema";
 import { shortenOldMessages } from "../memory/context-rules.ts";
@@ -97,7 +97,7 @@ export function botTools(deps: BotToolDeps): ToolRegistration[] {
 		...historyTools(deps.memory.history),
 		knowledgeTool(deps.knowledge),
 		...webTools(() => deps.provenance?.enter("web") ?? Promise.resolve()),
-		...(deps.gate ? [sendEmailTool(deps.gate)] : []),
+		...(deps.gate ? [sendEmailTool(deps.gate), githubCommentTool(deps.gate)] : []),
 		...(deps.extraTools ?? []),
 		helpTool(deps.help),
 		...(deps.image && deps.image.available.length > 0 ? [imageTool(deps.image)] : []),

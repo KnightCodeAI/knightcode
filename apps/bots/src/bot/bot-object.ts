@@ -2,6 +2,7 @@
 // the durable harness over its own SQLite, keeps its alarm armed so work survives eviction and deploys, and serves the
 // bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner. Its own tables share
 // the database with the harness, so every host write goes through the harness's queue (host-sql.ts).
+import { commentAsApp } from "../routines/github-app.ts";
 import type { Bot, ConversationView as ConversationViewProtocol, Entry, Note, Recipe } from "@knightcode/bots-protocol";
 import { addCard, addHostEntry, createHostEntriesTable, findCard, hostEntries, hostEntry, patchCard } from "./host-entries.ts";
 import type { ViewExtras } from "./socket.ts";
@@ -1920,6 +1921,35 @@ export class BotObject extends DurableObject<Env> {
 	/** Adapters for actions only this object can carry out (its own mail, and approved fleet changes). */
 	#builtinAdapter(tool: string): WriteAdapter | undefined {
 		if (tool === "email.send") return emailWriteAdapter(this.env, { accountId: this.#owner!, botId: this.#id });
+		if (tool === "github.comment")
+			return {
+				id: tool,
+				// A comment either lands or it does not; one with an unknown outcome is never posted twice.
+				kind: "neither",
+				send: async (action) => {
+					const args = action.intent.args as { repo: string; number: number; body: string };
+					if (!this.env.GITHUB_APP_ID || !this.env.GITHUB_APP_PRIVATE_KEY) return { ok: false, error: "The GitHub App is not set up." };
+					// The installation this account holds (the one that sent the event).
+					const installation = await this.env.DB.prepare("SELECT installation_id FROM github_installations WHERE account_id = ? LIMIT 1")
+						.bind(this.#owner)
+						.first<{ installation_id: string }>();
+					if (!installation) return { ok: false, error: "The owner has not installed the GitHub App." };
+					try {
+						await commentAsApp({
+							appId: this.env.GITHUB_APP_ID,
+							privateKey: this.env.GITHUB_APP_PRIVATE_KEY,
+							installationId: installation.installation_id,
+							repo: args.repo,
+							number: args.number,
+							body: args.body,
+							...(this.env.EMULATE_GITHUB_URL ? { apiUrl: this.env.EMULATE_GITHUB_URL } : {}),
+						});
+						return { ok: true, confirmed: true };
+					} catch (error) {
+						return { ok: false, error: error instanceof Error ? error.message : String(error) };
+					}
+				},
+			};
 		if (tool === "vault.call")
 			return {
 				id: tool,

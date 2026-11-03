@@ -40,6 +40,16 @@
 		"auth": "oauth"
 	},
 	{
+		"id": "hubspot",
+		"name": "HubSpot",
+		"maker": "HubSpot",
+		"category": "crm-sales",
+		"icon": "https://www.hubspot.com/favicon.ico",
+		"description": "Contacts, companies, deals and tickets.",
+		"url": "https://mcp.hubspot.com/",
+		"auth": "oauth"
+	},
+	{
 		"id": "atlassian",
 		"name": "Jira and Confluence",
 		"maker": "Atlassian",

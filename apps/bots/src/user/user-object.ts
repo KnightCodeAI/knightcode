@@ -39,7 +39,9 @@ import type {
 	Task,
 	UsageRow,
 } from "@knightcode/bots-protocol";
-import { curatedEntries, mergeCatalog } from "../connectors/catalog.ts";
+import { appOrigin } from "../auth/oauth.ts";
+import { type CatalogSource, curatedEntries, mergeCatalog, sourceOf } from "../connectors/catalog.ts";
+import { ComposioClient } from "../connectors/composio.ts";
 import { issueLinkCode } from "../channels/linking.ts";
 import { paymentsAvailable, StripeLinkProvider } from "../payments/link.ts";
 import { financeAvailable } from "../finance/plaid.ts";
@@ -670,16 +672,33 @@ export class UserObject extends DurableObject<Env> {
 	}
 
 	/** The catalog (curated servers, indexed plugins, the account's own servers) with this account's connections. */
-	async catalog(filter: { q?: string; category?: CatalogEntry["category"] } = {}): Promise<CatalogEntry[]> {
+	#composio(): ComposioClient | undefined {
+		return this.env.COMPOSIO_API_KEY ? new ComposioClient({ apiKey: this.env.COMPOSIO_API_KEY, ...(this.env.COMPOSIO_BASE_URL ? { baseUrl: this.env.COMPOSIO_BASE_URL } : {}) }) : undefined;
+	}
+	#composioCache?: { at: number; entries: CatalogEntry[] };
+	/** Composio's toolkits, kept for ten minutes; the catalog works without them when Composio is down. */
+	async #composioEntries(): Promise<CatalogEntry[]> {
+		const client = this.#composio();
+		if (!client) return [];
+		if (this.#composioCache && Date.now() - this.#composioCache.at < 10 * 60_000) return this.#composioCache.entries;
+		const entries = await client.catalog().catch((error: unknown) => {
+			console.error("composio catalog", error);
+			return this.#composioCache?.entries ?? [];
+		});
+		this.#composioCache = { at: Date.now(), entries };
+		return entries;
+	}
+	async #sources(): Promise<CatalogSource[]> {
 		const plugins = await this.env.DB.prepare("SELECT entry FROM plugin_catalog").all<{ entry: string }>().catch(() => ({ results: [] as { entry: string }[] }));
-		const custom = readDoc(this.#sql, "custom-servers", () => [] as CatalogEntry[]);
-		const merged = [
-			...mergeCatalog([
-				{ kind: "curated", entries: curatedEntries() },
-				{ kind: "plugins", entries: plugins.results.map((row) => JSON.parse(row.entry) as CatalogEntry) },
-			]),
-			...custom,
+		return [
+			{ kind: "curated", entries: curatedEntries() },
+			{ kind: "plugins", entries: plugins.results.map((row) => JSON.parse(row.entry) as CatalogEntry) },
+			{ kind: "composio", entries: await this.#composioEntries() },
 		];
+	}
+	async catalog(filter: { q?: string; category?: CatalogEntry["category"] } = {}): Promise<CatalogEntry[]> {
+		const custom = readDoc(this.#sql, "custom-servers", () => [] as CatalogEntry[]);
+		const merged = [...mergeCatalog(await this.#sources()), ...custom];
 		const connections = this.#connections();
 		const needle = filter.q?.toLowerCase();
 		return merged
@@ -700,6 +719,17 @@ export class UserObject extends DurableObject<Env> {
 		const entry = (await this.catalog()).find((candidate) => candidate.id === appId);
 		if (!entry) throw new Error(`no app ${appId}`);
 		if (options.apiKey) await this.credentials().modify(`app:${appId}`, async () => ({ type: "api_key", key: options.apiKey! }) as Credential);
+		// A Composio-backed app: the user signs in on Composio's page, which holds the app's tokens (spec section 9).
+		let authorizeUrl: string | undefined;
+		const composio = sourceOf(await this.#sources(), appId) === "composio" ? this.#composio() : undefined;
+		if (composio) {
+			// ponytail: the toolkit slug stands in for the auth config id; confirm against Composio's API before launch.
+			const started = await composio.connect(appId, this.#accountId, `${appOrigin(this.env)}/connectors/${encodeURIComponent(appId)}`);
+			await this.env.DB.prepare("INSERT OR REPLACE INTO composio_accounts (connected_account_id, account_id, app_id) VALUES (?, ?, ?)")
+				.bind(started.connectionId, this.#accountId, appId)
+				.run();
+			authorizeUrl = started.redirectUrl;
+		}
 		updateDoc(this.#sql, "connections", () => ({}) as ReturnType<UserObject["connectionsDoc"]>, (connections) => {
 			connections[appId] = { ...connections[appId], status: "connected", connectedAt: Date.now() };
 		});
@@ -708,12 +738,17 @@ export class UserObject extends DurableObject<Env> {
 			for (const skill of entry.skills)
 				if (!this.skillList({ scope: "app" }).some((existing) => existing.appId === appId && existing.name === skill.name))
 					this.skillAdd({ name: skill.name, description: skill.description, content: skill.description, scope: "app", appId });
-		return { entry: (await this.catalog()).find((candidate) => candidate.id === appId)! };
+		return { entry: (await this.catalog()).find((candidate) => candidate.id === appId)!, ...(authorizeUrl ? { authorizeUrl } : {}) };
 	}
 	connectionsDoc() {
 		return this.#connections();
 	}
 	async disconnectApp(appId: string): Promise<void> {
+		// A Composio connection is revoked there too, so its tokens do not outlive the connection.
+		const held = await this.env.DB.prepare("SELECT connected_account_id AS id FROM composio_accounts WHERE account_id = ? AND app_id = ?").bind(this.#accountId, appId).all<{ id: string }>();
+		const composio = this.#composio();
+		for (const { id } of held.results)
+			if (composio && (await composio.deleteConnection(id))) await this.env.DB.prepare("DELETE FROM composio_accounts WHERE connected_account_id = ?").bind(id).run();
 		updateDoc(this.#sql, "connections", () => ({}) as ReturnType<UserObject["connectionsDoc"]>, (connections) => {
 			delete connections[appId];
 		});

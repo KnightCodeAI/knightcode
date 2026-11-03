@@ -19,10 +19,18 @@ const read = (request: IncomingMessage) =>
 export async function startComposio(): Promise<{ url: string; close(): Promise<void> }> {
 	let connections = 0;
 	const deleted = new Set<string>();
+	const origin = () => `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 	const server = createServer(async (request, response) => {
 		const json = (status: number, body: unknown) => response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
-		if (request.headers["x-api-key"] !== COMPOSIO_TEST_KEY) return json(401, { error: "bad key" });
 		const url = new URL(request.url ?? "/", "http://composio");
+		// Composio's hosted sign-in page: Allow goes back to the app's callback.
+		const page = /^\/connect\/(ca_\d+)$/.exec(url.pathname);
+		if (request.method === "GET" && page) {
+			const next = url.searchParams.get("next") ?? "/";
+			const safe = next.replace(/[&"<>]/g, (c) => `&#${c.charCodeAt(0)};`);
+			return response.writeHead(200, { "content-type": "text/html" }).end(`<!doctype html><title>Connect</title><a href="${safe}">Allow</a>`);
+		}
+		if (request.headers["x-api-key"] !== COMPOSIO_TEST_KEY) return json(401, { error: "bad key" });
 		if (request.method === "GET" && url.pathname === "/api/v3/toolkits") {
 			// Two pages, to exercise the cursor.
 			const second = url.searchParams.get("cursor") === "page-2";
@@ -31,7 +39,7 @@ export async function startComposio(): Promise<{ url: string; close(): Promise<v
 		if (request.method === "POST" && url.pathname === "/api/v3/connected_accounts") {
 			const body = JSON.parse(await read(request)) as { connection: { callback_url: string } };
 			const id = `ca_${++connections}`;
-			return json(201, { id, redirect_url: `https://connect.composio.example/${id}?next=${encodeURIComponent(body.connection.callback_url)}` });
+			return json(201, { id, redirect_url: `${origin()}/connect/${id}?next=${encodeURIComponent(body.connection.callback_url)}` });
 		}
 		const account = /^\/api\/v3\/connected_accounts\/([^/]+)$/.exec(url.pathname);
 		if (account) {
