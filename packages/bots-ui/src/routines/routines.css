@@ -15,7 +15,8 @@
 	border: 0;
 	background: transparent;
 	color: inherit;
-	font: inherit;
+	font-family: inherit;
+	font-weight: inherit;
 	text-align: start;
 	cursor: pointer;
 }
@@ -31,6 +32,13 @@
 	gap: var(--kb-space-12);
 	font-size: var(--kb-font-size-sm);
 	line-height: var(--kb-line-height-sm);
+}
+.kb-routine__back {
+	min-height: calc(var(--kb-line-height-sm) + 2 * var(--kb-space-2));
+}
+.kb-routine__back > span {
+	/* Center the chevron against the letters, not the font's extra ascent and descender space. */
+	text-box: trim-both cap alphabetic;
 }
 .kb-routine__head {
 	display: flex;

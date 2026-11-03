@@ -203,6 +203,9 @@
 	letter-spacing: var(--kb-tracking-base);
 }
 .kb-browser__more {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--kb-space-4);
 	padding: var(--kb-space-2) var(--kb-space-8);
 	border: 0;
 	border-radius: var(--kb-radius-full);

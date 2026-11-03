@@ -62,8 +62,9 @@ function Editor({ bot, routine }: { bot: Bot; routine?: Routine }) {
 	};
 	return (
 		<div className="kb-routine">
-			<button type="button" className="kb-browser__back" onClick={back}>
-				<ChevronLeft size={14} /> Details
+			<button type="button" className="kb-browser__back kb-routine__back" onClick={back}>
+				<ChevronLeft size={14} />
+				<span>Details</span>
 			</button>
 			<Input
 				aria-label="Routine name"
