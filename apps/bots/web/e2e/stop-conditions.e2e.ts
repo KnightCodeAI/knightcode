@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectProviders, providerRules } from "../../../desktop/src/main/bots/connect.ts";
 import { expect, REAL, test } from "./fixtures.ts";
-import { apiOf, installSlack, killWorker, modelRequests, postGitHub, postSlack, postTelegram, script, sendMailToBot, sentMail, telegramSent, threadTexts, until, WEB } from "./stop-helpers.ts";
+import { apiOf, fakeServiceOrigin, installSlack, killWorker, modelRequests, modelSaw, postGitHub, postSlack, postTelegram, script, sendMailToBot, sentMail, telegramSent, threadTexts, until, WEB } from "./stop-helpers.ts";
 
 test.skip(!REAL, "the stop conditions run against the real backend (BOTS_BACKEND=real)");
 test.describe.configure({ timeout: 120_000 });
@@ -505,4 +505,44 @@ test("A bot uses the computer's browser, the computer sleeps after idling, and o
 	expect(seen?.tool).toContain("Tabs: https://news.example/login, https://docs.example/start");
 	expect(seen?.tool).toContain("Signed in to: https://news.example");
 	expect((await api.getComputer({})).status).toBe("awake");
+});
+
+test("A bot signs in to a site with a saved login and calls an API with a vault key, and neither value appears in the transcript or logs", async ({ context, page }) => {
+	test.setTimeout(180_000);
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	const password = `pw-${tag}-correct-horse`;
+	const key = `sk-${tag}-vault-key-0042`;
+	const bot = await api.createBot({ name: `Keeper${tag}`, purpose: "Handles the owner's accounts" });
+	await api.updateBot({ botId: bot.id, computerAccess: true, approvals: "never" });
+	const login = await api.putVault({ kind: "login", name: "News", origin: "https://news.example", value: JSON.stringify({ username: "ada", password }) });
+	await api.putVault({ kind: "api", name: "Echo API", origin: fakeServiceOrigin(), injection: "bearer", value: key });
+	await script(context.request, {
+		[bot.name]: [
+			{ tool: "tool_search", args: { query: "call_with_secret browser_act" } },
+			// The service reflects the request, Authorization header included.
+			{ tool: "call_with_secret", args: { name: "Echo API", url: `${fakeServiceOrigin()}/__echo` } },
+			{ tool: "browser_navigate", args: { url: "https://news.example/login" } },
+			{ tool: "browser_act", args: { ref: "password", do: "type", vaultItem: login.id, field: "password" } },
+			"I asked to keep using the computer.",
+			{ tool: "browser_act", args: { ref: "password", do: "type", vaultItem: login.id, field: "password" } },
+			"Signed in and called the API.",
+		],
+	});
+	await page.goto(`/bots/${bot.id}`);
+	await page.getByRole("textbox", { name: "Message" }).fill("Call the echo API, then sign in to the news site");
+	await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	await expect(page.getByText("I asked to keep using the computer.")).toBeVisible({ timeout: 60_000 });
+	await page.getByRole("button", { name: "Allow once" }).first().click();
+	await expect(page.getByText("Signed in and called the API.")).toBeVisible({ timeout: 60_000 });
+	const results = (await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool !== undefined).map((request) => request.tool!);
+	// The call went out with the key, and what came back had it removed.
+	expect(results.find((result) => result.startsWith("HTTP 200"))).toContain("[secret removed]");
+	expect(results.some((result) => result.includes('Filled the password from the vault item "News"'))).toBe(true);
+	for (const secret of [password, key]) {
+		expect(await modelSaw(context.request, secret)).toBe(0);
+		expect((await threadTexts(api, bot.id)).join("\n")).not.toContain(secret);
+		expect(await page.content()).not.toContain(secret);
+		expect(readFileSync(process.env.E2E_DEV_LOG!, "utf8")).not.toContain(secret);
+	}
 });

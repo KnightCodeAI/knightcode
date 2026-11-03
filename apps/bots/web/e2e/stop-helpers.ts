@@ -134,3 +134,11 @@ export function killWorker(): void {
 	if (process.platform === "win32") spawnSync("taskkill", ["/T", "/F", "/PID", pid]);
 	else process.kill(-Number(pid), "SIGKILL");
 }
+
+/** How many requests to the model carried `text` anywhere in their body. */
+export async function modelSaw(request: APIRequestContext, text: string): Promise<number> {
+	return ((await (await request.get(`${modelServer()}/__seen?text=${encodeURIComponent(text)}`)).json()) as { count: number }).count;
+}
+
+/** The fake model server's origin (it also plays a small API that echoes what it was sent, at /__echo). */
+export const fakeServiceOrigin = () => new URL(process.env.BOTS_FAKE_MODEL_URL!).origin;

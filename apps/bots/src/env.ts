@@ -57,6 +57,8 @@ export interface Env {
 	BOTS_DEV_MODEL_IDS?: string;
 	/** Development only (with BOTS_DEV_SEED): the computer's idle time before it sleeps, for browser tests. */
 	BOTS_DEV_COMPUTER_IDLE_MS?: string;
+	/** Development only (with BOTS_DEV_SEED): local origins vault calls may reach over HTTP, comma-separated. */
+	BOTS_DEV_VAULT_ORIGINS?: string;
 	/** Web Push (VAPID): the public key (raw P-256, base64url), its private scalar (a secret, base64url) and contact. */
 	VAPID_PUBLIC_KEY?: string;
 	VAPID_PRIVATE_KEY?: string;

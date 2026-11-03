@@ -38,7 +38,13 @@ export interface VaultAccess {
 	forget(id: string): Promise<void>;
 	/** Shows the owner a protected card to enter a credential. */
 	request(input: { name: string; origin: string; kind: VaultItem["kind"] }): Promise<void>;
+	/** Development only: local origins reachable over plain HTTP (the browser tests' fake services). */
+	localOrigins?: string[];
 }
+
+/** Development servers only (BOTS_DEV_SEED): the local origins credentialed calls may reach. */
+export const devVaultOrigins = (env: { BOTS_DEV_SEED?: string; BOTS_DEV_VAULT_ORIGINS?: string }) =>
+	env.BOTS_DEV_SEED === "1" ? (env.BOTS_DEV_VAULT_ORIGINS ?? "").split(",").filter(Boolean) : [];
 
 /** The request headers carrying `value` for `item`, and every string that must be scrubbed. */
 export function injection(item: VaultItem, value: string): { headers: Record<string, string>; secrets: string[] } {
@@ -53,13 +59,18 @@ export function injection(item: VaultItem, value: string): { headers: Record<str
 const text = (value: string, isError = false) => ({ output: [{ type: "text" as const, text: value }], ...(isError ? { isError } : {}) });
 
 /** Sends one credentialed request to the item's own origin and returns its scrubbed text. */
-export async function callWithSecret(item: VaultItem, value: string, request: { method: string; url: string; body?: string }): Promise<{ ok: boolean; text: string }> {
+export async function callWithSecret(
+	item: VaultItem,
+	value: string,
+	request: { method: string; url: string; body?: string },
+	localOrigins: string[] = [],
+): Promise<{ ok: boolean; text: string }> {
 	const { headers, secrets } = injection(item, value);
 	try {
 		const response = await guardedFetch(
 			request.url,
 			{ method: request.method, headers: { ...headers, ...(request.body ? { "content-type": "application/json" } : {}) }, ...(request.body ? { body: request.body } : {}) },
-			{ allowPrivate: [], sameOrigin: true },
+			{ allowPrivate: localOrigins.includes(new URL(request.url).origin) ? [new URL(request.url).host] : [], sameOrigin: true },
 		);
 		const body = (await response.text()).slice(0, RESPONSE_MAX);
 		const headerText = [...response.headers].map(([name, headerValue]) => `${name}: ${headerValue}`).join("\n");
@@ -91,7 +102,8 @@ export function vaultTools(vault: VaultAccess) {
 					return text("That is not a URL.", true);
 				}
 				// Only to the credential's own origin, over HTTPS.
-				if (url.protocol !== "https:" || url.origin !== new URL(item.origin).origin)
+				const local = vault.localOrigins?.includes(url.origin) === true;
+				if ((url.protocol !== "https:" && !local) || url.origin !== new URL(item.origin).origin)
 					return text(`${args.name} is for ${item.origin}; it is never sent anywhere else.`, true);
 				const method = args.method ?? "GET";
 				// A write changes something at the service: it is an action, approved like any other.
@@ -100,7 +112,7 @@ export function vaultTools(vault: VaultAccess) {
 					const result = await vault.write({ name: item.name, method, url: url.href, ...(args.body ? { body: args.body } : {}) });
 					return text(result.text, !result.ok);
 				}
-				const result = await callWithSecret(item, await vault.reveal(item.id), { method, url: url.href });
+				const result = await callWithSecret(item, await vault.reveal(item.id), { method, url: url.href }, vault.localOrigins);
 				return text(result.text, !result.ok);
 			},
 		}),

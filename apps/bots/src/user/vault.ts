@@ -39,8 +39,10 @@ const toItem = (row: Row): VaultItem => ({
 	createdAt: row.created_at,
 });
 
-export async function vaultPut(sql: SqlStorage, key: CryptoKey, input: VaultInput): Promise<VaultItem> {
-	if (input.kind !== "env" && !/^https:\/\//.test(input.origin ?? "")) throw new Error("a credential needs an https origin");
+export async function vaultPut(sql: SqlStorage, key: CryptoKey, input: VaultInput, localOrigins: string[] = []): Promise<VaultItem> {
+	// HTTPS only; a development server's own local services (localOrigins) are the one exception.
+	if (input.kind !== "env" && !/^https:\/\//.test(input.origin ?? "") && !localOrigins.includes(input.origin ?? ""))
+		throw new Error("a credential needs an https origin");
 	const id = `vault_${crypto.randomUUID()}`;
 	const sealed = await seal(key, encoder.encode(input.value), aad(id));
 	const createdAt = Date.now();

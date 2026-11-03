@@ -9,6 +9,8 @@
 // A Reply is text, or { tool, args } for a tool call; an argument "{{last.<field>}}" takes that field of the previous tool
 // result (JSON). With nothing scripted the server answers "You said: <message>" (its first 300 characters: a
 // compaction request carries a whole transcript).
+// GET /__echo answers with the request's own headers (a service that reflects what it was sent).
+// GET /__seen?text=<t> counts the requests whose body held <t>.
 // GET /__requests lists what each request asked (bot, last user text, the last few messages, tool result, tools offered)
 // and when it ran, for tests to check.
 import { createServer, type IncomingMessage, type Server } from "node:http";
@@ -49,6 +51,8 @@ export async function startFakeModelServer(port = 0): Promise<{ url: string; ser
 	const forBot = new Map<string, Reply[]>();
 	const byBot = new Map<string, string>();
 	const passing = new Set<string>();
+	/** Every chat request's body, as sent. */
+	const bodies: string[] = [];
 	const requests: { bot?: string; user: string; recent: string; tool?: string; tools: string[]; start: number; end?: number }[] = [];
 	const server = createServer(async (request, response) => {
 		const url = new URL(request.url ?? "/", "http://fake");
@@ -67,10 +71,14 @@ export async function startFakeModelServer(port = 0): Promise<{ url: string; ser
 			return json(200, { queued: scripted.length });
 		}
 		if (request.method === "GET" && url.pathname === "/__requests") return json(200, { requests });
+		if (request.method === "GET" && url.pathname === "/__echo") return json(200, { headers: request.headers });
+		if (request.method === "GET" && url.pathname === "/__seen") return json(200, { count: bodies.filter((text) => text.includes(url.searchParams.get("text") ?? "\u0000")).length });
 		if (request.method === "GET" && url.pathname === "/v1/models")
 			return json(200, { object: "list", data: FAKE_MODELS.map((id) => ({ id, object: "model", owned_by: "fake" })) });
 		if (request.method !== "POST" || url.pathname !== "/v1/chat/completions") return json(404, { error: { message: "not found" } });
-		const body = JSON.parse(await read(request)) as { model: string; messages: Message[]; stream?: boolean; tools?: { function?: { name?: string } }[] };
+		const raw = await read(request);
+		bodies.push(raw);
+		const body = JSON.parse(raw) as { model: string; messages: Message[]; stream?: boolean; tools?: { function?: { name?: string } }[] };
 		const lastUser = [...body.messages].reverse().find((message) => message.role === "user");
 		const last = body.messages.at(-1);
 		const system = body.messages.filter((message) => message.role === "system" || message.role === "developer").map(textOf).join("\n");

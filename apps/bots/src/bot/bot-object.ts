@@ -70,7 +70,7 @@ import { createSuggestionTables, maySuggest, recordSuggestion } from "../inbox/s
 import { financeAvailable, PlaidClient } from "../finance/plaid.ts";
 import { CardsUnavailable, type PaymentCredential, paymentsAvailable, type PaymentsProvider, type Purchase, StripeLinkProvider } from "../payments/link.ts";
 import { verifySpendAssertion } from "../payments/spend-approvals.ts";
-import { callWithSecret, vaultTools } from "../vault/tools.ts";
+import { callWithSecret, devVaultOrigins, vaultTools } from "../vault/tools.ts";
 import { ACCOUNT_LIMITS } from "../billing/limits.ts";
 import { usageByModel } from "../billing/usage.ts";
 import { exportRecipe } from "../recipes/recipes.ts";
@@ -658,6 +658,7 @@ export class BotObject extends DurableObject<Env> {
 				...(this.#settings.read().manager ? fleetTools(this.#fleet()) : []),
 				...this.#libraryTools(),
 				...vaultTools({
+					localOrigins: devVaultOrigins(this.env),
 					list: () => this.#user().vaultList(),
 					reveal: (id) => this.#user().vaultReveal(id, "inject"),
 					forget: (id) => this.#user().vaultDelete(id),
@@ -2021,7 +2022,7 @@ export class BotObject extends DurableObject<Env> {
 					const request = action.intent.args as { name: string; method: string; url: string; body?: string };
 					const item = (await this.#user().vaultList()).find((candidate) => candidate.name === request.name && candidate.kind === "api");
 					if (!item?.origin || new URL(request.url).origin !== new URL(item.origin).origin) return { ok: false, error: "The credential is gone or is for another origin." };
-					const result = await callWithSecret(item, await this.#user().vaultReveal(item.id, "inject"), request);
+					const result = await callWithSecret(item, await this.#user().vaultReveal(item.id, "inject"), request, devVaultOrigins(this.env));
 					this.#vaultResults.set(action.id, result);
 					return result.ok ? { ok: true, confirmed: true } : { ok: false, error: result.text.slice(0, 500) };
 				},

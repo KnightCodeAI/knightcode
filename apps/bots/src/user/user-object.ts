@@ -1,6 +1,7 @@
 // The user object (spec sections 4, 8, 16 and 21): one per account, named by the account id. It holds the vault, the
 // model provider credentials, the balance and the file index, all sealed with the account's own data key (itself
 // wrapped by the key-encryption key), so destroying that key makes the account's data unreadable at once.
+import { devVaultOrigins } from "../vault/tools.ts";
 import type { Credential, CredentialInfo, CredentialStore } from "@knightcode/ai";
 import { builtinModels } from "@knightcode/ai/providers/all";
 import type { FileKind, FileRef, Skill, SkillScope, VaultItem } from "@knightcode/bots-protocol";
@@ -192,7 +193,7 @@ export class UserObject extends DurableObject<Env> {
 	// ─── Vault ────────────────────────────────────────────────────────────────
 
 	async vaultPut(item: VaultInput): Promise<VaultItem> {
-		return vaultPut(this.#sql, await this.#key(), item);
+		return vaultPut(this.#sql, await this.#key(), item, devVaultOrigins(this.env));
 	}
 
 	vaultList(): VaultItem[] {
