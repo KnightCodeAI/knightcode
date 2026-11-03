@@ -5,6 +5,9 @@ import { afterEach, expect, it } from "vitest";
 import { setModelsFactory } from "../src/bot/models.ts";
 import { PageRefused, PageStore, validateBlocks } from "../src/pages/pages.ts";
 import { refreshPage, refreshWidget } from "../src/pages/widgets.ts";
+import type { UserObject } from "../src/user/user-object.ts";
+import { fakeModels } from "./fake-model.ts";
+import { signedInPrincipal } from "./helpers.ts";
 
 afterEach(() => setModelsFactory(undefined));
 
@@ -68,3 +71,29 @@ it("refreshes widgets by reading data, with no model call", async () => {
 	expect(await refreshWidget(widget, { ...readers, routineOutput: async () => Promise.reject(new Error("down")) })).toBe(widget);
 	expect(modelCalls).toBe(0);
 });
+
+it("a chart widget refreshes when its routine runs, and a button's connector action runs once approved", async () => {
+	const spec = { kind: "bar", title: "Signups", labels: ["Mon", "Tue"], series: [{ name: "Signups", values: [3, 5] }] };
+	const models = fakeModels([{ text: JSON.stringify(spec) }, { text: "[]" }]);
+	setModelsFactory(() => models);
+	const owner = await signedInPrincipal();
+	const bot = env.BOT.get(env.BOT.idFromName("pages-bot"));
+	const user = env.USER.get(env.USER.idFromName(owner.accountId));
+	await bot.claim(owner, { provider: "fake", modelId: "fake-model" });
+	const routine = await bot.createRoutine(owner, { name: "Signups", prompt: "Count this week's signups as a chart.", triggers: [], grant: { actions: [], targets: [], limits: {} } });
+	const widget = { type: "widget", id: "w1", title: "Signups", source: { kind: "routine", ref: `pages-bot/${routine.id}` }, view: "chart" };
+	const page = (await user.pageCreate("pages-bot", "Growth", [widget], "pages-bot")) as unknown as { id: string };
+	await bot.testRoutine(owner, routine.id);
+	const deadline = Date.now() + 5_000;
+	const chart = async () => ((await user.pageGet(page.id)) as unknown as { blocks: { data?: unknown }[] }).blocks[0]!.data;
+	while (!(await chart()) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+	expect(await chart()).toEqual(spec);
+
+	// A button running a Composio-backed app's action: asked first, run once allowed.
+	await runInDurableObject(user, (instance) => (instance as unknown as UserObject).connectApp("gmail", { skills: false }));
+	const pressed = (await bot.pressButton(owner, { kind: "connector", appId: "gmail", tool: "GMAIL_SEND_EMAIL", args: { to: "team@example.com" } }, "Send the report")) as { approval?: { id: string } };
+	const executed = async () => ((await (await fetch(`${env.COMPOSIO_BASE_URL}/__executed`, { headers: { "x-api-key": env.COMPOSIO_API_KEY! } })).json()) as { executed: { tool: string; arguments: unknown }[] }).executed;
+	expect((await executed()).some((call) => call.tool === "GMAIL_SEND_EMAIL")).toBe(false);
+	expect(await bot.answerApproval(owner, pressed.approval!.id, "allow")).toBe("ok");
+	expect((await executed()).filter((call) => call.tool === "GMAIL_SEND_EMAIL")).toEqual([{ tool: "GMAIL_SEND_EMAIL", connected_account_id: expect.any(String), arguments: { to: "team@example.com" } }]);
+}, 20_000);

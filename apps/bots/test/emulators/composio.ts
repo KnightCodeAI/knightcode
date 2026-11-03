@@ -19,6 +19,8 @@ const read = (request: IncomingMessage) =>
 export async function startComposio(): Promise<{ url: string; close(): Promise<void> }> {
 	let connections = 0;
 	const deleted = new Set<string>();
+	/** Tools run, for tests (GET /api/v3/__executed). */
+	const executed: { tool: string; connected_account_id: string; arguments: Record<string, unknown> }[] = [];
 	const origin = () => `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 	const server = createServer(async (request, response) => {
 		const json = (status: number, body: unknown) => response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
@@ -31,6 +33,7 @@ export async function startComposio(): Promise<{ url: string; close(): Promise<v
 			return response.writeHead(200, { "content-type": "text/html" }).end(`<!doctype html><title>Connect</title><a href="${safe}">Allow</a>`);
 		}
 		if (request.headers["x-api-key"] !== COMPOSIO_TEST_KEY) return json(401, { error: "bad key" });
+		if (request.method === "GET" && url.pathname === "/api/v3/__executed") return json(200, { executed });
 		if (request.method === "GET" && url.pathname === "/api/v3/toolkits") {
 			// Two pages, to exercise the cursor.
 			const second = url.searchParams.get("cursor") === "page-2";
@@ -55,6 +58,7 @@ export async function startComposio(): Promise<{ url: string; close(): Promise<v
 		if (request.method === "POST" && tool) {
 			const body = JSON.parse(await read(request)) as { connected_account_id: string; arguments: Record<string, unknown> };
 			if (!body.connected_account_id) return json(200, { data: null, successful: false, error: "no connected account" });
+			executed.push({ tool: decodeURIComponent(tool[1]!), connected_account_id: body.connected_account_id, arguments: body.arguments });
 			return json(200, { data: { tool: decodeURIComponent(tool[1]!), echo: body.arguments }, successful: true, error: null });
 		}
 		return json(404, { error: "not found" });

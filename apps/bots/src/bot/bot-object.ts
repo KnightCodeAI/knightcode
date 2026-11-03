@@ -2,6 +2,7 @@
 // the durable harness over its own SQLite, keeps its alarm armed so work survives eviction and deploys, and serves the
 // bot's live view to its owner's sockets. Every RPC and frame is checked against the bot's owner. Its own tables share
 // the database with the harness, so every host write goes through the harness's queue (host-sql.ts).
+import { ComposioClient } from "../connectors/composio.ts";
 import { commentAsApp } from "../routines/github-app.ts";
 import type { Bot, ConversationView as ConversationViewProtocol, Entry, Note, Recipe } from "@knightcode/bots-protocol";
 import { addCard, addHostEntry, createHostEntriesTable, findCard, hostEntries, hostEntry, patchCard } from "./host-entries.ts";
@@ -1839,6 +1840,8 @@ export class BotObject extends DurableObject<Env> {
 				.inboxAdd({ kind: "approval", botId: this.#id, title: intent.title, approvalId: approval.id })
 				.catch((error: unknown) => console.error("inbox", error));
 			void this.#notify("input", intent.title);
+			// The card shows in the chat at once, also when no run is going (a page button).
+			await this.#refreshView();
 			return { decision: "ask", approvalId: approval.id };
 		}
 		await this.#write((sql) => markApproved(sql, record.id));
@@ -1870,11 +1873,21 @@ export class BotObject extends DurableObject<Env> {
 	 */
 	#afterRun(): Promise<void> {
 		this.#computerSession = undefined;
-		// One pass at a time; the guard is released only after it is stored, even when the pass ends at once.
+		// Every run's own results, once per run (wakes can repeat), and before the memory pass guard: a pass still going
+		// from the run before must not swallow them.
+		if (this.#runUsage.length > 0 || this.#lastReply !== undefined) {
+			void this.#reportUsage().catch((error: unknown) => console.error("usage", error));
+			void this.#notify("finish", this.#lastReply);
+			// A routine's run: its answer is the routine's latest output, which the owner's page widgets read (no model call).
+			const routineId = this.#meta("run_routine");
+			if (routineId && this.#lastReply)
+				void this.#user()
+					.refreshRoutineWidgets(`${this.#id}/${routineId}`, this.#lastReply)
+					.catch((error: unknown) => console.error("widgets", error));
+			this.#lastReply = undefined;
+		}
+		// One memory pass at a time; the guard is released only after it is stored, even when the pass ends at once.
 		if (this.#afterRunning) return this.#afterRunning;
-		void this.#reportUsage().catch((error: unknown) => console.error("usage", error));
-		void this.#notify("finish", this.#lastReply);
-		this.#lastReply = undefined;
 		const pass = this.#learnFromRun().catch((error: unknown) => console.error("after run", error));
 		this.#afterRunning = pass;
 		void pass.finally(() => {
@@ -2054,6 +2067,34 @@ export class BotObject extends DurableObject<Env> {
 				},
 			};
 		if (tool === "fleet.replace_instructions" || tool === "fleet.set_model")
+			return this.#fleetAdapter(tool);
+		// "<app>.<tool>": a connector write (a page button's action, approved). Composio-backed apps run it through
+		// Composio with the owner's connected account; it either happens or not, so it is never sent twice.
+		const dot = tool.indexOf(".");
+		if (dot > 0)
+			return {
+				id: tool,
+				kind: "neither",
+				send: async (action) => {
+					const appId = tool.slice(0, dot);
+					const held = await this.env.DB.prepare("SELECT connected_account_id FROM composio_accounts WHERE account_id = ? AND app_id = ? LIMIT 1")
+						.bind(this.#owner, appId)
+						.first<{ connected_account_id: string }>();
+					// ponytail: makers' own MCP servers need their OAuth connection first; until then only Composio apps run actions.
+					if (!held || !this.env.COMPOSIO_API_KEY) return { ok: false, error: `${appId} has no connection that can run this action.` };
+					try {
+						const composio = new ComposioClient({ apiKey: this.env.COMPOSIO_API_KEY, ...(this.env.COMPOSIO_BASE_URL ? { baseUrl: this.env.COMPOSIO_BASE_URL } : {}) });
+						await composio.execute(tool.slice(dot + 1), { connectionId: held.connected_account_id, userId: this.#owner!, args: action.intent.args as Record<string, unknown> });
+						return { ok: true, confirmed: true };
+					} catch (error) {
+						return { ok: false, error: error instanceof Error ? error.message : String(error) };
+					}
+				},
+			};
+		return undefined;
+	}
+
+	#fleetAdapter(tool: string): WriteAdapter {
 			return {
 				id: tool,
 				// Applying a settings change twice is the same change: safe to retry.
@@ -2071,7 +2112,6 @@ export class BotObject extends DurableObject<Env> {
 					}
 				},
 			};
-		return undefined;
 	}
 
 	/** Bumped whenever the bot's approval settings change, revoking approvals granted under the old ones. */

@@ -657,3 +657,52 @@ test("With home routing on, a site the bot opens sees the user's home address (f
 		site.close();
 	}
 });
+
+test("A bot builds a page whose chart refreshes when its routine runs, and a button on the page runs a connector action after approval", async ({ context, page }) => {
+	test.setTimeout(180_000);
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	const bot = await api.createBot({ name: `Analyst${tag}`, purpose: "Reports on growth" });
+	await api.connectApp({ appId: "gmail", skills: false });
+	const routine = await api.createRoutine({ botId: bot.id, name: "Weekly signups", prompt: "Count this week's signups as a chart.", triggers: [], grant: { actions: [], targets: [], limits: {} }, active: true });
+	const blocks = [
+		{ type: "text", id: "intro", text: "Signups this week." },
+		{ type: "widget", id: "signups", title: "Signups", source: { kind: "routine", ref: `${bot.id}/${routine.id}` }, view: "chart" },
+		{ type: "button", id: "send", label: "Email the report", action: { kind: "connector", appId: "gmail", tool: "GMAIL_SEND_EMAIL", args: { to: "team@example.com", subject: "Signups" } } },
+	];
+	const first = { kind: "bar", title: "Signups", labels: ["Mon", "Tue"], series: [{ name: "Signups", values: [3, 5] }] };
+	await script(context.request, {
+		[bot.name]: [
+			{ tool: "tool_search", args: { query: "save_page" } },
+			{ tool: "save_page", args: { title: `Growth ${tag}`, blocks } },
+			"Made the Growth page.",
+			// The routine's run: its answer is the chart's data.
+			JSON.stringify(first),
+		],
+	});
+	await page.goto(`/bots/${bot.id}`);
+	await page.getByRole("textbox", { name: "Message" }).fill("Make a page with a signups chart and a button to email the report");
+	await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	await expect(page.getByText("Made the Growth page.")).toBeVisible({ timeout: 60_000 });
+	const made = await until(async () => (await api.listPages({})).pages.find((candidate) => candidate.title === `Growth ${tag}`), "the page");
+	const chartData = async () => (await api.getPage({ id: made.id })).blocks.find((block) => block.id === "signups") as { data?: unknown } | undefined;
+	expect((await chartData())?.data).toBeUndefined();
+	// The routine runs: the chart refreshes from its output.
+	await api.testRoutine({ id: routine.id });
+	await until(async () => JSON.stringify((await chartData())?.data) === JSON.stringify(first), "the refreshed chart", 60_000);
+	await page.goto(`/pages/${made.id}`);
+	await expect(page.getByText("Signups this week.")).toBeVisible();
+	// The button asks first; nothing is sent until the owner allows it.
+	const executed = async () =>
+		((await (await context.request.get(`${process.env.E2E_COMPOSIO_URL}/__executed`, { headers: { "x-api-key": process.env.E2E_COMPOSIO_KEY! } })).json()) as { executed: { tool: string; arguments: unknown }[] }).executed.filter(
+			(call) => call.tool === "GMAIL_SEND_EMAIL",
+		);
+	const before = (await executed()).length;
+	await page.getByRole("button", { name: "Email the report" }).click();
+	await expect(page.getByText("That needs your approval first.").first()).toBeVisible();
+	expect((await executed()).length).toBe(before);
+	await page.goto(`/bots/${bot.id}`);
+	await page.getByRole("button", { name: "Allow once" }).first().click();
+	await until(async () => (await executed()).length === before + 1, "the connector action");
+	expect((await executed()).at(-1)!.arguments).toEqual({ to: "team@example.com", subject: "Signups" });
+});

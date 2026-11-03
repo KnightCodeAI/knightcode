@@ -1,6 +1,7 @@
 // The user object (spec sections 4, 8, 16 and 21): one per account, named by the account id. It holds the vault, the
 // model provider credentials, the balance and the file index, all sealed with the account's own data key (itself
 // wrapped by the key-encryption key), so destroying that key makes the account's data unreadable at once.
+import { refreshPage } from "../pages/widgets.ts";
 import { devVaultOrigins } from "../vault/tools.ts";
 import type { Credential, CredentialInfo, CredentialStore } from "@knightcode/ai";
 import { builtinModels } from "@knightcode/ai/providers/all";
@@ -1000,6 +1001,18 @@ export class UserObject extends DurableObject<Env> {
 	}
 	pageGet(id: string) {
 		return this.pages.get(id);
+	}
+	/** A routine ran: pages whose widgets read its output refresh from it, with no model call (spec section 19). */
+	async refreshRoutineWidgets(ref: string, output: string): Promise<number> {
+		let refreshed = 0;
+		for (const summary of this.pages.list()) {
+			const page = this.pages.get(summary.id);
+			if (!page?.blocks.some((block) => block.type === "widget" && block.source.kind === "routine" && block.source.ref === ref)) continue;
+			const blocks = await refreshPage(page.blocks, { routineOutput: async (wanted) => (wanted === ref ? output : undefined), connectorRead: async () => undefined, file: async () => undefined });
+			this.pages.update(page.id, { kind: "bot", botId: page.ownerBotId }, { blocks });
+			refreshed++;
+		}
+		return refreshed;
 	}
 	pageList(query?: string) {
 		return this.pages.list(query);
