@@ -1,6 +1,6 @@
-import { type Context, copyJson, type Draft, type JsonRepresentation, type JsonValue } from "@knightcode/chord";
-import { awaitWithContext } from "@knightcode/chord/context";
-import { overlap, ownedSlice } from "@knightcode/chord/delta";
+import { awaitWithContext, type Context } from "@knightcode/chord/context";
+import { type Draft, overlap, ownedSlice } from "@knightcode/chord/delta";
+import { copyJson, type JsonRepresentation, type JsonValue } from "@knightcode/chord/json";
 import {
 	boundOutput,
 	OutputBuffer,

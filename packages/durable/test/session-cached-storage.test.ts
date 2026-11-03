@@ -1,4 +1,4 @@
-import type { JsonValue } from "@knightcode/chord";
+import type { JsonValue } from "@knightcode/chord/json";
 import { describe, expect, it } from "vitest";
 import { idFromNumber } from "../src/ids.ts";
 import { CachedStorage } from "../src/session/cached-storage.ts";

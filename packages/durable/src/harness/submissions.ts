@@ -1,5 +1,5 @@
-import { type Context, copyJson, type JsonRepresentation } from "@knightcode/chord";
-import { withTelemetry } from "@knightcode/chord/context";
+import { type Context, withTelemetry } from "@knightcode/chord/context";
+import { copyJson, type JsonRepresentation } from "@knightcode/chord/json";
 import {
 	createTypedSpanStarter,
 	NOOP_TELEMETRY_CONTEXT,

@@ -1,5 +1,6 @@
-import type { Context, JsonValue } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { applyImmutableBatches, type Op } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
 import { StorageRequestError } from "../errors.ts";
 import { idFromNumber, seqFromNumber } from "../ids.ts";
 import type {

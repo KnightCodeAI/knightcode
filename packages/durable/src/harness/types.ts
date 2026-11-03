@@ -1,4 +1,6 @@
-import type { Context, JsonValue, WatchHandle } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
+import type { JsonValue } from "@knightcode/chord/json";
+import type { WatchHandle } from "@knightcode/chord/watch";
 import type {
 	Api,
 	AssistantMessage,

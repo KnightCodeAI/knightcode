@@ -1,4 +1,4 @@
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { withAbortSignal, withCancel } from "@knightcode/chord/context";
 import { createModels } from "@knightcode/ai";
 import {

@@ -1,13 +1,7 @@
-import {
-	type Context,
-	type JsonValue,
-	Watch,
-	type WatchCall,
-	type WatchEnd,
-	type WatchHandle,
-} from "@knightcode/chord";
-import { withoutAbortSignal } from "@knightcode/chord/context";
+import { type Context, withoutAbortSignal } from "@knightcode/chord/context";
 import { applyImmutable, type NonEmptyPath, type Op, type Path } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
+import { Watch, type WatchCall, type WatchEnd, type WatchHandle } from "@knightcode/chord/watch";
 import { idFromNumber } from "../ids.ts";
 import {
 	closeEndOf,

@@ -1,5 +1,5 @@
-import type { JsonValue } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
+import type { JsonValue } from "@knightcode/chord/json";
 import type {
 	ConversationId,
 	DocumentCreate,

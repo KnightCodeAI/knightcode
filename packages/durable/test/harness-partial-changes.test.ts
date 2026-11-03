@@ -1,5 +1,5 @@
-import { copyJson } from "@knightcode/chord";
 import { type Op, track } from "@knightcode/chord/delta";
+import { copyJson } from "@knightcode/chord/json";
 import {
 	type AssistantMessage,
 	type AssistantMessageEvent,

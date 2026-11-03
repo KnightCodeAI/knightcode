@@ -1,4 +1,5 @@
-import { createHost, memoryLinkPair, replicatedState } from "@knightcode/chord";
+import { createHost, memoryLinkPair } from "@knightcode/chord";
+import { createHost as createOldHost, replicatedState } from "@knightcode/chord/old";
 import { createAssistantMessageEventStream, validateToolArguments } from "@knightcode/ai";
 import { complete, getModel, getProviders, streamSimple } from "@knightcode/ai/compat";
 import { Agent, streamProxy } from "@knightcode/agent";
@@ -27,6 +28,7 @@ console.log(
 	agent.hasQueuedMessages(),
 	typeof streamProxy,
 	typeof createHost,
+	typeof createOldHost,
 	typeof memoryLinkPair,
 	replicatedState({ browser: true }).value.browser,
 );

@@ -1,4 +1,4 @@
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { type ExecutionEnv, getOrThrow } from "../env/index.ts";
 
 /** Tail of the mutation chain of each file, keyed by file system id and canonical path. */

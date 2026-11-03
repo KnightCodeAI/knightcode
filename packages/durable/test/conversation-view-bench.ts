@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { BACKGROUND_CONTEXT as context } from "@knightcode/chord/context";
 import { createModels } from "@knightcode/ai/models";
 import { type Conversation, createRegistry, type EntryId, Harness, LiveDoc, type Storage } from "../src/index.ts";

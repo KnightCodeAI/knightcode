@@ -5,7 +5,6 @@
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/36-durable-views.ts
 
-import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import {
 	arr,
 	createHost,
@@ -17,7 +16,8 @@ import {
 	openStore,
 	sqliteBackend,
 	str,
-} from "@knightcode/chord/next";
+} from "@knightcode/chord";
+import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import { openNodeSqliteDatabase } from "@knightcode/chord/sqlite/node";
 import { createModels } from "@knightcode/ai";
 import { createRegistry, Harness, ROOT_CONVERSATION_ID } from "../../src/index.ts";

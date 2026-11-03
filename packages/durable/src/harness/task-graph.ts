@@ -1,6 +1,7 @@
-import { type Context, type JsonValue, Watch, type WatchCall, type WatchHandle } from "@knightcode/chord";
-import { BACKGROUND_CONTEXT, withoutAbortSignal } from "@knightcode/chord/context";
+import { BACKGROUND_CONTEXT, type Context, withoutAbortSignal } from "@knightcode/chord/context";
 import { applyImmutable, type Op } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
+import { Watch, type WatchCall, type WatchHandle } from "@knightcode/chord/watch";
 import {
 	closeEndOf,
 	closeEnds,

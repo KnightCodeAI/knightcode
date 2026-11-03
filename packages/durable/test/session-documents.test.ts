@@ -1,4 +1,5 @@
-import type { Draft, JsonValue } from "@knightcode/chord";
+import type { Draft } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
 import { type ConversationId, defineDoc, defineDocFamily, type JsonObject, type TaskId } from "@knightcode/durable";
 import { describe, expect, it } from "vitest";
 import { idFromNumber } from "../src/ids.ts";

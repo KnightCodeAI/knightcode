@@ -1,4 +1,4 @@
-import type { Draft } from "@knightcode/chord";
+import type { Draft } from "@knightcode/chord/delta";
 import {
 	type ConversationId,
 	createSession,

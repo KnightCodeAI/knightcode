@@ -1,4 +1,4 @@
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { characterEnd } from "@knightcode/chord/output";
 import { lit, num, obj, opt, type Static, str, union } from "@knightcode/schema";
 import {

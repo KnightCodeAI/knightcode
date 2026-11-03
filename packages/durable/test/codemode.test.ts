@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { type AssistantMessage, fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import { type CodemodeRun, CodemodeSandbox } from "@knightcode/codemode";
 import {

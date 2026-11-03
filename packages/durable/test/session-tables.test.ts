@@ -1,4 +1,4 @@
-import type { JsonValue } from "@knightcode/chord";
+import type { JsonValue } from "@knightcode/chord/json";
 import {
 	type ConversationId,
 	defineDoc,

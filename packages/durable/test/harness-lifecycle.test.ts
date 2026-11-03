@@ -1,8 +1,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Context, JsonValue } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { withAbortSignal } from "@knightcode/chord/context";
+import type { JsonValue } from "@knightcode/chord/json";
 import { createModels, fauxAssistantMessage, fauxText, fauxToolCall } from "@knightcode/ai";
 import {
 	type Conversation,

@@ -1,4 +1,4 @@
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import type { Message, SystemMessage, Tool, ToolReference } from "@knightcode/ai";
 import { declarationsEqual, getCurrentTools, toToolDeclaration } from "@knightcode/ai/utils/transcript";
 import { SystemEntry } from "../entries.ts";

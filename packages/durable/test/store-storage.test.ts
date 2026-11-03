@@ -6,8 +6,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
-import type { Context } from "@knightcode/chord";
-import { BACKGROUND_CONTEXT, withTelemetry } from "@knightcode/chord/context";
 import {
 	applyBatch,
 	type ChordStore,
@@ -23,7 +21,9 @@ import {
 	type Store,
 	sqliteBackend,
 	str,
-} from "@knightcode/chord/next";
+} from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
+import { BACKGROUND_CONTEXT, withTelemetry } from "@knightcode/chord/context";
 import { openNodeSqliteDatabase } from "@knightcode/chord/sqlite/node";
 import { createModels } from "@knightcode/ai";
 import { registerStorageConformance } from "@knightcode/durable/testing";

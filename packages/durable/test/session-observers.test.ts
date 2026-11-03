@@ -1,8 +1,8 @@
 // Tests for `Session.observeDoc()`, the synchronous observer of one document address that watches are built on.
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
-import type { WatchCall, WatchEnd } from "@knightcode/chord";
 import { withAbortSignal } from "@knightcode/chord/context";
+import type { WatchCall, WatchEnd } from "@knightcode/chord/watch";
 import {
 	type CommitObserver,
 	type ConversationId,

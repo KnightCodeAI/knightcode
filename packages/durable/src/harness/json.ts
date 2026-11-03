@@ -1,5 +1,5 @@
-import type { JsonValue } from "@knightcode/chord";
 import { appendText, type Draft } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
 
 /** How `assignJson()` writes one value instead of assigning it leaf by leaf. */
 export type AssignPlan =

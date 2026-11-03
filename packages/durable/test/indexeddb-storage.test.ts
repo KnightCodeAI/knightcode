@@ -1,7 +1,8 @@
 /// <reference lib="dom" />
 
-import type { Context, JsonValue } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
+import type { JsonValue } from "@knightcode/chord/json";
 import { registerStorageConformance } from "@knightcode/durable/testing";
 import { IDBKeyRange as FakeIDBKeyRange, IDBObjectStore as FakeIDBObjectStore, IDBFactory } from "fake-indexeddb";
 import { describe, expect, it, vi } from "vitest";

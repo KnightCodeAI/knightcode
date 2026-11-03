@@ -1,4 +1,5 @@
-import type { Draft, JsonRepresentation, JsonValue } from "@knightcode/chord";
+import type { Draft } from "@knightcode/chord/delta";
+import type { JsonRepresentation, JsonValue } from "@knightcode/chord/json";
 import type { AssistantMessage, Usage } from "@knightcode/ai";
 import { defineDoc } from "../documents.ts";
 import type { Transaction } from "../session/transaction.ts";

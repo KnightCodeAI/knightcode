@@ -2,7 +2,7 @@
 // commit makes, rebuilt from operations alone. This replaced the event stream (`watchEvents`).
 import { GCProfiler, getHeapStatistics, setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
-import type { Draft } from "@knightcode/chord";
+import type { Draft } from "@knightcode/chord/delta";
 import { applyImmutable, type Op } from "@knightcode/chord/delta";
 import {
 	type AssistantMessage,
