@@ -2404,6 +2404,36 @@ validation and copies the v2 kernel added around Delta.
   into p2 (its vitest tests and about 140 imports would need porting); it is deleted in the change that moves p2 to
   v2. No version bump: Chord is work in progress. Done by a re-runnable script (move, import and link rewrites,
   generated exports and aliases) on the base that includes slice 11; p2's imports updated in private.
+- **p2 moves to Chord v2, then Chord v1 is deleted (owner, 2026-11-03: yes to the plan's eleven points):** (1) way
+  (a): p2's kernel, workers and plugin loading move to v2 (`createHost`,
+  `createWorkers`, `createPlugins`), p2 keeps its own data directory, auth, devices and sharing, so no data migrates
+  (Chord v1 stored nothing for p2; every file in its data directory is p2's or Durable's); (2) Radius Cloud Brain stays
+  on its last v1 bundle and moves separately; (3) p2's web UI is p2 code again (brought back from bundled-ui) and is
+  moved with p2; (4) `createPlugins` replaces p2's own loader (which leaked a module copy per reload); (5) p2 keeps its
+  own SQLite files (catalog, shares, search, subagents) as natives (the rule against plugin databases is p3's); (6) p2's
+  terminal uses Chord's child-process sandbox, exported from the shared package first; (7) `createHttp` for p2 later, optional; (8)
+  Chord v1 (`src/old`) is deleted right after the switch; (9) p2's v1 plugin tutorial is retired for Chord's guide;
+  (10) the phone gets it once the switch is green on slayer (owner, later the same day: "no hours on slayer first";
+  was: after 1-2 days on slayer), about 10 minutes down, rollback by checkout; (11) a small shim
+  reloads pages left open across the deploy, removed with v1. Server, workers, the terminal bundle and the web bundle
+  switch in one deploy (v1 and v2 links do not talk); prep and cleanup steps deploy on their own.
+- **Mistakes that wait are reported at once (owner, 2026-11-03: "yes"; p2 move notes 1, 2, 9):** requests keep
+  waiting for providers (slice 7a), but a mistake no longer looks like slowness. (a) `get`, `hold` and `registry` on a host that has not loaded throw at once ("call
+  `host.load` first"; a client host with nothing to load calls `load([])`). (b) When a load or reload publishes, a
+  registry with contributions and no provider is reported through `onError` at once, naming the registry and its
+  contributors. (c) A request waiting unbound (`not_served`, `waiting`) is reported once through `onError` after 5 s,
+  naming what it waits for; it keeps waiting until its `readyTimeout` as before. (d) An invalid plugin name is a
+  programming error: `load` and `reload` throw instead of listing it in the report's `failed`. (e) (owner, 2026-11-03:
+  "add report"; p2 move note 10) Work a seal cancels before it ran (a document change or transaction waiting on its
+  object's line, started with a root's, handler's or attempt's context that ended first) is also reported through
+  `onError`, naming the object and the scope, besides rejecting: an empty `catch` cannot hide a change that never
+  happened. The rule itself stays: what is started with a context ends with it; await it.
+- **No limit on calls in progress per link; references in a method act as the caller (owner, 2026-11-03: "i guess
+  it's fine without, guess we document it"; p2 move notes 7, 11):** v1's `maxCalls` per link has no counterpart and
+  gets none (the call window N bounds calls per origin; part limits bound sizes); documented. `ctx.get` in a method
+  acts as the method's caller (decision of slice 4a, unchanged): a server object acting as itself towards a worker
+  takes the reference with `self.get` in its own object or a server root; documented with p2's `Search.rebuildIndex`
+  example in the guide and the move notes.
 - **A plugin's npm dependencies are bundled; external only by opt-in (owner, 2026-10-29: "explicit opt in + (a)"):**
   a plugin's `dependencies` are installed into its own `node_modules` (`npm install --ignore-scripts`) and bundled into
   each facet that imports them (host packages, its `peerDependencies`, stay external and are passed in). On Node a

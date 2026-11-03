@@ -51,6 +51,7 @@ change flags, settings, keybindings, providers, or the session format.
 - Formatting is Prettier, configured in `.prettierrc`: tabs, 120 columns, LF. `bun run format` formats `.ts`/`.tsx`; check without writing via `bun x prettier --check "**/*.ts"`. Prose is not formatted — Markdown is hand-wrapped, keep it that way.
 - `.prettierignore` covers what must not be touched: generated model catalogs, test fixtures (several are deliberately malformed), Changesets-owned changelogs, and `apps/` (own config and toolchain). Don't format those by hand either.
 - No `any` unless absolutely necessary.
+- No runtime checks of values whose types TypeScript already guarantees (no `typeof`/`instanceof`/`Array.isArray`/shape guards on typed parameters, typed callback results or typed declarations). Validate only at decided trust boundaries (wire input, schema-checked arguments and params).
 - Inline single-line helpers that have only one call site.
 - Check `node_modules` for external API types; don't guess.
 - **No inline imports** (`await import()`, `import("pkg").Type`, dynamic type imports). Top-level imports only.

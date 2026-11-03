@@ -37,6 +37,10 @@
       "@notes/app/*": ["./packages/chord/test/examples/53-app/app/*.ts"],
       "@board/app/*": ["./packages/chord/test/examples/56-web/app/*.ts"],
       "@chat/app/*": ["./packages/chord/test/examples/59-chat/app/*.ts"],
+      "@todo/app/*": [
+        "./packages/chord/test/examples/61-tutorial/src/api/*.ts",
+        "./packages/chord/test/examples/61-tutorial/src/api/*/index.ts",
+      ],
       "@knightcode/chord/http": ["./packages/chord/src/node/http/index.ts"],
       "@knightcode/chord/workers": ["./packages/chord/src/node/workers/index.ts"],
       "@knightcode/chord/plugins": ["./packages/chord/src/node/plugins/index.ts"],
