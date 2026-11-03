@@ -13,11 +13,13 @@ import type { HttpResponse } from "./response.ts";
 export type HttpRoute = (request: HttpRequest, ctx: Ctx) => Promise<HttpResponse>;
 
 /**
- * A route with its options: `page` admits a top-level navigation from another site (a link to it) with its
- * authentication; `crossSite` admits any foreign request (a webhook), always anonymous.
+ * A route with its options: `public` serves it without a principal (deny by default: a route without one answers 401
+ * to a request no authenticator recognized); `page` admits a top-level navigation from another site (a link to it)
+ * with its authentication; `crossSite` admits any foreign request (a webhook), always anonymous, so public too.
  */
 export type HttpRouteOptions = {
 	readonly handler: HttpRoute;
+	readonly public?: true;
 	readonly page?: true;
 	readonly crossSite?: true;
 };
@@ -46,6 +48,9 @@ export type HttpWrap = {
  */
 export type HttpSocket = (socket: WebSocketHandle, request: HttpRequest, ctx: Ctx) => void | Promise<void>;
 
+/** A plugin socket with its options: `public` accepts it without a principal (else 401 before the handler runs). */
+export type HttpSocketOptions = { readonly handler: HttpSocket; readonly public?: true };
+
 /** A plugin socket: `ws`'s WebSocket, for the plugin's own protocol. */
 export type WebSocketHandle = WebSocket;
 
@@ -64,7 +69,7 @@ export type HttpContribution = {
 	readonly routes?: Readonly<Record<string, HttpRoute | HttpRouteOptions>>;
 	readonly wraps?: readonly HttpWrap[];
 	/** Plugin sockets by pattern (no method). */
-	readonly sockets?: Readonly<Record<string, HttpSocket>>;
+	readonly sockets?: Readonly<Record<string, HttpSocket | HttpSocketOptions>>;
 	/** The largest frame this contribution's sockets accept; 1 MiB by default. */
 	readonly maxPayload?: number;
 	/** Hosts allowed besides loopback, as the client names them (`notes.example.com`): requests through them are https. */
@@ -75,6 +80,12 @@ export type HttpContribution = {
 	readonly relays?: readonly HttpRelay[];
 	/** Extra CSP sources by directive (`{ "img-src": ["https://cdn.example.com"] }`). */
 	readonly csp?: Readonly<Record<string, readonly string[]>>;
+	/**
+	 * The paths scripts load from (`/_chord/web/`): with any, `script-src` is these paths of the request's origin and the
+	 * response's nonce instead of the whole origin, so no other same-origin response (an upload served as JavaScript)
+	 * runs as a script.
+	 */
+	readonly scripts?: readonly string[];
 };
 
 /** The router a request uses: as it was when the request started. */
@@ -91,6 +102,8 @@ export type Router = {
 	readonly relays: readonly HttpRelay[];
 	/** Extra CSP sources by directive. */
 	readonly csp: ReadonlyMap<string, readonly string[]>;
+	/** The paths scripts load from; none: the whole origin. */
+	readonly scripts: readonly string[];
 	/** The socket handlers it serves: a socket handed out by one no longer here is closed. */
 	readonly socketHandlers: ReadonlySet<HttpSocket>;
 };
@@ -101,6 +114,8 @@ export type RouteMatch = {
 	readonly plugin: string;
 	readonly params: Readonly<Record<string, string>>;
 	readonly handler: HttpRoute;
+	/** Served without a principal: marked `public`, or `crossSite` (always anonymous). */
+	readonly public: boolean;
 	readonly page: boolean;
 	readonly crossSite: boolean;
 	readonly wraps: readonly ResolvedWrap[];
@@ -112,6 +127,7 @@ export type SocketMatch = {
 	readonly plugin: string;
 	readonly params: Readonly<Record<string, string>>;
 	readonly handler: HttpSocket;
+	readonly public: boolean;
 	readonly maxPayload: number;
 };
 
@@ -139,11 +155,13 @@ export function composeRouter(table: RegistryTable<HttpContribution>, { report }
 	const framers = new Set<string>();
 	const relays: HttpRelay[] = [];
 	const csp = new Map<string, string[]>();
+	const scripts: string[] = [];
 	const socketHandlers = new Set<HttpSocket>();
 	for (const { plugin, value } of table) {
 		for (const host of value.hosts ?? []) hosts.add(host.toLowerCase());
 		for (const framer of value.framers ?? []) framers.add(framer);
 		relays.push(...(value.relays ?? []));
+		scripts.push(...(value.scripts ?? []));
 		for (const [directive, sources] of Object.entries(value.csp ?? {})) {
 			csp.set(directive, [...(csp.get(directive) ?? []), ...sources]);
 		}
@@ -167,6 +185,7 @@ export function composeRouter(table: RegistryTable<HttpContribution>, { report }
 				pattern: key,
 				plugin,
 				handler: options.handler,
+				public: options.public === true || options.crossSite === true,
 				page: options.page === true,
 				crossSite: options.crossSite === true,
 				segments: parsed.segments,
@@ -177,13 +196,15 @@ export function composeRouter(table: RegistryTable<HttpContribution>, { report }
 			else report({ message: `route "${key}" is contributed twice`, plugins: [taken.plugin, plugin] });
 		}
 		const maxPayload = value.maxPayload ?? DEFAULT_MAX_PAYLOAD;
-		for (const [pattern, handler] of Object.entries(value.sockets ?? {})) {
+		for (const [pattern, socket] of Object.entries(value.sockets ?? {})) {
 			const segments = parsePattern(pattern);
 			if (segments === undefined) {
 				report({ message: `socket "${pattern}" is no pattern`, plugins: [plugin] });
 				continue;
 			}
-			const taken = insert(sockets, segments, { pattern, plugin, handler, segments, maxPayload });
+			const { handler, public: open } = typeof socket === "function" ? { handler: socket, public: undefined } : socket;
+			const entry = { pattern, plugin, handler, public: open === true, segments, maxPayload };
+			const taken = insert(sockets, segments, entry);
 			if (taken === undefined) socketHandlers.add(handler);
 			else report({ message: `socket "${pattern}" is contributed twice`, plugins: [taken.plugin, plugin] });
 		}
@@ -203,6 +224,7 @@ export function composeRouter(table: RegistryTable<HttpContribution>, { report }
 		framers,
 		relays,
 		csp,
+		scripts,
 		socketHandlers,
 	};
 }
@@ -218,6 +240,7 @@ type RouteEntry = {
 	readonly pattern: string;
 	readonly plugin: string;
 	readonly handler: HttpRoute;
+	readonly public: boolean;
 	readonly page: boolean;
 	readonly crossSite: boolean;
 	readonly segments: readonly Segment[];
@@ -229,6 +252,7 @@ type SocketEntry = {
 	readonly pattern: string;
 	readonly plugin: string;
 	readonly handler: HttpSocket;
+	readonly public: boolean;
 	readonly segments: readonly Segment[];
 	readonly maxPayload: number;
 };

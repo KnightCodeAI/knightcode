@@ -103,7 +103,7 @@ function settled(Type: Contract): ChordError {
 /**
  * A child of `context` aborted by `signal` and by the caller's signal (the caller's reason first) until `release()`,
  * which the call runs when it settles. Not `AbortSignal.any`: before Node 24.16.0 it keeps cleanup entries per call for
- * as long as its sources live (nodejs/node#62367), and a call's sources (its attempt, its reference) live long.
+ * as long as its sources live (Node issue 62367), and a call's sources (its attempt, its reference) live long.
  * Without a caller's signal the child is aborted by `signal` itself and `release` does nothing.
  */
 export function withLinkedAbortSignal(

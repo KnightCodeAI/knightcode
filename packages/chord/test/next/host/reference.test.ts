@@ -159,7 +159,7 @@ describe("cycles (Q5)", () => {
 });
 
 describe("GC", () => {
-	// AbortSignal.any keeps cleanup entries per call while its sources live before Node 24.16.0 (nodejs/node#62367): a
+	// AbortSignal.any keeps cleanup entries per call while its sources live before Node 24.16.0 (Node issue 62367): a
 	// call's signal is linked to its reference and its attempt only until it settles.
 	it.each([
 		["without a caller's signal", () => context],

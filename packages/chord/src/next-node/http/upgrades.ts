@@ -48,7 +48,8 @@ export class Upgrades {
 
 	/**
 	 * Upgrades `message` to the links endpoint: `host.accept` over the socket (its output capped) as the admitted
-	 * principal, with `options`' limits; `context` is the parent of the work on the link.
+	 * principal, with `options`' limits; `context` is the parent of the work on the link. `opened` runs once the link
+	 * is accepted; what it returns runs when its socket closes.
 	 */
 	link<P extends Principal>(
 		message: IncomingMessage,
@@ -57,6 +58,7 @@ export class Upgrades {
 		admission: Admission<P> & LinkOptions,
 		host: Host<P>,
 		context: Context,
+		opened: () => (() => void) | undefined,
 	): void {
 		const { principal, limits } = admission;
 		upgrade(message, stream, head, admission.maxPayload ?? DEFAULT_LINK_PAYLOAD, (socket) => {
@@ -69,6 +71,8 @@ export class Upgrades {
 				seal: () => link.close(),
 			});
 			host.accept(link, { principal, ...(limits === undefined ? {} : { limits }) }, context);
+			const closed = opened();
+			if (closed !== undefined) socket.once("close", closed);
 		});
 	}
 
@@ -81,7 +85,12 @@ export class Upgrades {
 		message: IncomingMessage,
 		stream: Duplex,
 		head: Buffer,
-		admission: Admission<P> & { readonly match: SocketMatch; readonly request: HttpRequest },
+		admission: Omit<Admission<P>, "principal"> & {
+			/** Anonymous only for a public socket. */
+			readonly principal: P | undefined;
+			readonly match: SocketMatch;
+			readonly request: HttpRequest;
+		},
 		host: Host<P>,
 		context: Context,
 		failed: (failure: SocketFailure) => void,

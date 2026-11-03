@@ -207,7 +207,7 @@ Target: about 500 source lines, tests excluded.
 - **Watchable state is JSON only.** No bytes in documents, derives, reference members or any watchable value; bytes
   appear only in method arguments and results (passed whole, carried as raw byte segments by L6) and in chunked
   transfers. Delta stays JSON-only. Supersedes W4's "JSON plus bytes" for watchables.
-- **`mapShared` lives in `next/watch/`** for now; it moves into Delta when v2 goes upstream.
+- **`mapShared` lives in `next/watch/`** for now; it moves into Delta when v2 becomes the package root.
 - **C10 rejected:** `constant` (JSON `Watchable`) and `writable` (`NativeWatchable`) stay two, because Q14 needs the
   kind distinction.
 - **One publication per host** (`createPublication()`, created by the host and passed to every source, derive and
