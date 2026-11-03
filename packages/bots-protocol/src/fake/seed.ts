@@ -148,7 +148,7 @@ function app(
 	};
 }
 
-/** The default world: four bots, a group chat, and records of every kind. */
+/** The default world: seven bots, groups of three, four and seven, and records of every kind. */
 export function defaultSeed(): FakeSeed {
 	const inboxApproval: Approval = {
 		id: "appr-dana",
@@ -208,6 +208,30 @@ export function defaultSeed(): FakeSeed {
 			email: "chief-of-staff.raghav@bots.knightcode.dev",
 			suggestions: true,
 			lastActivityAt: hours(1),
+		}),
+		bot({
+			id: "researcher",
+			name: "Researcher",
+			purpose: "Researches competitors and gathers sources for the team",
+			instructions: "Research questions using primary sources. Share concise findings and link every source.",
+			avatar: { shape: "gem", color: "violet" },
+			lastActivityAt: minutes(40),
+		}),
+		bot({
+			id: "designer",
+			name: "Designer",
+			purpose: "Reviews interfaces and prepares launch visuals",
+			instructions: "Review interfaces for clarity, accessibility and visual consistency. Prepare launch assets.",
+			avatar: { shape: "star", color: "yellow" },
+			lastActivityAt: minutes(35),
+		}),
+		bot({
+			id: "analyst",
+			name: "Analyst",
+			purpose: "Tracks product metrics and reports changes to the team",
+			instructions: "Track activation, retention and launch metrics. Explain changes with evidence and clear numbers.",
+			avatar: { shape: "pebble", color: "cyan" },
+			lastActivityAt: minutes(25),
 		}),
 	];
 	const reviewerThread: Entry[] = [
@@ -515,6 +539,28 @@ export function defaultSeed(): FakeSeed {
 				needsYou: false,
 				createdAt: days(3),
 			},
+			{
+				id: "operations",
+				name: "Operations",
+				memberIds: ["reviewer", "inbox", "social", "chief"],
+				leadId: "chief",
+				turnBudget: 12,
+				pinned: false,
+				unread: 0,
+				needsYou: false,
+				createdAt: days(2),
+			},
+			{
+				id: "all-hands",
+				name: "All Hands",
+				memberIds: ["reviewer", "inbox", "social", "chief", "researcher", "designer", "analyst"],
+				leadId: "chief",
+				turnBudget: 14,
+				pinned: false,
+				unread: 0,
+				needsYou: false,
+				createdAt: days(1),
+			},
 		],
 		sections: [{ id: "sec-work", name: "Work", itemIds: ["reviewer", "inbox"] }],
 		threads: {
@@ -522,19 +568,86 @@ export function defaultSeed(): FakeSeed {
 			"bot:inbox": view(inboxThread),
 			"bot:social": view(socialThread),
 			"bot:chief": view(chiefThread),
+			"bot:researcher": view([
+				message(
+					"research-1",
+					"assistant",
+					"The competitor review is ready. I'll share the findings in All Hands.",
+					minutes(40),
+				),
+			]),
+			"bot:designer": view([
+				message(
+					"design-1",
+					"assistant",
+					"Launch visuals are ready for review, including the mobile layouts.",
+					minutes(35),
+				),
+			]),
+			"bot:analyst": view([
+				message(
+					"analysis-1",
+					"assistant",
+					"The launch dashboard is ready with activation and retention baselines.",
+					minutes(25),
+				),
+			]),
 			"group:launch": view(groupThread),
+			"group:operations": view([
+				message("ops-1", "user", "@everyone what's on the operations checklist today?", hours(1)),
+				message("ops-2", "assistant", "Two pull requests need a final review before release.", minutes(58), {
+					botId: "reviewer",
+				}),
+				message("ops-3", "assistant", "Customer replies are drafted and waiting for approval.", minutes(56), {
+					botId: "inbox",
+				}),
+				message("ops-4", "assistant", "The launch posts are drafted. I'll schedule them after approval.", minutes(54), {
+					botId: "social",
+				}),
+				message(
+					"ops-5",
+					"assistant",
+					"I'll track the remaining approvals and post a summary this afternoon.",
+					minutes(52),
+					{ botId: "chief" },
+				),
+			]),
+			"group:all-hands": view([
+				message("all-1", "user", "@everyone share a quick update for Thursday's launch.", minutes(45)),
+				message(
+					"all-2",
+					"assistant",
+					"The release checklist is up to date. Let's flag anything blocked here.",
+					minutes(44),
+					{ botId: "chief" },
+				),
+				message("all-3", "assistant", "The migration fix is reviewed; CI is green.", minutes(43), {
+					botId: "reviewer",
+				}),
+				message("all-4", "assistant", "Launch-day customer replies are drafted.", minutes(42), { botId: "inbox" }),
+				message("all-5", "assistant", "The announcement copy is ready for approval.", minutes(41), { botId: "social" }),
+				message("all-6", "assistant", "The competitor review is complete. No pricing changes this week.", minutes(40), {
+					botId: "researcher",
+				}),
+				message("all-7", "assistant", "Desktop and mobile launch visuals are ready for review.", minutes(35), {
+					botId: "designer",
+				}),
+				message("all-8", "assistant", "The metrics dashboard is ready to track launch-day activation.", minutes(25), {
+					botId: "analyst",
+				}),
+			]),
 		},
 		replies: {
 			reviewer:
 				"On it. I'll pull the branch, run the tests, and leave comments on anything risky. I'll post a summary here when the review is done, with the files that need a second look and the tests I added.",
 			inbox: "Got it. I'll keep drafting and wait for your approval before anything is sent.",
 		},
-		instructionVersions: {
-			reviewer: [{ version: 1, text: bots[0]!.instructions, createdAt: days(12), author: { kind: "user" } }],
-			inbox: [{ version: 1, text: bots[1]!.instructions, createdAt: days(12), author: { kind: "user" } }],
-			social: [{ version: 1, text: bots[2]!.instructions, createdAt: days(12), author: { kind: "user" } }],
-			chief: [{ version: 1, text: bots[3]!.instructions, createdAt: days(12), author: { kind: "user" } }],
-		},
+		instructionVersions: Object.fromEntries(
+			bots.map((bot) => [
+				bot.id,
+				[{ version: 1, text: bot.instructions, createdAt: bot.createdAt, author: { kind: "user" } }],
+			]),
+		),
 		managed: { chief: ["reviewer", "inbox", "social"] },
 		notes: {
 			reviewer: [
