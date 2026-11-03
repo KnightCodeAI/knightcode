@@ -1,4 +1,4 @@
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { type FileChange, FileError, type FileWatcher, type WatchTarget } from "@knightcode/durable/env";
 import { type Connection, isConnectionLost } from "./connection.ts";
 import { toFileError } from "./errors.ts";

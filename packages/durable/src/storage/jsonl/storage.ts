@@ -1,4 +1,5 @@
-import type { Context, JsonValue } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
+import type { JsonValue } from "@knightcode/chord/json";
 import type { FileError, FileSystem } from "../../env/index.ts";
 import { StorageRequestError } from "../../errors.ts";
 import { idFromNumber, seqFromNumber } from "../../ids.ts";

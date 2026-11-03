@@ -1,4 +1,4 @@
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { NodeExecutionEnv } from "../../env/node.ts";
 import { JsonlStorage, type JsonlStorageOptions } from "./storage.ts";
 

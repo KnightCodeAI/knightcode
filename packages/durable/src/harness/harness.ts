@@ -1,5 +1,6 @@
-import type { Context, JsonValue } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { withAbortSignal, withoutAbortSignal } from "@knightcode/chord/context";
+import type { JsonValue } from "@knightcode/chord/json";
 import type { Models } from "@knightcode/ai";
 import {
 	type ClientIdentity,

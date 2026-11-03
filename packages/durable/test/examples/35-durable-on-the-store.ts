@@ -7,17 +7,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHost, defineFacet, defineTable, local, method, openStore, sqliteBackend, str } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
-import {
-	createHost,
-	defineFacet,
-	defineTable,
-	local,
-	method,
-	openStore,
-	sqliteBackend,
-	str,
-} from "@knightcode/chord/next";
 import { openNodeSqliteDatabase } from "@knightcode/chord/sqlite/node";
 import { createModels } from "@knightcode/ai";
 import { createRegistry, Harness, ROOT_CONVERSATION_ID } from "../../src/index.ts";

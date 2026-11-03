@@ -1,6 +1,12 @@
-import { type Context, copyJson, type JsonValue } from "@knightcode/chord";
-import { awaitWithContext, withAbortSignal, withoutAbortSignal, withTelemetry } from "@knightcode/chord/context";
+import {
+	awaitWithContext,
+	type Context,
+	withAbortSignal,
+	withoutAbortSignal,
+	withTelemetry,
+} from "@knightcode/chord/context";
 import { ownedSlice } from "@knightcode/chord/delta";
+import { copyJson, type JsonValue } from "@knightcode/chord/json";
 import type { Models } from "@knightcode/ai";
 import {
 	createTypedMetrics,

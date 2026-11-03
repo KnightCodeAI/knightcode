@@ -1,6 +1,6 @@
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
-import type { Context, WatchCall, WatchEnd } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import {
 	BACKGROUND_CONTEXT,
 	createContextKey,
@@ -9,6 +9,7 @@ import {
 	withContextValue,
 } from "@knightcode/chord/context";
 import { applyImmutable } from "@knightcode/chord/delta";
+import type { WatchCall, WatchEnd } from "@knightcode/chord/watch";
 import { type DocumentWatch, defineDoc, defineDocFamily, MemoryStorage } from "@knightcode/durable";
 import { describe, expect, it } from "vitest";
 import { SessionImpl } from "../src/session/session.ts";

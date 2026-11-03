@@ -1,4 +1,5 @@
-import type { Context, Draft } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
+import type { Draft } from "@knightcode/chord/delta";
 import type { AssistantMessage, Message, ModelThinkingLevel, SimpleStreamOptions } from "@knightcode/ai";
 import { calculateContextTokens, estimateMessageTokens } from "@knightcode/ai/utils/estimate";
 import { isRetryableAssistantError, retryDelayMs } from "@knightcode/ai/utils/retry";

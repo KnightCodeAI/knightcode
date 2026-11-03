@@ -1,6 +1,7 @@
-import { type Context, type JsonValue, Watch, type WatchEnd } from "@knightcode/chord";
-import { awaitWithContext, BACKGROUND_CONTEXT, withoutAbortSignal } from "@knightcode/chord/context";
+import { awaitWithContext, BACKGROUND_CONTEXT, type Context, withoutAbortSignal } from "@knightcode/chord/context";
 import { type Op, PendingOps, track } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
+import { Watch, type WatchEnd } from "@knightcode/chord/watch";
 import type { SpanAttributes } from "@knightcode/telemetry";
 import {
 	type AnyDocToken,

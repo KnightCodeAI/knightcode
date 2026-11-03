@@ -1,13 +1,8 @@
-import { defineConfig, mergeConfig } from "vitest/config";
-import baseConfig from "../../vitest.base.ts";
+import { defineConfig } from "vitest/config";
 
-export default mergeConfig(
-	baseConfig,
-	defineConfig({
-		test: {
-			globals: true,
-			environment: "node",
-			reporters: process.env.GITHUB_ACTIONS ? ["dot", "github-actions"] : ["dot"],
-		},
-	}),
-);
+// Workspace packages resolve to their sources, so Chord's tests need no build.
+export default defineConfig({
+	test: { environment: "node" },
+	resolve: { conditions: ["source"] },
+	ssr: { resolve: { conditions: ["source"] } },
+});

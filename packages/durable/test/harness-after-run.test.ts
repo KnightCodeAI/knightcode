@@ -1,7 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Draft, JsonValue } from "@knightcode/chord";
+import type { Draft } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
 import { fauxAssistantMessage, fauxToolCall } from "@knightcode/ai";
 import {
 	CompactionTask,

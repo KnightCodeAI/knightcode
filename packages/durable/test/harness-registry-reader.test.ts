@@ -1,4 +1,3 @@
-import { BACKGROUND_CONTEXT as context } from "@knightcode/chord/context";
 import {
 	arr,
 	createHost,
@@ -10,7 +9,8 @@ import {
 	type Native,
 	type RegistryTable,
 	str,
-} from "@knightcode/chord/next";
+} from "@knightcode/chord";
+import { BACKGROUND_CONTEXT as context } from "@knightcode/chord/context";
 import { createModels } from "@knightcode/ai/models";
 import { describe, expect, it } from "vitest";
 import {

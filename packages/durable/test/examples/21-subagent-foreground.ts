@@ -5,7 +5,7 @@
 // Run from packages/durable:
 //   node --conditions=source --experimental-strip-types test/examples/21-subagent-foreground.ts
 
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import type { AssistantMessage, FauxResponseStep } from "@knightcode/ai";
 import { createModels } from "@knightcode/ai/models";

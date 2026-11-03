@@ -1,5 +1,5 @@
 import { runInNewContext } from "node:vm";
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { createModels } from "@knightcode/ai";
 import {
 	createRegistry,

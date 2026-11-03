@@ -1,5 +1,5 @@
-import { copyJson, type JsonValue } from "@knightcode/chord";
 import type { Op } from "@knightcode/chord/delta";
+import { copyJson, type JsonValue } from "@knightcode/chord/json";
 import { idFromNumber } from "./ids.ts";
 import type {
 	CheckpointInfo,

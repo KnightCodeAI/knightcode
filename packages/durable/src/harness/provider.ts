@@ -1,4 +1,4 @@
-import type { Context } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { uuidv7 } from "@knightcode/ai/utils/uuid";
 import { defineDoc } from "../documents.ts";
 import type { TaskRuntime } from "../types.ts";

@@ -4,7 +4,8 @@
  * patterns end to end.
  */
 
-import type { Context, Draft } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
+import type { Draft } from "@knightcode/chord/delta";
 import type { AssistantMessage, Models, ToolCall } from "@knightcode/ai";
 import {
 	type Conversation,

@@ -1,6 +1,6 @@
-import type { JsonValue } from "@knightcode/chord";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
 import type { Op } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
 import { idFromNumber } from "../ids.ts";
 import {
 	type ConversationId,

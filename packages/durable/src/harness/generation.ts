@@ -1,4 +1,6 @@
-import { type Context, copyJson, type Draft, type JsonValue } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
+import type { Draft } from "@knightcode/chord/delta";
+import { copyJson, type JsonValue } from "@knightcode/chord/json";
 import type {
 	Api,
 	AssistantMessage,

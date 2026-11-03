@@ -2,8 +2,8 @@
 // document) and for task document watches, which end with their task.
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
-import type { WatchCall } from "@knightcode/chord";
 import { withAbortSignal } from "@knightcode/chord/context";
+import type { WatchCall } from "@knightcode/chord/watch";
 import {
 	type ConversationView,
 	defineDoc,

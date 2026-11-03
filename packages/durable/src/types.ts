@@ -1,5 +1,7 @@
-import type { Context, Draft, JsonValue, WatchCall, WatchEnd, WatchHandle } from "@knightcode/chord";
-import type { Op } from "@knightcode/chord/delta";
+import type { Context } from "@knightcode/chord/context";
+import type { Draft, Op } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
+import type { WatchCall, WatchEnd, WatchHandle } from "@knightcode/chord/watch";
 import type { Message, Models } from "@knightcode/ai";
 import type { TelemetryCarrier } from "@knightcode/telemetry";
 import type { ExecutionEnv } from "./env/index.ts";

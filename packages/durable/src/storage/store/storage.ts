@@ -2,7 +2,6 @@
 // allocator), commits as one composite write of the store's commit step, and the reads, each one guarded read of the
 // store (several queries at one state in a read transaction), its request errors in a tagged result told after it.
 
-import type { Context, JsonValue } from "@knightcode/chord";
 import {
 	type ChordStore,
 	type Claimant,
@@ -11,7 +10,9 @@ import {
 	type SeriesCommit,
 	type Store,
 	StoreOwnerTables,
-} from "@knightcode/chord/next";
+} from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
+import type { JsonValue } from "@knightcode/chord/json";
 import type { SqliteExecutor } from "@knightcode/chord/sqlite";
 import { StorageRequestError } from "../../errors.ts";
 import { idFromNumber, seqFromNumber } from "../../ids.ts";

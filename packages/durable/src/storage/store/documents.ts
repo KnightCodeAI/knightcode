@@ -11,7 +11,7 @@ import {
 	type DocumentRecord as EngineRecord,
 	loadContent,
 	readDocumentEntry,
-} from "@knightcode/chord/next";
+} from "@knightcode/chord";
 import type { SqliteExecutor } from "@knightcode/chord/sqlite";
 import { seqFromNumber } from "../../ids.ts";
 import type {

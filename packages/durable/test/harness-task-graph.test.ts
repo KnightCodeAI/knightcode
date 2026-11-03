@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { JsonValue } from "@knightcode/chord";
 import { applyImmutable, type Op } from "@knightcode/chord/delta";
+import type { JsonValue } from "@knightcode/chord/json";
 import {
 	type ConversationId,
 	type ConversationView,

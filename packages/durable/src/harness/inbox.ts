@@ -1,4 +1,5 @@
-import { copyJson, type Draft, type JsonRepresentation } from "@knightcode/chord";
+import type { Draft } from "@knightcode/chord/delta";
+import { copyJson, type JsonRepresentation } from "@knightcode/chord/json";
 import { defineDoc } from "../documents.ts";
 import { UserEntry } from "../entries.ts";
 import type { ConversationId, EntryDraft, EntryId, EntryRecord, JsonObject, SubmissionId, Tx } from "../types.ts";

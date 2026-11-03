@@ -1,4 +1,5 @@
-import { copyJson, type Draft } from "@knightcode/chord";
+import type { Draft } from "@knightcode/chord/delta";
+import { copyJson } from "@knightcode/chord/json";
 import { defineDoc } from "../documents.ts";
 import { documentRetention, persistWithin } from "../session/session.ts";
 import type { ConversationId, ConversationRecord, Tx } from "../types.ts";

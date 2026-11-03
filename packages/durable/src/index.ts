@@ -1,4 +1,4 @@
-export type { NativeWatchCall, WatchCall, WatchEnd, WatchHandle } from "@knightcode/chord";
+export type { NativeWatchCall, WatchCall, WatchEnd, WatchHandle } from "@knightcode/chord/watch";
 export { defineDoc, defineDocFamily } from "./documents.ts";
 export {
 	AssistantEntry,

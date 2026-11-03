@@ -1,8 +1,9 @@
 import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { Context, JsonValue } from "@knightcode/chord";
+import type { Context } from "@knightcode/chord/context";
 import { BACKGROUND_CONTEXT } from "@knightcode/chord/context";
+import type { JsonValue } from "@knightcode/chord/json";
 import { registerStorageConformance } from "@knightcode/durable/testing";
 import { afterEach, describe, expect, it } from "vitest";
 import { err, FileError, type FileSystem, type Result } from "../src/env/index.ts";
