@@ -130,20 +130,20 @@ Follow "Credentials" in `mvp-goal-plan.md`. Tick each step when the
 credential is in `.dev.vars`, or when the step that needs a human is
 recorded under "Human tasks" with exactly what is needed.
 
-- [ ] **Step 1: GitHub App and OAuth app (development)**
-- [ ] **Step 2: Slack app in a development workspace**
-- [ ] **Step 3: Telegram bot**
-- [ ] **Step 4: Google Cloud OAuth client in Testing mode**
-- [ ] **Step 5: Stripe test-mode keys and a test webhook secret**
-- [ ] **Step 6: Composio API key and Plaid sandbox keys**
-- [ ] **Step 7: Local Cloudflare resources** (`wrangler d1 create` and the
+- [x] **Step 1: GitHub App and OAuth app (development)**
+- [x] **Step 2: Slack app in a development workspace**
+- [x] **Step 3: Telegram bot**
+- [x] **Step 4: Google Cloud OAuth client in Testing mode**
+- [x] **Step 5: Stripe test-mode keys and a test webhook secret**
+- [x] **Step 6: Composio API key and Plaid sandbox keys**
+- [x] **Step 7: Local Cloudflare resources** (`wrangler d1 create` and the
   rest only for a development account; nothing production)
-- [ ] **Step 8: Confirm nothing secret is tracked**
+- [x] **Step 8: Confirm nothing secret is tracked**
 
 Run: `git status --porcelain` and `git grep -n -I -E "(sk_test|xoxb-|ghp_|AIza)"` in the worktree
 Expected: `.dev.vars` is not listed; the grep finds nothing.
 
-- [ ] **Step 9: Commit the plan update** (only if "Human tasks" changed)
+- [x] **Step 9: Commit the plan update** (only if "Human tasks" changed)
 
 ```bash
 git add apps/bots/docs/plans/mvp-goal-plan.md

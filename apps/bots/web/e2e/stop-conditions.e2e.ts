@@ -120,7 +120,7 @@ test("A Slack message containing a routine's keyword, and a webhook call, each f
 		grant: { actions: [], targets: [], limits: {} },
 		active: true,
 	});
-	const teams = (await (await context.request.get(`${process.env.E2E_SLACK_URL}/api/team.info`, { headers: { authorization: "Bearer xoxb-any" } })).json().catch(() => ({}))) as { team?: { id?: string } };
+	const teams = (await (await context.request.get(`${process.env.E2E_SLACK_URL}/api/team.info`, { headers: { authorization: "Bearer e2e-any-token" } })).json().catch(() => ({}))) as { team?: { id?: string } };
 	const team = teams.team?.id ?? "T000000001";
 	expect((await postSlack(context.request, { type: "event_callback", team_id: team, event: { type: "message", channel: "C1", user: "U2", text: "the deploy is stuck", ts: "1.1" } })).ok()).toBe(true);
 	await until(async () => (await api.listRuns({ routineId: routine.id })).runs.length >= 1, "the Slack-fired run");

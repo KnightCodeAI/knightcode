@@ -197,3 +197,28 @@ never does them; it appends to this list when it meets a new one.
   secrets, the first production deploy, DNS and Email Routing for
   `bots.knightcode.dev`.
 - Reviewing the `feat/bots-mvp` branch and deciding how it merges.
+- Live development credentials (Task 4.4). The Claude in Chrome extension was
+  not connected during the run, and parts of each also need the owner (typing
+  a secret into a dashboard field, messaging BotFather, accepting terms). Each
+  value goes into `apps/bots/.dev.vars` (already created, gitignored, with
+  local secrets and commented slots):
+  - GitHub: an OAuth app (callback
+    `http://localhost:5173/auth/github/callback`) for `GITHUB_CLIENT_ID` and
+    `GITHUB_CLIENT_SECRET`; a GitHub App with pull request and issue write,
+    contents read, events `pull_request` and `issue_comment`, a webhook
+    secret you choose, and a private key, for `GITHUB_APP_ID`,
+    `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_WEBHOOK_SECRET`.
+  - Slack: an app in a development workspace with scopes
+    `app_mentions:read, channels:history, chat:write, im:history, im:write,
+    users:read`, redirect `http://localhost:5173/auth/slack/callback`, for
+    `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_SIGNING_SECRET`.
+  - Telegram: a bot from BotFather for `TELEGRAM_BOT_TOKEN`, and a webhook
+    secret token you choose for `TELEGRAM_WEBHOOK_SECRET`.
+  - Google Cloud: an OAuth client in Testing mode (consent screen terms are
+    the owner's to accept), redirect
+    `http://localhost:5173/auth/google/callback`, for `GOOGLE_CLIENT_ID` and
+    `GOOGLE_CLIENT_SECRET`.
+  - Stripe: test-mode `STRIPE_SECRET_KEY`, and a test webhook endpoint for
+    `/hooks/stripe` for `STRIPE_WEBHOOK_SECRET`.
+  - Composio `COMPOSIO_API_KEY`; Plaid sandbox `PLAID_CLIENT_ID` and
+    `PLAID_SECRET` (new accounts, if needed, are the owner's to open).
