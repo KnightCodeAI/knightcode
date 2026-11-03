@@ -37,7 +37,14 @@ slice spec's section citations are for orientation, not a reading limit (owner, 
 - **Slice 10** (built 2026-10-31, `slice-10.md`): `src/next-node/http/` (a `fetch` core with the security baseline,
   Chord's Node listener, `nodeRequest`, plugin sockets, links), `src/next-node/workers/`, `createPluginRuntime`, kinds,
   the kernel's `RouteHandle` and anonymous `host.root`, origins only from relays; examples 40-48.
-- **Chord's shared code** (upstream knightcode): `src/watch.ts` (`Watch`, `NativeWatch`, `WatchHandle`, `WatchEnd`,
+- **Slice 12** (committed 2026-11-01, `slice-12.md`): the plugin model in `src/next-node/plugins/` (the app's versioned
+  API, per-kind files, single-file plugins, installs from git and npm, `testPlugin`); examples 49-52.
+- **Slice 13** (committed 2026-11-02, `slice-13.md`): the app kit, `src/next-node/app/` (`startServer`, `startWorker`,
+  sessions, owner link, pairing, `Files`, `exportData`/`importData`); examples 53-55.
+- **Slice 11** (committed 2026-11-03, `slice-11.md`): `src/next/surfaces/` (scripts objects, registered scripts, the
+  connection loop, clients, themes), `src/next-web/`, `src/next-react/`, `src/next-tui/`, `src/next-node/surfaces/`,
+  `src/next-node/tui/` (the launcher and its child-process sandbox); examples 56-59.
+- **Chord's shared code** (the shared package): `src/watch.ts` (`Watch`, `NativeWatch`, `WatchHandle`, `WatchEnd`,
   `NativeWatchable`), Delta (`track`, `diffRevisions`, `applyImmutable`, encoders, `PendingOps`, `appendText`),
   context, JSON, output, SQLite drivers.
 
@@ -45,7 +52,7 @@ slice spec's section citations are for orientation, not a reading limit (owner, 
 
 Order (owner, 2026-10-22: routines and jobs before the store and reload; 2026-10-27: slice 8 before slice 7, whose
 reload has to reload real registries; 2026-10-29: slice 7 split into 7a, 7b, 7c; the app kit as slices 10 and 11;
-telemetry last, since it instruments the app kit too).
+telemetry last, since it instruments the app kit too; 2026-11-01: the plugin model (12) and the app kit (13) before web and TUI (11), which builds into the kit).
 
 | # | Slice | In short |
 | --- | --- | --- |
@@ -63,6 +70,8 @@ telemetry last, since it instruments the app kit too).
 | 7b | **Reload in the kernel** | `host.reload`: staging, commit, rollback; swaps, restarts, removal and re-serving; holds and `accepts` across a reload; jobs and registries across a reload; per-name wakes (`slice-7b/` brief) |
 | 7c | **Plugins** | `chord/next/plugins` (discovery, `buildFacet`, `evaluateFacet`, `pluginFile`, `installDependencies`, the watcher, `rollout`, `mapStack`; no dev/prod split; the kernel's `load`/`reload` per plugin; `slice-7c.md`) |
 | 10 | **HTTP and workers** | `chord/next/http` (server, `Http` registry, responses as descriptions, WebSocket entry) and `chord/next/workers` (a worker per address, IPC, idle stop) |
+| 12 | **The plugin model** | imports (relative within a repository, package names pinned across), versioned app API with Chord re-exported, per-kind API modules and contract files with the build's import check, single-file plugins, git installs, `testPlugin`, a required root (`slice-12.md`) |
+| 13 | **The app kit** | `chord/next/app`: `startServer`, `startWorker`, layout, worker kinds, owner link, deny by default, sessions, CLI tokens, storage, the files plugin, export per address, plugin roots and "apply changes", base code as API, bootstrap and a start-data facet (`slice-13.md`) |
 | 11 | **Web and TUI** | `chord/next/web` (page host, React hooks) and `chord/next/tui` (launcher, sandbox), from p2's code |
 | 9 | **Telemetry** | spans, events, metrics across hosts |
 
@@ -145,6 +154,8 @@ pattern, no code. Decided cuts are noted where they apply.
 | 22 | relays, size limits per part, compression at the origin, adapted bindings get diffs | 4a (relays), 4b (limits, compression), 7b |
 | 22 | trace carriers (R5) | 9 |
 | 23 | HTTP (routes, wraps, responses as descriptions, request bodies, plugin sockets), workers; channels and chunked transfers stay owner patterns until a second user | 10 |
+| 23 | the app kit: `startServer`, `startWorker`, start-data objects, deny by default, sessions, owner link and token file, device pairing, files (with chunked transfers), export and import per address, plugin roots and "apply changes", optional users, invite and ephemeral-login plugins | 13 |
+| 23 | web and TUI: base bundles, registered plugin scripts and the combined file, `WebScripts`/`TuiScripts`, `startPage` with the connection loop and in-place reloads, React bindings, the sandboxed terminal (launcher, sandbox, `TuiScope`), themes (`Themes`, `ThemeChoice`, CSS variables, terminal colours), CSS modules | 11 |
 | 24 | Durable integration: `chord(fn, context)` (Q6), a `RegistryReader` over composed registries; the harness object and its model and env registries are p3's (base code, owner, 2026-10-27) | 8 (Chord parts), p3 |
 | 24 | `StoreStorage` | 6b |
 | 27 | versions table: contracts (L1 done), registries 8, documents 6, jobs 5, link protocol 3a | as listed |
@@ -161,6 +172,7 @@ Obligations a slice deliberately left to a later one, under the slice that must 
 Rules (owner, 2026-10-22): whoever defers something (this session, a subagent, a reviewer) adds it here in the same
 change; a slice's spec includes every entry of its section, and its build and review check them off; a done entry is
 deleted (the slice's spec and code are the record). Moved here from `carry-over.md` (owner, 2026-10-24).
+
 
 ### Any slice (protocol and checks)
 
@@ -185,6 +197,11 @@ deleted (the slice's spec and code are the record). Moved here from `carry-over.
 
 ### After slice 11
 
+- **Messages and languages in the app kit** (decision "Messages and languages in the app kit", proposal
+  `docs/next/i18n/`): `defineMessages`, `t.message`/`t.render`, `MessagesOf`, the `Translations` registry with
+  fallbacks and conflicts, the locale preference per principal (default from the device, live switch, `lang`/`dir` on
+  the page), `useMessages` and the terminal scope's redraw, `formatTime`/`formatNumber`; tests and an example (the
+  notes plugin in English and German, a French translation plugin, a server message rendered per viewer).
 - **Small examples** (owner, 2026-10-30: the 7c examples are complete but complex): once HTTP, workers, web and TUI
   exist, a pass of small, easy-to-read examples, each showing one thing a plugin author or app does.
 
@@ -195,12 +212,12 @@ deleted (the slice's spec and code are the record). Moved here from `carry-over.
 
 - Round-3 cut to decide: C11 (`ctx.trace`).
 
-### When v2 goes upstream
+### When v2 becomes the package root
 
 - `mapShared` lives in `src/next/state/derive.ts` and moves into Delta. (L2 decisions.)
-- `withLinkedAbortSignal` lives in `src/next/host/ctx.ts` and moves next to `withAbortSignal` in `src/context` (knightcode
-  first): a call's context linked to long-lived abort signals until the call settles, instead of `AbortSignal.any`,
-  which keeps cleanup entries per call while its sources live before Node 24.16.0 (nodejs/node#62367). (Slice 4a.)
+- `withLinkedAbortSignal` lives in `src/next/host/ctx.ts` and moves next to `withAbortSignal` in `src/context` (shared
+  package first): a call's context linked to long-lived abort signals until the call settles, instead of `AbortSignal.any`,
+  which keeps cleanup entries per call while its sources live before Node 24.16.0 (Node issue 62367). (Slice 4a.)
 - The `./next` package export returns when the new code has an entry point (removed with the frozen-kernel move).
 - A `./next/node` export for `nodeCompression` (`src/next-node/`), with `./next`. (Slice 4b.)
 
