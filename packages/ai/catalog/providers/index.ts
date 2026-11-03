@@ -12,6 +12,7 @@ import cloudflareAiGateway from "./cloudflare-ai-gateway.ts";
 import cloudflareWorkersAi from "./cloudflare-workers-ai.ts";
 import deepseek from "./deepseek.ts";
 import fireworks from "./fireworks.ts";
+import geminiWeb from "./gemini-web.ts";
 import githubCopilot from "./github-copilot.ts";
 import google from "./google.ts";
 import googleVertex from "./google-vertex.ts";
@@ -57,6 +58,7 @@ export const PROVIDERS: readonly ProviderDefinition[] = [
 	cloudflareWorkersAi,
 	deepseek,
 	fireworks,
+	geminiWeb,
 	githubCopilot,
 	googleVertex,
 	google,

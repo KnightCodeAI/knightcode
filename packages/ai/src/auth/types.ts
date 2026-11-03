@@ -175,6 +175,9 @@ export interface ApiKeyAuth {
 	/** Display name, e.g. "Anthropic API key". */
 	name: string;
 
+	/** Whether access through this auth method is backed by a subscription. */
+	isSubscription?: boolean;
+
 	/** Interactive setup (prompt for key/provider env). Absent = ambient-only. */
 	login?(interaction: ProviderAuthInteraction): Promise<ApiKeyCredential>;
 

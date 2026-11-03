@@ -70,6 +70,7 @@ import {
 import { getAgentDir } from "../config.ts";
 import { operationSignal, raceWithAbortSignal } from "../utils/abort.ts";
 import { AuthStorage as DefaultAuthStorage } from "./auth-storage.ts";
+import { isCommandConfigValue } from "./resolve-config-value.ts";
 import { ModelConfig } from "./model-config.ts";
 import { FileModelsStore, InMemoryCodingAgentModelsStore } from "./models-store.ts";
 import {
@@ -685,6 +686,21 @@ export class ModelRuntime implements Models {
 		if (transformHeaders) headers = await transformHeaders(headers ?? {});
 		const env =
 			resolution.env || providerOptions.env ? { ...(resolution.env ?? {}), ...(providerOptions.env ?? {}) } : undefined;
+		const callerApiKeyUpdate = providerOptions.onApiKeyUpdate;
+		const onApiKeyUpdate = async (apiKey: string) => {
+			await this.credentials.modify(model.provider, async (current) => {
+				if (
+					current?.type !== "api_key" ||
+					!current.key ||
+					isCommandConfigValue(current.key) ||
+					current.key === apiKey
+				) {
+					return undefined;
+				}
+				return { ...current, key: apiKey };
+			});
+			await callerApiKeyUpdate?.(apiKey);
+		};
 		return {
 			provider,
 			model: requestModel,
@@ -693,6 +709,7 @@ export class ModelRuntime implements Models {
 				apiKey: providerOptions.apiKey ?? resolution.auth.apiKey,
 				headers,
 				env,
+				onApiKeyUpdate,
 			} as Omit<TOptions, "transformHeaders"> & ProviderRequestOptions<TModel>,
 		};
 	}
