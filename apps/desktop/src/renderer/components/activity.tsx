@@ -453,15 +453,35 @@ function ToolBody({ item, cwd, nested }: { item: ToolItem; cwd: string; nested: 
 	);
 }
 
-export function ToolRow({ item, cwd, nested }: { item: ToolItem; cwd: string; nested: ToolItem[] }) {
-	const [open, setOpen] = useState(false);
+export function ToolRow({
+	item,
+	cwd,
+	nested,
+	live = false,
+}: {
+	item: ToolItem;
+	cwd: string;
+	nested: ToolItem[];
+	live?: boolean;
+}) {
+	const [toggled, setOpen] = useState<boolean>();
+	// Keep command output visible while the turn runs, even after a command completes. A user's toggle wins.
+	const open = toggled ?? (live && kindOf(item.tool) === "command");
 	const toggle = expandable(item) || nested.length > 0 ? () => setOpen(!open) : undefined;
 	return (
 		<ActivityRow
 			icon={<KindIcon kind={kindOfItem(item)} tool={item.tool} />}
-			label={<Label item={item} cwd={cwd} open={open} />}
+			label={
+				<>
+					<Label item={item} cwd={cwd} open={open} />
+					{(item.status === "failed" || item.status === "declined") && kindOf(item.tool) !== "edit" ? (
+						<span className="ms-2 text-sm text-danger-text">{item.status === "declined" ? "Declined" : "Failed"}</span>
+					) : null}
+				</>
+			}
 			open={open}
 			onToggle={toggle}
+			active={live && isRunning(item)}
 		>
 			<ToolBody item={item} cwd={cwd} nested={nested} />
 		</ActivityRow>
@@ -499,14 +519,7 @@ export function ActivityGroup({
 	);
 }
 
-/** While a turn runs, Codex shows only the call in progress: its row in the present tense, shimmering. */
+/** A live call stays expandable, so a long-running command does not hide its output. */
 export function ActiveRow({ item, cwd }: { item: ToolItem; cwd: string }) {
-	const label = rowLabel(item, cwd);
-	return (
-		<ActivityRow
-			icon={<KindIcon kind={kindOfItem(item)} tool={item.tool} />}
-			label={<span className="truncate">{label.path ? `${label.text} ${label.path}` : label.text}</span>}
-			active
-		/>
-	);
+	return <ToolRow item={item} cwd={cwd} nested={[]} live />;
 }

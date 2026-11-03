@@ -329,11 +329,20 @@ const PARTS: [Kind, (n: number) => string][] = [
 /** "Edited files, ran commands": a group's parts in Codex's order, the first capitalised. Files count once each. */
 export function activitySummary(items: ToolItem[]): string {
 	const text = PARTS.flatMap(([kind, phrase]) => {
-		const mine = items.filter((i) => kindOfItem(i) === kind);
+		const mine = items.filter((i) => kindOfItem(i) === kind && i.status !== "failed" && i.status !== "declined");
 		const n = kind === "edit" ? new Set(mine.map(editPath)).size : mine.length;
 		return n > 0 ? [phrase(n)] : [];
 	}).join(", ");
-	return text ? text.charAt(0).toUpperCase() + text.slice(1) : "Worked";
+	const failures = items.filter((item) => item.status === "failed").length;
+	const denials = items.filter((item) => item.status === "declined").length;
+	const summary = [
+		text,
+		failures ? `${failures} failed ${failures === 1 ? "call" : "calls"}` : "",
+		denials ? `${denials} declined ${denials === 1 ? "call" : "calls"}` : "",
+	]
+		.filter(Boolean)
+		.join(", ");
+	return summary ? summary.charAt(0).toUpperCase() + summary.slice(1) : "Worked";
 }
 
 /** The kind whose icon heads a group: its summary's first part. */
@@ -385,6 +394,11 @@ export function rowLabel(item: ToolItem, cwd: string, open = false, background?:
 	const running = isRunning(item);
 	const rawPath = str(input.path) || str(input.file_path);
 	const path = rawPath ? shortPath(displayPath(rawPath, cwd)) : undefined;
+	if (item.status === "pending")
+		return {
+			text: `Preparing ${item.tool}${str(input.command) ? ` ${str(input.command).trim().split("\n")[0]}` : ""}`,
+			...(rawPath ? { path: shortPath(displayPath(rawPath, cwd)), target: rawPath } : {}),
+		};
 	const verb = (done: string, doing: string) => (running ? doing : done);
 	switch (item.tool) {
 		case "read": {
@@ -410,12 +424,13 @@ export function rowLabel(item: ToolItem, cwd: string, open = false, background?:
 		case "edit":
 		case "write": {
 			const kind = item.fileChanges?.[0]?.kind;
-			if (open) return { text: kind === "add" ? "Created file" : kind === "delete" ? "Deleted file" : "Edited file" };
+			if (open && item.status === "completed")
+				return { text: kind === "add" ? "Created file" : kind === "delete" ? "Deleted file" : "Edited file" };
 			const text =
 				item.status === "declined"
 					? "Rejected"
 					: item.status === "failed"
-						? "Stopped editing"
+						? `${item.tool === "write" ? "Write" : "Edit"} failed`
 						: running
 							? item.tool === "write"
 								? "Writing"
@@ -459,11 +474,12 @@ export function rowLabel(item: ToolItem, cwd: string, open = false, background?:
 	}
 }
 
-/** Whether a row opens: reads, searches, listings and web searches show their output only when they failed. */
+/** Every tool with output can open, including successful reads and searches. */
 export function expandable(item: ToolItem): boolean {
 	const kind = kindOfItem(item);
 	return (
 		item.view !== undefined ||
+		item.output.length > 0 ||
 		(kind !== "explore" && kind !== "web") ||
 		item.status === "failed" ||
 		item.status === "declined"
@@ -491,13 +507,13 @@ export type Entry = { kind: "item"; item: ViewItem } | { kind: "group"; items: T
 const groupable = (item: ViewItem): item is ToolItem =>
 	item.type === "toolCall" && !item.parentItemId && kindOf(item.tool) !== "question" && kindOf(item.tool) !== "plan";
 
-/** Work in order, two or more consecutive calls folded into a group. Nested calls render under their parent. */
-export function workEntries(items: ViewItem[]): Entry[] {
+/** Work in order: live calls stay individual; past consecutive calls fold. Nested calls stay under their parent. */
+export function workEntries(items: ViewItem[], live = false): Entry[] {
 	const entries: Entry[] = [];
 	const top = items.filter((i) => !(i.type === "toolCall" && i.parentItemId));
 	for (let i = 0; i < top.length; i++) {
 		const item = top[i]!;
-		if (!groupable(item)) {
+		if (live || !groupable(item)) {
 			entries.push({ kind: "item", item });
 			continue;
 		}
@@ -547,7 +563,7 @@ export function threadSources(turns: { items: ViewItem[] }[]): {
 
 /**
  * What the model is thinking about, as the "Thinking" status names it: the bold heading its latest reasoning summary
- * opens with ("**Inspecting the repo**"). Reasoning shows only there, never as rows of its own.
+ * opens with ("**Inspecting the repo**"). The exposed summary can also be opened in the turn's activity.
  */
 export function thinkingHeading(items: ViewItem[]): string | undefined {
 	for (let i = items.length - 1; i >= 0; i--) {

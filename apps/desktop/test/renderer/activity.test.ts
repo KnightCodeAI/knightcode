@@ -329,3 +329,41 @@ test("what follows a turn's reply keeps its order: a compaction, then a notice r
 	// No reply: nothing is set apart.
 	expect(afterReply(items, -1)).toEqual([]);
 });
+
+test("live work stays in order without folding completed calls out of sight", () => {
+	const parent = call("codemode");
+	const nested = call("read", {}, { parentItemId: parent.id });
+	const items: ViewItem[] = [text("progress"), parent, nested, call("edit"), call("bash", {}, { status: "running" })];
+	const entries = workEntries(items, true);
+	expect(entries.every((entry) => entry.kind === "item")).toBe(true);
+	expect(entries.map((entry) => (entry.kind === "item" ? entry.item.id : "group"))).toEqual([
+		"progress",
+		parent.id,
+		items[3]!.id,
+		items[4]!.id,
+	]);
+});
+
+test("successful reads and web searches expose their confirmed output", () => {
+	for (const tool of ["read", "grep", "ls", "websearch", "webfetch"])
+		expect(expandable(call(tool, {}, { output: [{ type: "text", text: "confirmed result" }] })), tool).toBe(true);
+});
+
+test("failed or declined edits never appear in the summary as completed edits", () => {
+	const failed = call("edit", { path: "a.ts" }, { status: "failed" });
+	const denied = call("write", { path: "b.ts" }, { status: "declined" });
+	expect(activitySummary([failed, denied])).toBe("1 failed call, 1 declined call");
+	expect(rowLabel(failed, "", true).text).toBe("Edit failed");
+	expect(rowLabel(denied, "", true).text).toBe("Rejected");
+});
+
+test("pending previews are labeled Preparing, not Editing or Running", () => {
+	expect(rowLabel(call("edit", { path: "a.ts" }, { status: "pending" }), "")).toMatchObject({
+		text: "Preparing edit",
+		path: "a.ts",
+	});
+	expect(rowLabel(call("bash", { command: "npm test" }, { status: "pending" }), "").text).toBe(
+		"Preparing bash npm test",
+	);
+	expect(rowLabel(call("bash", { command: "npm test" }, { status: "running" }), "").text).toBe("Running npm test");
+});

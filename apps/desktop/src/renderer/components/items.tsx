@@ -5,8 +5,8 @@
  * Copy and time. While a turn runs its work shows as it happens under "Working for …".
  *
  * Work is a column 16px apart: the agent's commentary, reasoning, and tool calls (components/activity.tsx), two or
- * more in a row folded under one summary ("Edited files, ran commands"). While the turn runs, finished calls are
- * hidden and the running one shows in the present tense, as in Codex; a turn with no final reply shows its work open.
+ * more in a row folded under one summary for older turns. Running turns keep completed calls visible and commands
+ * expandable; the latest outcome and failed/interrupted turns default to open. Exposed thought summaries can open.
  */
 
 import type { TurnFile } from "@knightcode/app-server-protocol";
@@ -26,7 +26,7 @@ import {
 	type ViewItem,
 	type ViewTurn,
 } from "../store.ts";
-import { ActiveRow, ActivityGroup, BackgroundNotices, ToolRow } from "./activity.tsx";
+import { ActivityGroup, BackgroundNotices, ToolRow } from "./activity.tsx";
 import { Button, IconButton } from "./button.tsx";
 import { Tooltip } from "./tooltip.tsx";
 import {
@@ -349,20 +349,16 @@ function FoldedText({ text }: { text: string }) {
 }
 
 /**
- * Work in order: commentary and tool calls, consecutive calls folded under one summary. While the turn runs every
- * action stays in sight; a call in progress is its present-tense row in its place, only the finished calls on either
- * side folded. Reasoning is not a row: it shows only in the "Thinking" status.
+ * Work in order: commentary, exposed thought summaries and tool calls. Live/latest work stays individual;
+ * older consecutive calls can fold under a summary. Commands open by default while their turn remains expanded.
  */
 function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cwd: string }) {
 	const nestedOf = (id: string) => items.filter((i): i is ToolItem => i.type === "toolCall" && i.parentItemId === id);
-	const entries = workEntries(items);
+	const entries = workEntries(items, live);
 	const rows: ReactNode[] = [];
-	const call = (item: ToolItem) =>
-		live && isRunning(item) ? (
-			<ActiveRow key={item.id} item={item} cwd={cwd} />
-		) : (
-			<ToolRow key={item.id} item={item} cwd={cwd} nested={nestedOf(item.id)} />
-		);
+	const call = (item: ToolItem) => (
+		<ToolRow key={item.id} item={item} cwd={cwd} nested={nestedOf(item.id)} live={live} />
+	);
 	for (const entry of entries) {
 		if (entry.kind === "group") {
 			let done: ToolItem[] = [];
@@ -384,6 +380,15 @@ function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cw
 		const item = entry.item;
 		if (item.type === "toolCall") rows.push(call(item));
 		else if (item.type === "agentMessage") rows.push(<Markdown key={item.id} text={item.text} />);
+		else if (item.type === "reasoning" && item.text.trim())
+			rows.push(
+				<details key={item.id} className="rounded-md border border-line px-3 py-2 text-secondary">
+					<summary className="cursor-pointer text-sm">Thought summary</summary>
+					<div className="pt-2">
+						<Markdown text={item.text} />
+					</div>
+				</details>,
+			);
 		else if (item.type === "compaction") rows.push(<CompactionDivider key={item.id} />);
 		else if (item.type === "extensionMessage" && item.backgroundShells)
 			rows.push(<BackgroundNotices key={item.id} notices={item.backgroundShells} />);
@@ -595,7 +600,10 @@ export function TurnView({
 	const workingVisible = useStore((s) => s.held[threadId]?.ui.workingVisible !== false);
 	const workingMessage = useStore((s) => s.held[threadId]?.ui.workingMessage);
 	const working = { visible: workingVisible, message: workingMessage };
-	const [open, setOpen] = useState(false);
+	const [toggled, setOpen] = useState<boolean>();
+	// Keep the latest outcome and failures inspectable rather than silently hiding the work at completion.
+	const expandByDefault = latest || turn.status === "failed" || turn.status === "interrupted";
+	const open = toggled ?? expandByDefault;
 	const first = turn.items.find((i) => i.type === "userMessage");
 	// A run a background command's end started has no message of the user's: the notice opens the turn in its place,
 	// out of the work it folds.
@@ -610,9 +618,14 @@ export function TurnView({
 	const plan = turn.items.findLast(isPlan);
 	// Below the reply, in the order they came: later compactions and notices recorded after it.
 	const later = afterReply(rest, finalIndex);
-	// Reasoning is no row (it shows only in the running status), so a turn of reasoning alone has no work.
+	// Exposed thought summaries remain expandable with the work; no hidden reasoning is requested or synthesized.
 	const work = rest.filter(
-		(i) => i !== final && i.type !== "compaction" && i.type !== "reasoning" && !isPlan(i) && !later.includes(i),
+		(i) =>
+			i !== final &&
+			i.type !== "compaction" &&
+			!isPlan(i) &&
+			!later.includes(i) &&
+			(i.type !== "reasoning" || i.text.trim().length > 0),
 	);
 	const last = turn.items.at(-1);
 	// A reply streaming in shows itself; until one does, the "Thinking" status stands in.
@@ -654,11 +667,11 @@ export function TurnView({
 				</>
 			) : work.length > 0 && !final ? (
 				// No reply to fold the work under (a turn that only asked questions).
-				<WorkItems items={work} cwd={cwd} />
+				<WorkItems items={work} live={expandByDefault} cwd={cwd} />
 			) : work.length > 0 ? (
 				<div className="flex flex-col gap-4">
 					<WorkedFor turn={turn} open={open} onToggle={() => setOpen(!open)} />
-					{open ? <WorkItems items={work} cwd={cwd} /> : null}
+					{open ? <WorkItems items={work} live={expandByDefault} cwd={cwd} /> : null}
 				</div>
 			) : null}
 			{/* MCP Apps stay in sight when the work folds, and in one place while the turn runs and after, so the frame

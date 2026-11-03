@@ -101,11 +101,13 @@ test("a prompt gets the model's reply, and a bash call runs once approved", asyn
 	await send(page, "run echo e2e-bash");
 	await page.getByRole("button", { name: /^Allow once/ }).click();
 	await expect(page.getByText("Ran it.")).toBeVisible();
-	// A finished turn folds its work under one summary.
-	await page
-		.getByRole("button", { name: /^Worked for/ })
-		.last()
-		.click();
+	// The latest completed turn keeps its work visible, and still allows an explicit collapse.
+	const worked = page.getByRole("button", { name: /^Worked for/ }).last();
+	await expect(worked).toHaveAttribute("aria-expanded", "true");
+	await expect(page.getByText(/Ran echo e2e-bash/)).toBeVisible();
+	await worked.click();
+	await expect(worked).toHaveAttribute("aria-expanded", "false");
+	await worked.click();
 	await expect(page.getByText(/Ran echo e2e-bash/)).toBeVisible();
 });
 
@@ -132,6 +134,25 @@ test("Not now leaves a project undecided, so it loads without its own settings",
 	await expect(page.getByRole("button", { name: "Stop" })).toBeHidden();
 	// Checked once the thread has loaded and answered, so a decision written anywhere along the way would show.
 	expect(existsSync(join(agentDir, "trust.json"))).toBe(false);
+});
+
+test("live work exposes thoughts, available reads, and command output before the turn finishes", async () => {
+	const { page, project } = await launch();
+	await send(page, "show live progress");
+	await expect(page.getByText("Reading README and checking command progress.")).toBeVisible();
+	await page.getByRole("button", { name: /^Allow once/ }).click();
+	const output = page.locator(".selectable.w-max").last();
+	await expect(output).toHaveText("progress-one");
+	await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+	await page.getByText("Thought summary", { exact: true }).click();
+	await expect(page.getByText("Checking a read and a bounded diagnostic command.")).toBeVisible();
+	// The file-name link opens a file tab; the row's icon toggles its output.
+	await page.getByRole("button", { name: /Read[\s\S]*README/ }).click({ position: { x: 8, y: 8 } });
+	await expect(page.getByText(/# e2e fixture/)).toBeVisible();
+	writeFileSync(join(project, ".e2e-release"), "release");
+	await expect(page.getByText("Ran it.")).toBeVisible();
+	await expect(page.getByRole("button", { name: /^Worked for/ })).toHaveAttribute("aria-expanded", "true");
+	await expect(output).toContainText("progress-two");
 });
 
 test("Stop interrupts a running turn", async () => {
