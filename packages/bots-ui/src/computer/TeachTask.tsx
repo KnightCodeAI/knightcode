@@ -24,15 +24,20 @@ export function TeachTask({
 	const toast = useToast();
 	const [goal, setGoal] = useState("");
 	const [phase, setPhase] = useState<Phase>({ kind: "goal" });
+	// Closing the panel, or leaving it, while recording stops the session and releases control. The session counts from
+	// the moment it exists: control can show as taken (the socket says so) before taking it has returned here.
+	const recording = useRef<string | undefined>(undefined);
+	const closed = useRef(false);
 	const start = async () => {
 		const { sessionId } = await store.api.startTeaching({ botId, goal: goal.trim() || "A task" });
+		recording.current = sessionId;
+		// Closed while the session was being started: it stops now, and control is never taken.
+		if (closed.current) return abandon();
 		await onTake(true);
-		setPhase({ kind: "recording", sessionId });
+		if (recording.current === sessionId) setPhase({ kind: "recording", sessionId });
 	};
-	// Closing the panel, or leaving it, while recording stops the session and releases control.
-	const recording = useRef<string | undefined>(undefined);
-	recording.current = phase.kind === "recording" ? phase.sessionId : undefined;
 	const abandon = () => {
+		closed.current = true;
 		const sessionId = recording.current;
 		if (!sessionId) return;
 		recording.current = undefined;
@@ -43,7 +48,11 @@ export function TeachTask({
 	};
 	const abandonOnLeave = useRef(abandon);
 	abandonOnLeave.current = abandon;
-	useEffect(() => () => abandonOnLeave.current(), []);
+	useEffect(() => {
+		// Mounted (again, after StrictMode's trial unmount): open.
+		closed.current = false;
+		return () => abandonOnLeave.current();
+	}, []);
 	const stop = async (sessionId: string) => {
 		recording.current = undefined;
 		const draft = await store.api.stopTeaching({ botId, sessionId });
