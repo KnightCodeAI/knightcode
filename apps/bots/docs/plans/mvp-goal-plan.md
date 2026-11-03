@@ -201,25 +201,53 @@ never does them; it appends to this list when it meets a new one.
   owner: the run may create development resources but never reads a secret
   out of a dashboard into its session, types one into a field, messages
   BotFather or accepts terms. Each value goes into `apps/bots/.dev.vars`
-  (gitignored; local secrets and commented slots already there). Done so far:
-  the GitHub OAuth app "KnightCode Bots (local)" exists with callback
-  `http://localhost:5173/auth/github/callback`, and its client id and secret
-  are in `.dev.vars`. Still to do:
-  - GitHub: a GitHub App with pull request and issue write,
-    contents read, events `pull_request` and `issue_comment`, a webhook
-    secret you choose, and a private key, for `GITHUB_APP_ID`,
-    `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_WEBHOOK_SECRET`.
-  - Slack: an app in a development workspace with scopes
-    `app_mentions:read, channels:history, chat:write, im:history, im:write,
-    users:read`, redirect `http://localhost:5173/auth/slack/callback`, for
-    `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_SIGNING_SECRET`.
-  - Telegram: a bot from BotFather for `TELEGRAM_BOT_TOKEN`, and a webhook
-    secret token you choose for `TELEGRAM_WEBHOOK_SECRET`.
-  - Google Cloud: an OAuth client in Testing mode (consent screen terms are
-    the owner's to accept), redirect
-    `http://localhost:5173/auth/google/callback`, for `GOOGLE_CLIENT_ID` and
-    `GOOGLE_CLIENT_SECRET`.
-  - Stripe: test-mode `STRIPE_SECRET_KEY`, and a test webhook endpoint for
-    `/hooks/stripe` for `STRIPE_WEBHOOK_SECRET`.
-  - Composio `COMPOSIO_API_KEY`; Plaid sandbox `PLAID_CLIENT_ID` and
-    `PLAID_SECRET` (new accounts, if needed, are the owner's to open).
+  (gitignored). Done 2026-11-03: every development value is in `.dev.vars`
+  and was checked against the live provider:
+  - GitHub OAuth app "KnightCode Bots (local)"; GitHub App "KnightCode Bots
+    Dev" (id 5594154, owner Raghav1428, key stored as PKCS#8).
+  - Google OAuth client "KnightCode Bots Dev" in project `n8n-dev-485309`
+    (Testing; redirects on localhost and the tunnel host).
+  - Stripe sandbox: secret key, plan price, top-up product, and webhook
+    `knightcode-bots-dev` to `/hooks/stripe` with the 7 handled events.
+  - Telegram bot `@knightcode_bots_dev_bot`, webhook set with the secret.
+  - Slack app "KnightCode Bots Dev" (`A0CEF7T9E7Q`, workspace "New
+    Workspace"), events URL verified (`app_mention`, `message.channels`,
+    `message.im`).
+  - Composio project `knightcode_bots_dev`; Plaid sandbox (team KnightCode).
+  Webhooks reach the dev server through the Cloudflare tunnel
+  `knightcode-bots-dev` (`https://bots-dev.knightcode.dev` to
+  `localhost:5173`, Host rewritten). Run it beside the dev server when
+  smoke-testing:
+  `cloudflared tunnel --config C:\Users\Raghav\.cloudflared\knightcode-bots-dev.yml run`.
+  Still to do for development:
+  - Google: add the sign-in accounts under Audience, Test users (Testing
+    mode admits only listed users).
+  - Optional: rotate the development secrets that were shown in the setup
+    session (Stripe webhook secret, Telegram token, Slack client and
+    signing secrets, Composio key, Plaid sandbox secret). The owner chose
+    not to for now.
+- Production credentials (deferred by the owner until the development smoke
+  tests pass). Values go into the gitignored `apps/bots/.prod.vars` and are
+  set with `bunx wrangler secret bulk .prod.vars --env production`:
+  - `SESSION_SECRET`: new random value.
+  - GitHub: an OAuth app with callback
+    `https://bots.knightcode.dev/auth/github/callback`; a public GitHub App
+    "KnightCode Bots" under the KnightCodeAI org with the development app's
+    permissions and events, webhook `https://bots.knightcode.dev/hooks/github`,
+    its own webhook secret, and its key converted with
+    `openssl pkcs8 -topk8 -nocrypt`. GitHub rejects a webhook URL it cannot
+    reach, so create it after the first deploy or with the webhook inactive.
+  - Google: a production client with redirect
+    `https://bots.knightcode.dev/auth/google/callback`; publishing the
+    consent screen needs a home page and privacy policy URL.
+  - Slack: the production redirect and events URL on
+    `https://bots.knightcode.dev` (the events URL verifies only against the
+    running Worker).
+  - Telegram: a production bot, `setWebhook` to
+    `https://bots.knightcode.dev/hooks/telegram` with a new secret token.
+  - Stripe: activate the account for live mode (business verification),
+    then the live key, a live webhook for `/hooks/stripe` with the same 7
+    events, a live $10 monthly USD plan price and a top-up product.
+  - Composio: a production project key, and `COMPOSIO_WEBHOOK_SECRET` with a
+    webhook to `https://bots.knightcode.dev/hooks/composio`.
+  - Plaid: production access (see "Plaid production approval" above).
