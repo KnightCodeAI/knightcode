@@ -582,9 +582,13 @@ export class UserObject extends DurableObject<Env> {
 		return issueLinkCode(this.env.DB, { channel: "telegram", accountId: this.#accountId, botId });
 	}
 	async linkSlackDms(botId: string): Promise<ProtocolChannelLink> {
-		const team = await this.env.DB.prepare("SELECT team_id FROM slack_teams WHERE account_id = ?").bind(this.#accountId).first<{ team_id: string }>();
+		const team = await this.env.DB.prepare("SELECT team_id, owner_user_id FROM slack_teams WHERE account_id = ?")
+			.bind(this.#accountId)
+			.first<{ team_id: string; owner_user_id: string | null }>();
 		if (!team) throw new Error("Slack is not installed for this account");
-		const externalChat = `${team.team_id}:dm`;
+		// The DMs of the Slack user who installed the app (inbound DMs are keyed "<team>:<user>"); nobody else's.
+		if (!team.owner_user_id) throw new Error("Reinstall the Slack app to link your direct messages");
+		const externalChat = `${team.team_id}:${team.owner_user_id}`;
 		const now = Date.now();
 		await this.env.DB.prepare("INSERT OR REPLACE INTO channel_links (channel, external_chat, account_id, bot_id, mode, created_at) VALUES ('slack', ?, ?, ?, 'direct', ?)")
 			.bind(externalChat, this.#accountId, botId, now)

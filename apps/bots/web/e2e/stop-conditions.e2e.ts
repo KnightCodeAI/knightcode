@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectProviders, providerRules } from "../../../desktop/src/main/bots/connect.ts";
 import { expect, REAL, test } from "./fixtures.ts";
-import { apiOf, postGitHub, postSlack, script, sendMailToBot, sentMail, threadTexts, until, WEB } from "./stop-helpers.ts";
+import { apiOf, installSlack, postGitHub, postSlack, postTelegram, script, sendMailToBot, sentMail, telegramSent, threadTexts, until, WEB } from "./stop-helpers.ts";
 
 test.skip(!REAL, "the stop conditions run against the real backend (BOTS_BACKEND=real)");
 test.describe.configure({ timeout: 120_000 });
@@ -106,12 +106,7 @@ test("After four hours away, the user sees what finished and what waits; the inb
 test("A Slack message containing a routine's keyword, and a webhook call, each fire that routine", async ({ context, page }) => {
 	const api = apiOf(context.request);
 	// Add to Slack: the app installs in the workspace through Slack's own consent page.
-	await page.goto("/settings/channels");
-	const popup = page.waitForEvent("popup");
-	await page.getByRole("button", { name: /Add to Slack|Reinstall/ }).click();
-	const consent = await popup;
-	await consent.getByRole("button").filter({ hasText: /ada|allow|authorize|continue/i }).first().click();
-	await consent.waitForURL(/\/settings\/channels\?slack=installed/);
+	await installSlack(page);
 	const { slackInstalled } = await api.getChannels({});
 	expect(slackInstalled).toBe(true);
 	const routine = await api.createRoutine({
@@ -232,4 +227,28 @@ test("A user connects Gmail, HubSpot and Notion from one catalog in which no ent
 	}
 	const connected = (await api.listCatalog({})).entries.filter((entry) => entry.connection?.status === "connected").map((entry) => entry.name);
 	expect(connected).toEqual(expect.arrayContaining(["Gmail", "HubSpot", "Notion"]));
+});
+
+test("The user talks to a bot from Telegram and from Slack, and sees the same thread in the web app on a phone", async ({ context, page }) => {
+	const api = apiOf(context.request);
+	const bot = await api.createBot({ name: "Courier", purpose: "Answers wherever the owner writes" });
+	await script(context.request, { Courier: ["Got your Telegram note.", "Got your Slack note."] });
+	// Telegram: the code shown in Settings, sent from the chat, links it.
+	const chat = 400_000 + Math.floor(Math.random() * 100_000);
+	const { code } = await api.createTelegramCode({ botId: bot.id });
+	expect((await postTelegram(context.request, chat, code)).ok()).toBe(true);
+	await until(async () => (await telegramSent(context.request, chat)).some((text) => text.startsWith("Linked.")), "the link notice");
+	expect((await postTelegram(context.request, chat, "Note from Telegram")).ok()).toBe(true);
+	await until(async () => (await telegramSent(context.request, chat)).includes("Got your Telegram note."), "the reply in Telegram");
+	// Slack: the app installed, and the owner's DMs with it linked to the bot.
+	await installSlack(page);
+	const link = await api.linkSlackDms({ botId: bot.id });
+	const [team, user] = link.externalId.split(":");
+	expect((await postSlack(context.request, { type: "event_callback", team_id: team, event: { type: "message", channel_type: "im", channel: "D9", user, text: "Note from Slack", ts: "2.1" } })).ok()).toBe(true);
+	await until(async () => (await threadTexts(api, bot.id)).includes("Got your Slack note."), "the reply to Slack");
+	// One thread, read on a phone.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`/bots/${bot.id}`);
+	for (const text of ["Note from Telegram", "Got your Telegram note.", "Note from Slack", "Got your Slack note."]) await expect(page.getByText(text)).toBeVisible();
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

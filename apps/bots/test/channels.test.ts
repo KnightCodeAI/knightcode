@@ -58,12 +58,18 @@ it("refuses a Telegram update without the webhook's secret", async () => {
 it("routes Slack DMs to the linked bot", async () => {
 	answering("ok");
 	await claim("slack-bot");
-	await setLink(env.DB, { channel: "slack", externalChat: "T9:U9", accountId: owner.accountId, botId: "slack-bot", mode: "direct" });
+	// "Link DMs" in the app's settings: the installing user's own DMs with the app go to the bot.
+	await env.DB.prepare("INSERT OR REPLACE INTO slack_teams (team_id, account_id, owner_user_id) VALUES ('T9', ?, 'U9')").bind(owner.accountId).run();
+	await env.USER.get(env.USER.idFromName(owner.accountId)).linkSlackDms("slack-bot");
 	await postSlack({ type: "event_callback", team_id: "T9", event: { type: "message", channel_type: "im", channel: "D1", user: "U9", text: "status please", ts: "1.1" } });
 	await waitFor(async () => (await userMessages("slack-bot")).includes("status please"));
 	// The app's own posts and other people's DMs to other users are not routed.
 	await postSlack({ type: "event_callback", team_id: "T9", event: { type: "message", channel_type: "im", channel: "D1", user: "U9", bot_id: "B1", text: "echo", ts: "1.2" } });
 	expect(await userMessages("slack-bot")).not.toContain("echo");
+	// Someone else in the workspace writing to the app does not reach the owner's bot.
+	await postSlack({ type: "event_callback", team_id: "T9", event: { type: "message", channel_type: "im", channel: "D2", user: "U7", text: "from a coworker", ts: "1.3" } });
+	await new Promise((resolve) => setTimeout(resolve, 300));
+	expect(await userMessages("slack-bot")).not.toContain("from a coworker");
 });
 
 it("keeps In-Reply-To and References on an email reply", async () => {

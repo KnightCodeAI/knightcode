@@ -3,7 +3,7 @@
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { type ApiClient, createApiClient } from "@knightcode/bots-protocol";
-import type { APIRequestContext, BrowserContext } from "@playwright/test";
+import type { APIRequestContext, BrowserContext, Page } from "@playwright/test";
 import type { Reply } from "../../test/fake-model-server.ts";
 
 export const WEB = "http://localhost:5190";
@@ -96,4 +96,31 @@ export function sentMail(): SentMail[] {
 		mails.push({ from: field("From"), to: field("To"), subject: field("Subject"), text: textFile ? readFileSync(textFile, "utf8") : "" });
 	}
 	return mails;
+}
+
+/** "Add to Slack" from Settings, through the Slack consent page. */
+export async function installSlack(page: Page): Promise<void> {
+	await page.goto("/settings/channels");
+	const popup = page.waitForEvent("popup");
+	await page.getByRole("button", { name: /Add to Slack|Reinstall/ }).click();
+	const consent = await popup;
+	await consent.getByRole("button").filter({ hasText: /ada|allow|authorize|continue/i }).first().click();
+	await consent.waitForURL(/\/settings\/channels\?slack=installed/);
+	await consent.close();
+}
+
+/** A Telegram update to the Worker's webhook, with the secret Telegram sends. */
+export function postTelegram(request: APIRequestContext, chatId: number, text: string) {
+	const id = Math.floor(Math.random() * 1e9);
+	return request.post(`${WEB}/hooks/telegram`, {
+		headers: { "x-telegram-bot-api-secret-token": process.env.E2E_TELEGRAM_SECRET!, "content-type": "application/json" },
+		data: JSON.stringify({ update_id: id, message: { message_id: id, chat: { id: chatId, type: "private" }, from: { id: chatId }, text } }),
+	});
+}
+
+/** What the Worker sent to a Telegram chat. */
+export async function telegramSent(request: APIRequestContext, chatId: number): Promise<string[]> {
+	const base = process.env.E2E_TELEGRAM_URL!.replace(/\/bot[^/]*$/, "");
+	const all = (await (await request.get(`${base}/test/sent`)).json()) as { chat_id: string | number; text: string }[];
+	return all.filter((message) => String(message.chat_id) === String(chatId)).map((message) => message.text);
 }
