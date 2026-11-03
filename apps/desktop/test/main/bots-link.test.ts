@@ -1,4 +1,5 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { type AddressInfo, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -250,4 +251,58 @@ test("the computer link signs in with a socket ticket, asks once per session, th
 	expect(await exec("x2", "echo second")).toMatchObject({ exitCode: 0, output: expect.stringContaining("second") });
 	// One question for the session.
 	expect(asked).toEqual(["echo first"]);
+});
+
+test("home routing: the link makes a connection only to an allowed destination and carries its bytes both ways", async () => {
+	const server = createServer((connection) => connection.on("data", (chunk) => connection.end(`echo:${chunk}`)));
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const { port } = server.address() as AddressInfo;
+	const sent: { kind: string; id?: string; data?: string; reason?: string }[] = [];
+	const listeners: Record<string, ((event: { data: unknown }) => void)[]> = {};
+	let authorized: string[] = [];
+	const link = await connectComputerLink({
+		origin: "https://bots.example",
+		accountId: "a1",
+		ticket: async () => "tk",
+		policy: new LocalComputerPolicy(),
+		ask: async () => "deny",
+		run: async () => ({ output: "", exitCode: 0 }),
+		socket: () => ({
+			send: (data) => void sent.push(JSON.parse(data)),
+			close: () => {},
+			addEventListener: (type: string, listener: (event: { data: unknown }) => void) =>
+				void (listeners[type] ??= []).push(listener),
+		}),
+		egress: { policy: async () => ({ authorizedHosts: authorized }) },
+	});
+	const frame = (value: unknown) => {
+		for (const listener of listeners.message ?? []) listener({ data: JSON.stringify(value) });
+	};
+	const waitFor = async (check: () => boolean) => {
+		const deadline = Date.now() + 5_000;
+		while (!check() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+	};
+	try {
+		// A private address the owner did not allow: refused.
+		frame({ kind: "proxy-open", id: "t1", host: "127.0.0.1", port });
+		await waitFor(() => sent.some((entry) => entry.id === "t1"));
+		expect(sent.find((entry) => entry.id === "t1")).toMatchObject({
+			kind: "proxy-close",
+			reason: expect.stringContaining("refused"),
+		});
+		// Allowed by the owner: the bytes go through, and the answer comes back.
+		authorized = [`127.0.0.1:${port}`];
+		frame({ kind: "proxy-open", id: "t2", host: "127.0.0.1", port });
+		frame({ kind: "proxy-data", id: "t2", data: Buffer.from("hi").toString("base64") });
+		await waitFor(() => sent.some((entry) => entry.id === "t2" && entry.kind === "proxy-close"));
+		const back = sent
+			.filter((entry) => entry.id === "t2" && entry.kind === "proxy-data")
+			.map((entry) => Buffer.from(entry.data!, "base64").toString())
+			.join("");
+		expect(back).toBe("echo:hi");
+		expect(sent.find((entry) => entry.id === "t2" && entry.kind === "proxy-close")?.reason).toBe("end");
+	} finally {
+		link.close();
+		server.close();
+	}
 });

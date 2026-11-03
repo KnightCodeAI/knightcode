@@ -132,6 +132,19 @@ export class DesktopBots {
 					policy,
 					ask: deps.ask,
 					run: (command) => runInShell(command, { cwd: deps.home }),
+					// Hosts the owner allowed to be private, from their home-routing settings (none by default).
+					egress: {
+						policy: async () => {
+							const response = await this.#fetch(`${BOTS_ORIGIN}/api/settings/home-routing`, {
+								headers: { authorization: `Ticket ${(await this.ticket("api")).ticket}` },
+							});
+							if (!response.ok) return { authorizedHosts: [] };
+							return {
+								authorizedHosts:
+									((await response.json()) as { allowedPrivateHosts?: string[] }).allowedPrivateHosts ?? [],
+							};
+						},
+					},
 				});
 			},
 		});

@@ -5,6 +5,9 @@
 // until removed. Windows has no filesystem sandbox here: the setting says bots act with the user's full access.
 
 import { exec } from "node:child_process";
+import { lookup } from "node:dns/promises";
+import { connect as connectTcp, isIP, type Socket } from "node:net";
+import { type EgressPolicy, egressAllowed } from "./egress-proxy.ts";
 
 export const ACCESS_WARNING =
 	"Bots will run commands and read and write files on this computer with your full access. There is no sandbox. You can turn this off at any time.";
@@ -144,6 +147,8 @@ export async function connectComputerLink(input: {
 	ask(input: { botId: string; command: string }): Promise<ExecAnswer>;
 	run(command: string): Promise<{ output: string; exitCode: number }>;
 	socket?: (url: string) => LinkSocket;
+	/** Home routing: connections the cloud asks this computer to make, public destinations only unless authorized. */
+	egress?: { policy(): Promise<EgressPolicy>; localAddress?: string };
 }): Promise<{ close(): void }> {
 	const url = `${input.origin.replace(/^http/, "ws")}/api/desktop/${encodeURIComponent(input.accountId)}/link`;
 	// The ticket first: a socket opened before its listener is attached would never send the auth frame.
@@ -157,10 +162,68 @@ export async function connectComputerLink(input: {
 		} catch {
 			return;
 		}
+		if (frame.kind === "proxy-open") {
+			// Bytes may arrive while the destination is still being checked: they wait here.
+			opening.set(frame.id, []);
+			return void openTunnel(frame.id, frame.host, frame.port);
+		}
+		if (frame.kind === "proxy-data") {
+			const bytes = Buffer.from(frame.data, "base64");
+			const open = tunnels.get(frame.id);
+			if (open) open.write(bytes);
+			else opening.get(frame.id)?.push(bytes);
+			return;
+		}
+		if (frame.kind === "proxy-close") {
+			opening.delete(frame.id);
+			tunnels.get(frame.id)?.destroy();
+			tunnels.delete(frame.id);
+			return;
+		}
 		if (frame.kind !== "exec") return;
 		void handleExec(frame, input.policy, input).then((result) => socket.send(JSON.stringify(result)));
 	});
-	return { close: () => socket.close() };
+	const tunnels = new Map<string, Socket>();
+	const opening = new Map<string, Buffer[]>();
+	const send = (frame: LinkFrame) => socket.send(JSON.stringify(frame));
+	/** One connection for home routing, to the address the name resolved to (so a second lookup cannot redirect it). */
+	async function openTunnel(id: string, host: string, port: number): Promise<void> {
+		const refuse = (reason: string) => {
+			opening.delete(id);
+			send({ kind: "proxy-close", id, reason });
+		};
+		if (!input.egress) return refuse("home routing is off on this computer");
+		const addresses = isIP(host)
+			? [host]
+			: (await lookup(host, { all: true }).catch(() => [])).map((entry) => entry.address);
+		if (!egressAllowed(host, port, addresses, await input.egress.policy()))
+			return refuse("refused: not a public address");
+		const waiting = opening.get(id);
+		// Closed by the cloud while it was being checked.
+		if (!waiting) return;
+		opening.delete(id);
+		const connection = connectTcp({
+			host: addresses[0] ?? host,
+			port,
+			...(input.egress.localAddress ? { localAddress: input.egress.localAddress } : {}),
+		});
+		tunnels.set(id, connection);
+		for (const bytes of waiting) connection.write(bytes);
+		const finish = (reason: string) => {
+			if (tunnels.delete(id)) send({ kind: "proxy-close", id, reason });
+		};
+		connection.on("data", (chunk: Buffer) => send({ kind: "proxy-data", id, data: chunk.toString("base64") }));
+		connection.on("end", () => finish("end"));
+		connection.on("close", () => finish("end"));
+		connection.on("error", (error) => finish(error.message));
+	}
+	return {
+		close: () => {
+			for (const connection of tunnels.values()) connection.destroy();
+			tunnels.clear();
+			socket.close();
+		},
+	};
 }
 
 /** Runs one command in the user's own shell, from their home folder; output is stdout then stderr. */

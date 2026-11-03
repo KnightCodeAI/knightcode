@@ -31,7 +31,8 @@ export interface ComputerProvider {
 	snapshot(id: string, generation: number): Promise<SnapshotHandle>;
 	restoreSnapshot(id: string, handle: SnapshotHandle): Promise<void>;
 	/** Drives `botUser`'s Chrome (absent where there is no browser, as in the fake). */
-	browser?(id: string, botUser: string, request: BrowserRequest): Promise<BrowserResult>;
+	/** `page`: the page already loaded over the home route, when home routing goes through the desktop app. */
+	browser?(id: string, botUser: string, request: BrowserRequest, page?: { status: number; body: string }): Promise<BrowserResult>;
 	/** Screenshots and input on `botUser`'s display. */
 	desktop?(id: string, botUser: string, request: DesktopRequest): Promise<DesktopResult>;
 	/** Runs the owner's setup script as root; resolves with its exit code and the tail of its output. */
@@ -205,7 +206,7 @@ export class FakeComputerProvider implements ComputerProvider {
 	 * Session") and the sites it is signed in to (a password filled on a site's page signs in). A page opened on a site
 	 * with no tab yet gets a new tab. Before anything is opened the page is a checkout (the payment tests' shop).
 	 */
-	async browser(_id: string, botUser: string, request: BrowserRequest): Promise<BrowserResult> {
+	async browser(_id: string, botUser: string, request: BrowserRequest, page?: { status: number; body: string }): Promise<BrowserResult> {
 		this.browserRequests.push(request);
 		this.addUser(botUser);
 		const sessionPath = `${chromeProfileDir(botUser)}/Default/Current Session`;
@@ -226,6 +227,9 @@ export class FakeComputerProvider implements ComputerProvider {
 			save();
 		}
 		const url = current();
+		// A page that really loaded (through the home route): its own title.
+		const loaded = page && /<title>([^<]*)<\/title>/i.exec(page.body)?.[1];
+		if (loaded) return { url, title: loaded };
 		if (request.action === "snapshot")
 			return { url, title: new URL(url).host, snapshot: `Tabs: ${session.tabs.join(", ") || "none"}. Signed in to: ${session.signedIn.join(", ") || "nothing"}.` };
 		return { url, title: url === "https://shop.example/checkout" ? "Checkout" : new URL(url).host };

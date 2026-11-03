@@ -15,7 +15,19 @@ const EXEC_TIMEOUT_MS = 10 * 60 * 1000;
 export type DesktopFrame =
 	| { kind: "auth"; ticket: string }
 	| { kind: "exec"; id: string; botId: string; session: string; command: string }
-	| { kind: "exec-result"; id: string; output?: string; exitCode?: number; refused?: boolean; error?: string };
+	| { kind: "exec-result"; id: string; output?: string; exitCode?: number; refused?: boolean; error?: string }
+	| { kind: "proxy-open"; id: string; host: string; port: number }
+	| { kind: "proxy-data"; id: string; data: string }
+	| { kind: "proxy-close"; id: string; reason?: string };
+
+/** One TCP connection the desktop makes for home routing; bytes go both ways as base64 frames. */
+export interface Tunnel {
+	write(bytes: Uint8Array): void;
+	close(): void;
+}
+
+const toBase64 = (bytes: Uint8Array) => btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+const fromBase64 = (text: string) => Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
 
 export type ExecResult = { ok: true; output: string; exitCode: number } | { ok: false; error: string };
 
@@ -31,6 +43,7 @@ export class DesktopLink {
 	readonly #accountId: () => string;
 	// ponytail: pending commands live in memory; a user object evicted mid-command fails it, and the bot can retry.
 	readonly #pending = new Map<string, (result: ExecResult) => void>();
+	readonly #tunnels = new Map<string, { data(bytes: Uint8Array): void; closed(reason?: string): void }>();
 
 	constructor(ctx: DurableObjectState, env: Env, accountId: () => string) {
 		this.#ctx = ctx;
@@ -68,6 +81,12 @@ export class DesktopLink {
 			return;
 		}
 		if (!(await this.#stillSignedIn(socket))) return;
+		if (frame.kind === "proxy-data") return this.#tunnels.get(frame.id)?.data(fromBase64(frame.data));
+		if (frame.kind === "proxy-close") {
+			const tunnel = this.#tunnels.get(frame.id);
+			this.#tunnels.delete(frame.id);
+			return tunnel?.closed(frame.reason);
+		}
 		if (frame.kind !== "exec-result") return;
 		const settle = this.#pending.get(frame.id);
 		if (!settle) return;
@@ -82,6 +101,26 @@ export class DesktopLink {
 		if (this.online()) return;
 		for (const settle of this.#pending.values()) settle({ ok: false, error: OFFLINE });
 		this.#pending.clear();
+		for (const tunnel of this.#tunnels.values()) tunnel.closed("offline");
+		this.#tunnels.clear();
+	}
+
+	/** A connection to host:port made by the desktop (home routing); undefined when no desktop is linked. */
+	async tunnel(host: string, port: number, handlers: { data(bytes: Uint8Array): void; closed(reason?: string): void }): Promise<Tunnel | undefined> {
+		let socket: WebSocket | undefined;
+		for (const candidate of this.#linked()) if (await this.#stillSignedIn(candidate)) socket = candidate;
+		if (!socket) return undefined;
+		const linked = socket;
+		const id = crypto.randomUUID();
+		this.#tunnels.set(id, handlers);
+		linked.send(JSON.stringify({ kind: "proxy-open", id, host, port } satisfies DesktopFrame));
+		return {
+			write: (bytes) => linked.send(JSON.stringify({ kind: "proxy-data", id, data: toBase64(bytes) } satisfies DesktopFrame)),
+			close: () => {
+				if (!this.#tunnels.delete(id)) return;
+				linked.send(JSON.stringify({ kind: "proxy-close", id } satisfies DesktopFrame));
+			},
+		};
 	}
 
 	/**

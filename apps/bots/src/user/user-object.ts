@@ -496,6 +496,35 @@ export class UserObject extends DurableObject<Env> {
 	homeRouting(): HomeRouting {
 		return this.#state.homeRouting();
 	}
+	/**
+	 * A page loaded through the owner's own connection when home routing goes through the desktop app (spec section 7):
+	 * an HTTP/1.1 GET over a connection the desktop makes. Undefined means "go direct" (routing off, or the link is down
+	 * and the owner chose to fall back to the cloud); with fail-closed and no link, the traffic stops.
+	 */
+	async homeFetch(url: string): Promise<{ ok: true; status: number; body: string } | { ok: false; error: string } | undefined> {
+		const routing = this.homeRouting();
+		if (!routing.enabled || routing.route !== "desktop") return undefined;
+		const target = new URL(url);
+		// ponytail: plain HTTP only here; HTTPS through the route needs the container's CONNECT proxy (TLS in Chrome).
+		if (target.protocol !== "http:") return { ok: false, error: "Only http:// pages load through the home route here." };
+		const chunks: Uint8Array[] = [];
+		let finish: (reason?: string) => void = () => {};
+		const done = new Promise<string | undefined>((resolve) => (finish = resolve));
+		const tunnel = await this.#desktop.tunnel(target.hostname, Number(target.port || 80), { data: (bytes) => void chunks.push(bytes), closed: (reason) => finish(reason) });
+		if (!tunnel) return routing.failClosed ? { ok: false, error: "Home routing is on and the desktop app is offline, so traffic is stopped." } : undefined;
+		const head = [`GET ${target.pathname}${target.search} HTTP/1.1`, `Host: ${target.host}`, "User-Agent: KnightCode Bots", "Connection: close", "", ""];
+		tunnel.write(new TextEncoder().encode(head.join("\r\n")));
+		const timer = setTimeout(() => finish("timeout"), 30_000);
+		const reason = await done;
+		clearTimeout(timer);
+		tunnel.close();
+		if (reason && reason !== "end") return { ok: false, error: `The home route could not reach ${target.host} (${reason}).` };
+		const text = new TextDecoder().decode(Uint8Array.from(chunks.flatMap((chunk) => [...chunk])));
+		const split = text.indexOf("\r\n\r\n");
+		const status = Number(/^HTTP\/1\.[01] (\d{3})/.exec(text)?.[1] ?? 0);
+		if (split < 0 || !status) return { ok: false, error: `${target.host} sent no HTTP answer.` };
+		return { ok: true, status, body: text.slice(split + 4) };
+	}
 	updateHomeRouting(patch: Partial<HomeRouting>): HomeRouting {
 		return this.#state.updateHomeRouting(patch);
 	}

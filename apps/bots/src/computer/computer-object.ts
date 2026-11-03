@@ -372,7 +372,10 @@ export class ComputerObject extends DurableObject<Env> {
 		if (!this.#holds(botId)) return { error: "The computer is not running for this bot." };
 		if (!this.#provider.browser) return { error: "This computer has no browser." };
 		if (request.action === "fill") return { error: "Fill logins with fillLogin." };
-		return this.#provider.browser(this.#account, await botUserFor(botId), request);
+		// Home routing through the desktop app: the page comes over the owner's own connection.
+		const routed = request.action === "navigate" ? await this.#user().homeFetch(request.url) : undefined;
+		if (routed && !routed.ok) return { error: routed.error };
+		return this.#provider.browser(this.#account, await botUserFor(botId), request, routed);
 	}
 
 	/**

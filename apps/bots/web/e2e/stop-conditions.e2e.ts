@@ -1,6 +1,8 @@
 // apps/bots/web/e2e/stop-conditions.e2e.ts: the spec's Stop condition, one test per item, against the real Worker
 // (wrangler dev), the emulated services and the fake model server. BOTS_BACKEND=real only.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ACCESS_WARNING, ComputerLink, connectComputerLink, LocalComputerPolicy, runInShell } from "../../../desktop/src/main/bots/computer-link.ts";
@@ -600,5 +602,58 @@ test("A user enables Let bots use this computer, and a bot runs a command on the
 	} finally {
 		link.disable();
 		rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("With home routing on, a site the bot opens sees the user's home address (fake computer provider; the desktop link's connections leave from 127.0.0.2, the stand-in home address)", async ({ context, page }) => {
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	// The site: it answers with the address the connection came from.
+	const seen: string[] = [];
+	const site = createHttpServer((request, response) => {
+		const from = (request.socket.remoteAddress ?? "").replace(/^::ffff:/, "");
+		seen.push(from);
+		const body = `<!doctype html><title>Seen from ${from}</title>`;
+		response.writeHead(200, { "content-type": "text/html", "content-length": Buffer.byteLength(body) }).end(body);
+	});
+	await new Promise<void>((resolve) => site.listen(0, "127.0.0.1", resolve));
+	const sitePort = (site.address() as AddressInfo).port;
+	const siteUrl = `http://127.0.0.1:${sitePort}/whoami`;
+	const bot = await api.createBot({ name: `Router${tag}`, purpose: "Browses for the owner" });
+	await api.updateBot({ botId: bot.id, computerAccess: true, approvals: "never" });
+	// Through the desktop app, failing closed; the test site is a local host the owner allows by name.
+	await api.updateHomeRouting({ enabled: true, route: "desktop", failClosed: true, allowedPrivateHosts: [`127.0.0.1:${sitePort}`] });
+	const account = (await api.getAccount({})).id;
+	const link = await connectComputerLink({
+		origin: process.env.E2E_WORKER_URL!,
+		accountId: account,
+		ticket: async () => (await api.issueTicket({ scope: "socket" })).ticket,
+		policy: new LocalComputerPolicy(),
+		ask: async () => "deny",
+		run: async () => ({ output: "", exitCode: 0 }),
+		egress: { policy: async () => ({ authorizedHosts: (await api.getHomeRouting({})).allowedPrivateHosts }), localAddress: "127.0.0.2" },
+	});
+	const send = async (text: string) => {
+		await page.getByRole("textbox", { name: "Message" }).fill(text);
+		await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	};
+	try {
+		await script(context.request, { [bot.name]: [{ tool: "browser_navigate", args: { url: siteUrl } }, "The site saw your home connection."] });
+		await page.goto(`/bots/${bot.id}`);
+		await send("Open the whoami page");
+		await expect(page.getByText("The site saw your home connection.")).toBeVisible({ timeout: 60_000 });
+		expect(seen).toEqual(["127.0.0.2"]);
+		const opened = (await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool !== undefined).at(-1);
+		expect(opened?.tool).toContain("Title: Seen from 127.0.0.2");
+		// The desktop goes away: with fail-closed set, the traffic stops instead of leaving from the cloud.
+		link.close();
+		await script(context.request, { [bot.name]: [{ tool: "browser_navigate", args: { url: siteUrl } }, "Stopped, as you asked."] });
+		await send("Open it again");
+		await expect(page.getByText("Stopped, as you asked.")).toBeVisible({ timeout: 60_000 });
+		expect((await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool !== undefined).at(-1)?.tool).toContain("traffic is stopped");
+		expect(seen).toEqual(["127.0.0.2"]);
+	} finally {
+		link.close();
+		site.close();
 	}
 });
