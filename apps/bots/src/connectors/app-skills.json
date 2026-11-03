@@ -1,0 +1,10 @@
+{
+	"gmail": [
+		{ "name": "gmail-triage", "description": "Sort a Gmail inbox into labels" },
+		{ "name": "gmail-drafts", "description": "Draft replies that wait for approval" }
+	],
+	"google-calendar": [{ "name": "calendar-scheduling", "description": "Find a time that works and draft the invite" }],
+	"hubspot": [{ "name": "hubspot-follow-ups", "description": "List deals that need a follow-up and draft the notes" }],
+	"notion": [{ "name": "notion-weekly-notes", "description": "Keep a weekly notes page up to date" }],
+	"slack": [{ "name": "slack-catch-up", "description": "Summarize the channels you missed" }]
+}

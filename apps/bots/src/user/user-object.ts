@@ -42,7 +42,7 @@ import type {
 	UsageRow,
 } from "@knightcode/bots-protocol";
 import { appOrigin } from "../auth/oauth.ts";
-import { type CatalogSource, curatedEntries, mergeCatalog, sourceOf } from "../connectors/catalog.ts";
+import { appSkills, type CatalogSource, curatedEntries, mergeCatalog, sourceOf } from "../connectors/catalog.ts";
 import { ComposioClient } from "../connectors/composio.ts";
 import { issueLinkCode } from "../channels/linking.ts";
 import { paymentsAvailable, paymentsProviderFor } from "../payments/link.ts";
@@ -739,7 +739,11 @@ export class UserObject extends DurableObject<Env> {
 	}
 	async catalog(filter: { q?: string; category?: CatalogEntry["category"] } = {}): Promise<CatalogEntry[]> {
 		const custom = readDoc(this.#sql, "custom-servers", () => [] as CatalogEntry[]);
-		const merged = [...mergeCatalog(await this.#sources()), ...custom];
+		// One entry per app: a server added by hand never duplicates an app a source already offers. Apps without skills
+		// of their own get the ones KnightCode writes for the most used apps (spec section 9).
+		const sourced = mergeCatalog(await this.#sources()).map((entry) => (entry.skills.length > 0 ? entry : { ...entry, skills: appSkills(entry.id) }));
+		const known = new Set(sourced.map((entry) => entry.id));
+		const merged = [...sourced, ...custom.filter((entry) => !known.has(entry.id))];
 		const connections = this.#connections();
 		const needle = filter.q?.toLowerCase();
 		return merged

@@ -1,6 +1,7 @@
 // The connector catalog (spec section 9): one list of apps from three sources, the curated official MCP servers first,
 // then indexed plugins, then Composio. An app appears once, from the first source that has it, and the user never
 // sees which source that was; how it connects is the server's business.
+import APP_SKILLS from "./app-skills.json";
 import type { CatalogEntry } from "@knightcode/bots-protocol";
 import curated from "./curated.json";
 import { DEFAULT_PERMISSIONS } from "./permissions.ts";
@@ -19,6 +20,9 @@ export interface CuratedServer {
 }
 
 export const CURATED: CuratedServer[] = curated as CuratedServer[];
+
+/** The skills KnightCode writes for the most used apps that have none of their own. */
+export const appSkills = (appId: string): CatalogEntry["skills"] => (APP_SKILLS as Record<string, CatalogEntry["skills"]>)[appId] ?? [];
 
 export const curatedEntries = (): CatalogEntry[] =>
 	CURATED.map(({ url: _url, ...entry }) => ({ ...entry, skills: [], permissions: DEFAULT_PERMISSIONS }));

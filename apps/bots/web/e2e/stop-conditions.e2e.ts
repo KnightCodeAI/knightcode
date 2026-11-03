@@ -13,7 +13,7 @@ import { apiOf, fakeServiceOrigin, installSlack, killWorker, modelRequests, mode
 test.skip(!REAL, "the stop conditions run against the real backend (BOTS_BACKEND=real)");
 test.describe.configure({ timeout: 120_000 });
 
-test("A desktop user connects their providers with Connect to KnightCode Bots, and the CLI on the same machine stays signed in", async ({ context }) => {
+test("A KnightCode desktop user signs up, connects their providers with Connect to KnightCode Bots, and the CLI on the same machine stays signed in (the account is the fixture's fresh sign-up)", async ({ context }) => {
 	const api = apiOf(context.request);
 	// The CLI's credential store on this machine: an OAuth sign-in and an API key.
 	const home = mkdtempSync(join(tmpdir(), "kc-cli-"));

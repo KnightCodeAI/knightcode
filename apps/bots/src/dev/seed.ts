@@ -32,8 +32,8 @@ export async function importSeed(env: Env, principal: Principal, seed: FakeSeed)
 		if (bot.email) await claimBotAddress(env.DB, { address: bot.email, botId: bot.id, accountId: principal.accountId }).catch(() => undefined);
 	}
 	for (const [manager, managed] of Object.entries(seed.managed)) {
-		// A bot that manages others is a Chief of Staff.
-		await env.BOT.get(env.BOT.idFromName(manager)).updateSettings(principal, { manager: true });
+		// A bot that manages others is a Chief of Staff (when the seed has that bot).
+		if (seed.bots.some((bot) => bot.id === manager)) await env.BOT.get(env.BOT.idFromName(manager)).updateSettings(principal, { manager: true });
 		for (const id of managed) await env.DB.prepare("UPDATE bots SET managed_by = ? WHERE id = ? AND account_id = ?").bind(manager, id, principal.accountId).run();
 	}
 	for (const group of seed.groups) {

@@ -54,7 +54,7 @@ git commit -m "feat(bots): connect the UI to the real backend"
   macOS, Docker for the computer image) use the fake provider or the Windows
   path and say so in the test name.
 
-- [ ] **Step 1: Write the tests**, one per Stop condition item, each
+- [x] **Step 1: Write the tests**, one per Stop condition item, each
   asserting the observable outcome the spec states (for example: the
   desktop's local credential store is byte-identical after "Connect to
   KnightCode Bots"; a PR opened in the GitHub emulator receives a comment
@@ -72,13 +72,13 @@ git commit -m "feat(bots): connect the UI to the real backend"
   never appear; a test-mode purchase needs a passkey and uses a single-use
   card; home routing exits through the desktop proxy; a command on the
   user's computer runs after one approval).
-- [ ] **Step 2: Run them**
+- [x] **Step 2: Run them**
 
 Run: `bunx playwright test --project ui stop-conditions`
 Expected: every test passes. Fix the owning task's code for any failure
 and rerun.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/bots/web/e2e/stop-conditions.e2e.ts
