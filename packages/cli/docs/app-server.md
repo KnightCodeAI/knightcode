@@ -140,6 +140,17 @@ replaces **times, text, fileChanges, and index**; do not just append deltas.
 `index` is the item's top-level position in the turn: order by its latest value,
 because a streaming item's index can change at message end. `item/removed`
 withdraws an item dropped by a message-end handler.
+Tool-call previews can also arrive before the assistant finishes, with `status:
+"pending"` and bounded identifying input fields. They are not executed or
+confirmed edits. Repeated `item/started` notifications update the same call ID;
+replace their input and index rather than adding another row. The finalized
+assistant message supplies the complete input, and withdrawn previews send
+`item/removed`. Execution publishes `item/started` with `status: "running"`;
+only saved tool results decide the final status and file changes. Running output
+also appears in reconnect snapshots, not just `item/toolCall/outputDelta`.
+A parallel call can expose its available output before the other calls finish;
+that output remains provisional until its saved result sends `item/completed`.
+
 Nested tool calls carry `parentItemId` and no top-level index. A saved turn with
 no end entry reads as `interrupted`. See [Session Format](session-format.md).
 

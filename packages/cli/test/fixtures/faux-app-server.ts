@@ -5,6 +5,7 @@
  * no network. The reply depends on the prompt:
  *
  * - "run echo <word>": a bash call of `echo <word>`, then "Ran it."
+ * - "show live progress": exposed thoughts, a read, and a bounded command with incremental output
  * - "count slowly": a long reply streamed slowly, to interrupt or to quit over
  * - "show the counter": the examples/mcp-app counter's app tool, then "Here is the counter."
  * - anything else: "Hello from the faux model."
@@ -16,6 +17,7 @@ import {
 	fauxAssistantMessage,
 	fauxProvider,
 	fauxText,
+	fauxThinking,
 	fauxToolCall,
 	InMemoryCredentialStore,
 	type Message,
@@ -48,6 +50,13 @@ function reply(messages: Message[]): AssistantMessage {
 		return fauxAssistantMessage([fauxText(prompt.startsWith("show the counter") ? "Here is the counter." : "Ran it.")]);
 	const echo = /^run echo (\S+)/.exec(prompt);
 	if (echo) return fauxAssistantMessage([fauxToolCall("bash", { command: `echo ${echo[1]}` })], { stopReason: "toolUse" });
+	if (prompt.startsWith("show live progress"))
+		return fauxAssistantMessage([
+			fauxThinking("**Inspecting the fixture**\nChecking a read and a bounded diagnostic command."),
+			fauxText("Reading README and checking command progress."),
+			fauxToolCall("read", { path: "README.md" }),
+			fauxToolCall("bash", { command: "printf 'progress-one\\n'; while [ ! -f .e2e-release ]; do sleep 0.1; done; printf 'progress-two\\n'", timeout: 30 }),
+		], { stopReason: "toolUse" });
 	if (prompt.startsWith("count slowly"))
 		return fauxAssistantMessage([fauxText(Array.from({ length: 2000 }, (_, i) => `${i + 1}`).join(" "))]);
 	if (prompt.startsWith("show the counter"))

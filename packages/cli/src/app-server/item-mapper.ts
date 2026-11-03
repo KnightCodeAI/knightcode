@@ -138,10 +138,11 @@ const countersOf = (turn: Turn): Counters => ({
 	items: turn.items.filter((i) => !isNested(i)).length,
 });
 
-/** The assistant message streaming now: where its items begin, and its text and thinking items by content index. */
+/** The assistant message streaming now: text/thinking by content index and provisional tool previews by call id. */
 interface Streaming {
 	base: number;
 	open: Map<number, TextItem>;
+	tools: Map<string, ToolCallItem>;
 }
 
 export class ItemMapper {
@@ -279,12 +280,41 @@ export class ItemMapper {
 			}
 			case "message_start":
 				if (event.message.role === "assistant" && this.turn && this.counters) {
-					this.streaming = { base: this.counters.items, open: new Map() };
+					this.streaming = { base: this.counters.items, open: new Map(), tools: new Map() };
 				}
 				return;
 			case "message_update": {
 				if (!this.turn || !this.counters || !this.streaming) return;
 				const inner = event.assistantMessageEvent;
+				if (inner.type === "toolcall_start" || inner.type === "toolcall_delta" || inner.type === "toolcall_end") {
+					const block = inner.partial.content[inner.contentIndex];
+					if (block?.type !== "toolCall") return;
+					// Preview only bounded identifying fields, not entire file bodies on every streamed token. The
+					// final message supplies the complete input; pending previews never authorize execution.
+					const input = Object.fromEntries(
+						["path", "file_path", "command", "query", "url"].flatMap((key) =>
+							typeof block.arguments[key] === "string" ? [[key, block.arguments[key].slice(0, 2_000)]] : [],
+						),
+					);
+					const known = this.streaming.tools.get(block.id);
+					if (known && known.tool === block.name && JSON.stringify(known.input) === JSON.stringify(input)) return;
+					const call: ToolCallItem = known ?? {
+						type: "toolCall",
+						id: block.id,
+						tool: block.name,
+						input,
+						status: "pending",
+						output: [],
+						startedAt: Date.now(),
+					};
+					call.tool = block.name;
+					call.input = input;
+					this.streaming.tools.set(block.id, call);
+					const index = this.streaming.base + inner.contentIndex;
+					if (known) this.notifyItem("item/started", call, this.turn.id, index);
+					else this.started(call, index);
+					return;
+				}
 				if (inner.type !== "text_delta" && inner.type !== "thinking_delta") return;
 				const id = `${this.turn.id}:${this.counters.assistants}:${inner.contentIndex}`;
 				let item = this.streaming.open.get(inner.contentIndex);
@@ -293,7 +323,7 @@ export class ItemMapper {
 						inner.type === "text_delta" ? { type: "agentMessage", id, text: "" } : { type: "reasoning", id, text: "" };
 					item.startedAt = Date.now();
 					// Provisional: blocks that start later (a tool call) may come before it; message_end settles it.
-					const index = this.streaming.base + this.streaming.open.size;
+					const index = this.streaming.base + inner.contentIndex;
 					this.streaming.open.set(inner.contentIndex, item);
 					this.started(item, index);
 				}
@@ -392,6 +422,7 @@ export class ItemMapper {
 				if (known) {
 					// Already an item since its assistant message ended; the snapshot shows it running.
 					known.status = "running";
+					if (this.turn) this.notifyItem("item/started", known, this.turn.id, this.positions.get(known.id));
 					return;
 				}
 				// A nested call (code mode): live only, no block of its own, no index (§4.2 table).
@@ -412,20 +443,37 @@ export class ItemMapper {
 			case "tool_execution_update": {
 				if (!this.turn) return;
 				const content = (event.partialResult as { content?: unknown })?.content;
+				const output = Array.isArray(content) ? outputOf(content) : [];
+				const call = this.calls.get(event.toolCallId);
+				if (call && call.status !== "pending" && call.status !== "running") return;
+				if (call) call.output = output;
 				this.thread.notify("item/toolCall/outputDelta", {
 					threadId,
 					turnId: this.turn.id,
 					itemId: event.toolCallId,
-					output: this.thread.payloads.output(Array.isArray(content) ? outputOf(content) : []),
+					output: this.thread.payloads.output(output),
 				});
 				return;
 			}
 			case "tool_execution_end": {
-				// Only nested calls complete here; a top-level call completes from its saved result (message_end).
 				const item = this.calls.get(event.toolCallId);
-				if (!item?.parentItemId) return;
+				if (!item) return;
 				const content = (event.result as { content?: unknown })?.content;
 				const blocks = Array.isArray(content) ? content : [];
+				if (!item.parentItemId) {
+					if (item.status !== "pending" && item.status !== "running") return;
+					// Parallel results may not reach message_end until the longest call finishes. Expose the
+					// available output now, without finalizing status, changes or views ahead of saved hooks.
+					item.output = outputOf(blocks);
+					if (this.turn)
+						this.thread.notify("item/toolCall/outputDelta", {
+							threadId,
+							turnId: this.turn.id,
+							itemId: item.id,
+							output: this.thread.payloads.output(item.output),
+						});
+					return;
+				}
 				item.status = toolCallStatus(event.isError, blocks);
 				item.output = outputOf(blocks);
 				// A nested call stays live only (§4.2): its view travels on this item and nowhere else.
@@ -505,8 +553,18 @@ export class ItemMapper {
 	private finishAssistant(message: AssistantMessage, counters: Counters): void {
 		const turn = this.turn!;
 		const n = counters.assistants++;
-		const streaming = this.streaming ?? { base: counters.items, open: new Map<number, TextItem>() };
+		const streaming = this.streaming ?? {
+			base: counters.items,
+			open: new Map<number, TextItem>(),
+			tools: new Map<string, ToolCallItem>(),
+		};
 		this.streaming = undefined;
+		// Draft tools may be rewritten, withdrawn, or replaced by a recovery generation. Only the final
+		// calls exist in saved history. Remove previews by id, since finalization can also change indices.
+		const finalizedCalls = new Set(message.content.flatMap((block) => (block.type === "toolCall" ? [block.id] : [])));
+		for (const [id, item] of streaming.tools) {
+			if (!finalizedCalls.has(id)) this.removed(item);
+		}
 		// Withdraw obsolete ids before starting replacements at those same ordinal positions.
 		for (const [blockIndex, item] of streaming.open) {
 			const block = message.content[blockIndex];
@@ -530,7 +588,12 @@ export class ItemMapper {
 					startedAt: callStartedAt(message),
 				};
 				this.calls.set(block.id, call);
-				this.started(call, index++);
+				const preview = streaming.tools.get(block.id);
+				if (preview) {
+					Object.assign(preview, call);
+					this.calls.set(block.id, preview);
+					this.notifyItem("item/started", preview, turn.id, index++);
+				} else this.started(call, index++);
 				return;
 			}
 			if (block.type !== "text" && block.type !== "thinking") return;
