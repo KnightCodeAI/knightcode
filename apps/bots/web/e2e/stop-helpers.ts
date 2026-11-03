@@ -31,8 +31,9 @@ export async function script(request: APIRequestContext, forBot: Record<string, 
 }
 
 /** What the fake model was asked, per bot. */
-export async function modelRequests(request: APIRequestContext): Promise<{ bot?: string; user: string; tool?: string }[]> {
-	return ((await (await request.get(`${modelServer()}/__requests`)).json()) as { requests: { bot?: string; user: string; tool?: string }[] }).requests;
+export type ModelRequest = { bot?: string; user: string; tool?: string; start: number; end?: number };
+export async function modelRequests(request: APIRequestContext): Promise<ModelRequest[]> {
+	return ((await (await request.get(`${modelServer()}/__requests`)).json()) as { requests: ModelRequest[] }).requests;
 }
 
 export async function until<T>(check: () => Promise<T | undefined | false>, what: string, timeoutMs = 30_000): Promise<T> {

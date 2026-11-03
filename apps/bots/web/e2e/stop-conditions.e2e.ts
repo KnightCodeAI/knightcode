@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connectProviders, providerRules } from "../../../desktop/src/main/bots/connect.ts";
 import { expect, REAL, test } from "./fixtures.ts";
-import { apiOf, installSlack, postGitHub, postSlack, postTelegram, script, sendMailToBot, sentMail, telegramSent, threadTexts, until, WEB } from "./stop-helpers.ts";
+import { apiOf, installSlack, modelRequests, postGitHub, postSlack, postTelegram, script, sendMailToBot, sentMail, telegramSent, threadTexts, until, WEB } from "./stop-helpers.ts";
 
 test.skip(!REAL, "the stop conditions run against the real backend (BOTS_BACKEND=real)");
 test.describe.configure({ timeout: 120_000 });
@@ -251,4 +251,64 @@ test("The user talks to a bot from Telegram and from Slack, and sees the same th
 	await page.goto(`/bots/${bot.id}`);
 	for (const text of ["Note from Telegram", "Got your Telegram note.", "Note from Slack", "Got your Slack note."]) await expect(page.getByText(text)).toBeVisible();
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("Two bots exchange messages and a group chat with three bots completes a task without bots talking over each other, and a 7-hop chain is stopped", async ({ context, page }) => {
+	test.setTimeout(240_000);
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	const name = (base: string) => `${base}${tag}`;
+	// Two bots: one asks, the other's answer comes back to it as a result.
+	const asker = await api.createBot({ name: name("Asker"), purpose: "Asks" });
+	const answerer = await api.createBot({ name: name("Answerer"), purpose: "Knows the launch date" });
+	await script(context.request, {
+		[asker.name]: [{ tool: "message_bot", args: { to: answerer.name, text: "When is the launch?", intent: "question" } }, "Asked."],
+		[answerer.name]: ["The launch is on the 14th."],
+	});
+	await page.goto(`/bots/${asker.id}`);
+	await page.getByRole("textbox", { name: "Message" }).fill("Find out when the launch is");
+	await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	await until(async () => (await threadTexts(api, asker.id)).some((text) => text.includes("The launch is on the 14th.")), "the answer back in the asker's thread");
+
+	// A group of three: each takes its turn, one at a time, and the task gets done.
+	const members = await Promise.all(["Planner", "Writer", "Checker"].map((base) => api.createBot({ name: name(base), purpose: `${base} of launch notes` })));
+	const [planner, writer, checker] = members as [typeof asker, typeof asker, typeof asker];
+	await script(context.request, {
+		[planner.name]: ["Plan: one paragraph, the date, one link."],
+		[writer.name]: ["Draft: We launch on the 14th. Details at knightcode.dev."],
+		[checker.name]: ["Checked: the draft follows the plan. Done."],
+	});
+	const group = await api.createGroup({ name: name("Launch note"), memberIds: members.map((bot) => bot.id), leadId: planner.id });
+	const before = (await modelRequests(context.request)).length;
+	await page.goto(`/groups/${group.id}`);
+	await page.getByRole("textbox", { name: "Message" }).fill("@everyone write the launch note");
+	await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	await expect(page.getByText("Checked: the draft follows the plan. Done.")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("Draft: We launch on the 14th. Details at knightcode.dev.")).toBeVisible();
+	await expect(page.getByText("Plan: one paragraph, the date, one link.")).toBeVisible();
+	// No two members' turns ran at once.
+	const turns = (await modelRequests(context.request)).slice(before).filter((request) => members.some((bot) => bot.name === request.bot));
+	expect(turns.length).toBeGreaterThanOrEqual(3);
+	for (const [index, turn] of turns.entries()) if (index > 0) expect(turn.start).toBeGreaterThanOrEqual(turns[index - 1]!.end!);
+
+	// A chain of seven bots, each passing the message on: the seventh hop is refused.
+	const chain = await Promise.all(Array.from({ length: 7 }, (_, index) => api.createBot({ name: name(`Relay${"ABCDEFG"[index]}`), purpose: "Passes messages on" })));
+	await script(
+		context.request,
+		Object.fromEntries(
+			chain.map((bot, index) => [bot.name, [{ tool: "message_bot", args: { to: chain[(index + 1) % chain.length]!.name, text: "Pass this on.", intent: "status" } }, "Passed on."]]),
+		),
+	);
+	await page.goto(`/bots/${chain[0]!.id}`);
+	await page.getByRole("textbox", { name: "Message" }).fill("Start the relay");
+	await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	const last = chain[6]!;
+	const refused = await until(
+		async () => (await modelRequests(context.request)).find((request) => request.bot === last.name && request.tool?.includes("reached 6 hops")),
+		"the seventh hop refused",
+		60_000,
+	);
+	expect(refused.tool).toContain("tell the owner");
+	// The first bot never got a message back around the loop.
+	expect((await threadTexts(api, chain[0]!.id)).some((text) => text.includes(`Message from ${last.name}`))).toBe(false);
 });

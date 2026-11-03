@@ -7,7 +7,7 @@
 //   { byBot: { [botName]: string } }     what a bot answers whenever nothing else is scripted
 //   { passInGroups: string[] }           bots that pass on their group turns
 // A Reply is text, or { tool, args } for a tool call. With nothing scripted the server answers "You said: <message>".
-// GET /__requests lists what each request asked (bot, last user text, tool results), for tests to check.
+// GET /__requests lists what each request asked (bot, last user text, tool result) and when it ran, for tests to check.
 import { createServer, type IncomingMessage, type Server } from "node:http";
 
 export const FAKE_MODELS = ["fake-model", "fake-fast"];
@@ -32,7 +32,7 @@ export async function startFakeModelServer(port = 0): Promise<{ url: string; ser
 	const forBot = new Map<string, Reply[]>();
 	const byBot = new Map<string, string>();
 	const passing = new Set<string>();
-	const requests: { bot?: string; user: string; tool?: string }[] = [];
+	const requests: { bot?: string; user: string; tool?: string; start: number; end?: number }[] = [];
 	const server = createServer(async (request, response) => {
 		const url = new URL(request.url ?? "/", "http://fake");
 		const json = (status: number, body: unknown) => response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
@@ -59,7 +59,9 @@ export async function startFakeModelServer(port = 0): Promise<{ url: string; ser
 		const system = body.messages.filter((message) => message.role === "system" || message.role === "developer").map(textOf).join("\n");
 		const names = new Set([...forBot.keys(), ...byBot.keys(), ...passing]);
 		const bot = [...names].find((name) => system.includes(`You are ${name}`));
-		requests.push({ ...(bot ? { bot } : {}), user: textOf(lastUser), ...(last?.role === "tool" ? { tool: textOf(last) } : {}) });
+		const logged: (typeof requests)[number] = { ...(bot ? { bot } : {}), user: textOf(lastUser), ...(last?.role === "tool" ? { tool: textOf(last) } : {}), start: Date.now() };
+		requests.push(logged);
+		response.on("finish", () => (logged.end = Date.now()));
 		const inGroup = system.includes("You are in the group chat");
 		let reply: Reply;
 		if (inGroup && bot && passing.has(bot)) reply = "PASS";
