@@ -1640,7 +1640,7 @@ export class BotObject extends DurableObject<Env> {
 	/** Development only (BOTS_DEV_SEED): this bot as the seed describes it, its thread's rows and cards included. */
 	async importSeed(
 		principal: Principal,
-		part: { bot: Bot; thread?: ConversationViewProtocol; notes: Note[]; openWork: { id: string; text: string; done: boolean; createdAt: number }[]; routines: Routine[]; approvals: Approval[]; instructionVersions: unknown[]; reply?: string },
+		part: { bot: Bot; thread?: ConversationViewProtocol; notes: Note[]; openWork: { id: string; text: string; done: boolean; createdAt: number }[]; routines: Routine[]; approvals: Approval[]; instructionVersions: unknown[]; reply?: string; history?: { role: "user" | "assistant"; text: string; at: number }[] },
 	): Promise<void> {
 		if (this.env.BOTS_DEV_SEED !== "1") throw new Error("seeding is off");
 		await this.create(principal, part.bot);
@@ -1654,7 +1654,12 @@ export class BotObject extends DurableObject<Env> {
 		}
 		const reactions = Object.fromEntries((part.thread?.entries ?? []).flatMap((entry) => (entry.kind === "message" && entry.reactions?.length ? [[entry.id, entry.reactions]] : [])));
 		await this.#setMeta("reactions", JSON.stringify(reactions));
-		for (const note of part.notes) await this.memory.notes.write({ name: note.name, description: note.description, type: note.type, body: note.body, outside: note.outside });
+		for (const note of part.notes) {
+			await this.memory.notes.write({ name: note.name, description: note.description, type: note.type, body: note.body, outside: note.outside });
+			// Written when the seed says, not now.
+			await this.#write((sql) => void sql.exec("UPDATE notes SET created_at = ?, updated_at = ? WHERE name = ?", note.updatedAt, note.updatedAt, note.name));
+		}
+		await this.#seedHistory(part.history ?? []);
 		for (const item of part.openWork) await this.memory.openWork.add(item.text);
 		for (const routine of part.routines)
 			await this.createRoutine(principal, { name: routine.name, prompt: routine.prompt, triggers: routine.triggers, grant: routine.grant, active: routine.active, ...(routine.note ? { note: routine.note } : {}) } as RoutineInput);
@@ -1666,6 +1671,26 @@ export class BotObject extends DurableObject<Env> {
 			const created = await createApproval(this.ctx.storage.sql, { botId: this.#id, actionId: record.id, action: intent, policyVersion: this.#policyVersion, ttlMs: APPROVAL_TTL_MS });
 			await this.#write((sql) => void sql.exec("UPDATE actions SET approval_id = ? WHERE id = ?", created.id, record.id));
 		}
+	}
+
+	/** Development seeding: messages appended to the bot's own conversation, as if they had been said. */
+	async #seedHistory(messages: { role: "user" | "assistant"; text: string; at: number }[]): Promise<void> {
+		if (messages.length === 0) return;
+		const root = await this.#conversation();
+		const ref = this.#settings.read().model ?? this.#model!;
+		const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+		for (let start = 0; start < messages.length; start += 500)
+			await root.commit(async (tx) => {
+				for (const message of messages.slice(start, start + 500))
+					await tx.appendEntry(root.id, {
+						kind: message.role === "user" ? UserEntry.kind : AssistantEntry.kind,
+						model: [
+							message.role === "user"
+								? { role: "user", content: message.text, timestamp: message.at }
+								: { role: "assistant", content: [{ type: "text", text: message.text }], api: ref.provider, provider: ref.provider, model: ref.modelId, usage, stopReason: "stop", timestamp: message.at },
+						],
+					});
+			}, context);
 	}
 
 	/**

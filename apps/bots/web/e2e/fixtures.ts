@@ -16,11 +16,13 @@ export const REAL = process.env.BOTS_BACKEND === "real";
 const LEFTOVERS = fileURLToPath(new URL("../../.wrangler/e2e/leftover-accounts", import.meta.url));
 const leftovers = () => (existsSync(LEFTOVERS) ? readFileSync(LEFTOVERS, "utf8").split("\n").filter(Boolean) : []);
 
-export const test = base.extend<{ seedName: string | undefined; account: string | undefined }>({
+export const test = base.extend<{ seedName: string | undefined; extendSeed: ((seed: FakeSeed) => void) | undefined; account: string | undefined }>({
 	/** A named seed from the reference folder (as `?seed=<name>` loads into the fake); the default world otherwise. */
 	seedName: [undefined, { option: true }],
+	/** Changes to the seed before it loads (a test's own bots, notes or long history). */
+	extendSeed: [undefined, { option: true }],
 	account: [
-		async ({ context, seedName }, use) => {
+		async ({ context, seedName, extendSeed }, use) => {
 			if (!REAL) return use(undefined);
 			// The dev server may be coming back after an exit (see global-setup.ts): a few tries over half a minute.
 			let session = await context.request.post("/__dev/session", { data: { name: "Raghav" } }).catch(() => undefined);
@@ -39,6 +41,7 @@ export const test = base.extend<{ seedName: string | undefined; account: string 
 				? seedFrom((await (await context.request.get(`/__seed/${seedName}.json`)).json()) as Partial<FakeSeed>)
 				: defaultSeed();
 			if (seed.templates.length === 0) seed.templates = TEMPLATES;
+			extendSeed?.(seed);
 			// Each seeded bot answers with the reply the fake would stream.
 			const byBot = Object.fromEntries(seed.bots.flatMap((bot) => (seed.replies[bot.id] ? [[bot.name, seed.replies[bot.id]!]] : [])));
 			// As the fake does: with @everyone, every second member of a group has nothing to add.

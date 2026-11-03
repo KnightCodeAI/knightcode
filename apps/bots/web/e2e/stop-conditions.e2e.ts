@@ -360,3 +360,50 @@ test("A Chief of Staff bot creates a bot and edits its instructions only after a
 	expect((await api.getBot({ botId: scribe.id })).instructions).toBe("Take notes as short bullet points.");
 	expect((await api.listApprovals({})).approvals.filter((candidate) => candidate.state === "pending" && candidate.botId === chief.id)).toEqual([]);
 });
+
+test.describe("a bot with a long past", () => {
+	const DAY = 24 * 60 * 60_000;
+	test.use({
+		// A function value here would be read as a fixture, so the change is handed over by one.
+		extendSeed: async ({}, use) =>
+			use((seed) => {
+			const { email: _email, ...base } = seed.bots[0]!;
+			seed.bots.push({ ...base, id: "archivist", name: "Archivist", purpose: "Remembers the owner's things", instructions: "", pinned: false, main: false });
+			// A note written three weeks ago.
+			seed.notes.archivist = [
+				{ name: "storage-unit", description: "where the owner's boxes are", type: "fact", body: "The storage unit is number 214 at Lakeside Storage.", updatedAt: Date.now() - 21 * DAY, shared: false, outside: false },
+			];
+			// 10,000 messages over the last month; the locksmith came up near the start.
+			const start = Date.now() - 30 * DAY;
+			seed.history = {
+				archivist: Array.from({ length: 10_000 }, (_, index) => ({
+					role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
+					text: index === 30 ? "The locksmith's number is 555-0142, ask for Marta." : `Message ${index}: an ordinary exchange about the week's errands.`,
+					at: start + index * 4 * 60_000,
+				})),
+			};
+		}),
+	});
+
+	test("A bot recalls a fact from a note written weeks earlier, and finds an exchange from early in a 10,000-message thread", async ({ context, page }) => {
+		test.setTimeout(240_000);
+		const api = apiOf(context.request);
+		const note = (await api.listNotes({ botId: "archivist" })).notes.find((candidate) => candidate.name === "storage-unit")!;
+		expect(Date.now() - note.updatedAt).toBeGreaterThan(20 * DAY);
+		await script(context.request, {
+			Archivist: ["Unit 214 at Lakeside Storage.", { tool: "search_history", args: { query: "locksmith" } }, "It's 555-0142; ask for Marta."],
+		});
+		await page.goto("/bots/archivist");
+		await page.getByRole("textbox", { name: "Message" }).fill("Which storage unit did I rent?");
+		await page.getByRole("textbox", { name: "Message" }).press("Enter");
+		await expect(page.getByText("Unit 214 at Lakeside Storage.")).toBeVisible({ timeout: 120_000 });
+		// The note joined that turn's context as a recall.
+		const asked = (await modelRequests(context.request)).filter((request) => request.bot === "Archivist" && request.user.includes("Which storage unit"));
+		expect(asked.at(-1)?.recent).toContain("The storage unit is number 214 at Lakeside Storage.");
+		await page.getByRole("textbox", { name: "Message" }).fill("What was the locksmith's number again?");
+		await page.getByRole("textbox", { name: "Message" }).press("Enter");
+		await expect(page.getByText("It's 555-0142; ask for Marta.")).toBeVisible({ timeout: 120_000 });
+		const searched = (await modelRequests(context.request)).filter((request) => request.bot === "Archivist" && request.tool !== undefined).at(-1);
+		expect(searched?.tool).toContain("555-0142");
+	});
+});

@@ -7,8 +7,10 @@
 //   { byBot: { [botName]: string } }     what a bot answers whenever nothing else is scripted
 //   { passInGroups: string[] }           bots that pass on their group turns
 // A Reply is text, or { tool, args } for a tool call; an argument "{{last.<field>}}" takes that field of the previous tool
-// result (JSON). With nothing scripted the server answers "You said: <message>".
-// GET /__requests lists what each request asked (bot, last user text, tool result) and when it ran, for tests to check.
+// result (JSON). With nothing scripted the server answers "You said: <message>" (its first 300 characters: a
+// compaction request carries a whole transcript).
+// GET /__requests lists what each request asked (bot, last user text, the last few messages, tool result, tools offered)
+// and when it ran, for tests to check.
 import { createServer, type IncomingMessage, type Server } from "node:http";
 
 export const FAKE_MODELS = ["fake-model", "fake-fast"];
@@ -47,7 +49,7 @@ export async function startFakeModelServer(port = 0): Promise<{ url: string; ser
 	const forBot = new Map<string, Reply[]>();
 	const byBot = new Map<string, string>();
 	const passing = new Set<string>();
-	const requests: { bot?: string; user: string; tool?: string; tools: string[]; start: number; end?: number }[] = [];
+	const requests: { bot?: string; user: string; recent: string; tool?: string; tools: string[]; start: number; end?: number }[] = [];
 	const server = createServer(async (request, response) => {
 		const url = new URL(request.url ?? "/", "http://fake");
 		const json = (status: number, body: unknown) => response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
@@ -74,14 +76,14 @@ export async function startFakeModelServer(port = 0): Promise<{ url: string; ser
 		const system = body.messages.filter((message) => message.role === "system" || message.role === "developer").map(textOf).join("\n");
 		const names = new Set([...forBot.keys(), ...byBot.keys(), ...passing]);
 		const bot = [...names].find((name) => system.includes(`You are ${name}`));
-		const logged: (typeof requests)[number] = { ...(bot ? { bot } : {}), user: textOf(lastUser), ...(last?.role === "tool" ? { tool: textOf(last) } : {}), tools: (body.tools ?? []).map((tool) => tool.function?.name ?? ""), start: Date.now() };
+		const logged: (typeof requests)[number] = { ...(bot ? { bot } : {}), user: textOf(lastUser).slice(0, 2_000), recent: body.messages.slice(-6).map(textOf).join("\n").slice(0, 8_000), ...(last?.role === "tool" ? { tool: textOf(last) } : {}), tools: (body.tools ?? []).map((tool) => tool.function?.name ?? ""), start: Date.now() };
 		requests.push(logged);
 		response.on("finish", () => (logged.end = Date.now()));
 		const inGroup = system.includes("You are in the group chat");
 		let reply: Reply;
 		if (inGroup && bot && passing.has(bot)) reply = "PASS";
 		else if (bot && forBot.get(bot)?.length) reply = forBot.get(bot)!.shift()!;
-		else reply = scripted.shift() ?? (bot && byBot.has(bot) ? byBot.get(bot)! : `You said: ${textOf(lastUser)}`);
+		else reply = scripted.shift() ?? (bot && byBot.has(bot) ? byBot.get(bot)! : `You said: ${textOf(lastUser).slice(0, 300)}`);
 		const id = `chatcmpl-${Date.now()}`;
 		const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
 		if (typeof reply !== "string") {

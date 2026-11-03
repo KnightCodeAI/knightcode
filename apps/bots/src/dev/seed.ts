@@ -27,6 +27,7 @@ export async function importSeed(env: Env, principal: Principal, seed: FakeSeed)
 			approvals: seed.approvals.filter((approval) => approval.botId === bot.id),
 			instructionVersions: seed.instructionVersions[bot.id] ?? [],
 			reply: seed.replies[bot.id],
+			history: seed.history?.[bot.id] ?? [],
 		});
 		if (bot.email) await claimBotAddress(env.DB, { address: bot.email, botId: bot.id, accountId: principal.accountId }).catch(() => undefined);
 	}

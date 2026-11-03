@@ -55,6 +55,8 @@ export interface FakeSeed {
 	instructionVersions: Record<string, InstructionsVersion[]>;
 	managed: Record<string, string[]>;
 	notes: Record<string, Note[]>;
+	/** Development seeding only: messages already in a bot's own conversation, for long-chat tests. */
+	history?: Record<string, { role: "user" | "assistant"; text: string; at: number }[]>;
 	sharedMemory: { notes: Note[]; summary: string };
 	openWork: Record<string, OpenWorkItem[]>;
 	files: FileRef[];
