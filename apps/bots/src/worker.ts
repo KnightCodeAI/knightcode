@@ -372,9 +372,29 @@ async function handle(request: Request, env: Env): Promise<Response> {
 		if (!accountId) return json({ error: "bad_request" }, 400);
 		const principal: Principal = { accountId, workspaceId: "", client: "web" };
 		try {
+			// The purged objects reset themselves just after answering, and the next test reuses their names: the answer
+			// waits until each one answers from a fresh instance, so no reset can land in the middle of the next test.
+			const botIds = (await env.DB.prepare("SELECT id FROM bots WHERE account_id = ?").bind(accountId).all<{ id: string }>()).results.map((row) => row.id);
+			// A stub that saw its object reset stays broken: each call takes a fresh one.
+			const objects = [
+				...botIds.map((id) => () => env.BOT.get(env.BOT.idFromName(id))),
+				() => env.USER.get(env.USER.idFromName(accountId)),
+				() => env.COMPUTER.get(env.COMPUTER.idFromName(accountId)),
+			];
+			const before = await Promise.all(objects.map((object) => object().instanceId().catch(() => "")));
 			const report = await deleteAccount(env, principal);
-			// The purged objects reset themselves just after answering; the next test reuses their names.
-			await new Promise((resolve) => setTimeout(resolve, 250));
+			const deadline = Date.now() + 15_000;
+			await Promise.all(
+				objects.map(async (object, index) => {
+					while (Date.now() < deadline) {
+						const now = await object()
+							.instanceId()
+							.catch(() => undefined);
+						if (now && now !== before[index]) return;
+						await new Promise((resolve) => setTimeout(resolve, 50));
+					}
+				}),
+			);
 			return json(report);
 		} catch (error) {
 			return json({ error: "delete_failed", message: error instanceof Error ? `${error.message}\n${error.stack ?? ""}` : String(error) }, 500);

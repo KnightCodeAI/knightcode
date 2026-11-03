@@ -180,6 +180,12 @@ export class BotObject extends DurableObject<Env> {
 	/** The owner's country, for what is offered there (payments, finance). */
 	#country: string | undefined;
 
+	/** This instance, as opposed to the object: it changes when the object resets (development tests wait on it). */
+	readonly #instance = crypto.randomUUID();
+	instanceId(): string {
+		return this.#instance;
+	}
+
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
 		const sql = ctx.storage.sql;

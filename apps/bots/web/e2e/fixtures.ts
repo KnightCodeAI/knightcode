@@ -54,6 +54,8 @@ export const test = base.extend<{ seedName: string | undefined; extendSeed: ((se
 				expect(seeded.ok(), await seeded.text()).toBe(true);
 				await use(accountId);
 			} finally {
+				// No page keeps talking to the objects being deleted: a request cut off by their reset makes the dev server exit.
+				for (const open of context.pages()) await open.close().catch(() => undefined);
 				const deleted = await context.request.post("/__dev/delete", { data: { accountId } }).catch(() => undefined);
 				if (!deleted?.ok()) {
 					appendFileSync(LEFTOVERS, `${accountId}\n`);
