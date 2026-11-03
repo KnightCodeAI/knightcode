@@ -33,7 +33,13 @@ export function Select({ value, onValueChange, options, label, className, disabl
 				</SelectPrimitive.Icon>
 			</SelectPrimitive.Trigger>
 			<SelectPrimitive.Portal container={layer}>
-				<SelectPrimitive.Content className="kb-floating" position="popper" sideOffset={6} collisionPadding={8}>
+				<SelectPrimitive.Content
+					className="kb-floating kb-select__content"
+					position="popper"
+					align="end"
+					sideOffset={4}
+					collisionPadding={8}
+				>
 					<SelectPrimitive.Viewport className="kb-select__viewport">
 						{options.map((option) => (
 							<SelectPrimitive.Item key={option.value} value={option.value} className="kb-menu__item">
