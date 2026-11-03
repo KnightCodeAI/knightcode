@@ -55,25 +55,23 @@ test("selects the newest catalog a KnightCode version supports", () => {
 	assert.equal(selectModelCatalog(index, undefined)?.revision, mixedApiRevision);
 });
 
-test("redirects KnightCode user agents to an explicit catalog version", () => {
-	// Regression: released clients identify themselves only by User-Agent.
+test("serves KnightCode user agents the catalog for their version", () => {
+	// Released clients identify themselves only by User-Agent.
 	assert.deepEqual(
 		parseModelCatalogRequest(
 			"https://knightcode.dev/api/models/providers/openrouter?types=chat%2Cimage",
 			"knightcode/0.84.4 (linux; node/v22.0.0; x64)",
 		),
-		{
-			kind: "redirect",
-			location: "https://knightcode.dev/api/models/providers/openrouter?types=chat%2Cimage&knightcode-version=0.84.4",
-		},
+		{ kind: "catalog", knightcodeVersion: "0.84.4", representation: "typed" },
 	);
 	assert.deepEqual(parseModelCatalogRequest("https://knightcode.dev/api/models", "knightcode/0.84.4"), {
-		kind: "redirect",
-		location: "https://knightcode.dev/api/models?knightcode-version=0.84.4",
+		kind: "catalog",
+		knightcodeVersion: "0.84.4",
+		representation: "legacy",
 	});
 });
 
-test("serves explicit and unversioned catalog requests without redirecting", () => {
+test("serves explicit and unversioned catalog requests", () => {
 	assert.deepEqual(
 		parseModelCatalogRequest(
 			"https://knightcode.dev/api/models?knightcode-version=0.83.0",
