@@ -1,5 +1,29 @@
 # @knightcodeai/cli
 
+## 0.23.6
+
+### Added
+
+- Added the GitHub Copilot classifier Microsoft-Decision-1, reached at the account's System One endpoint.
+
+### Changed
+
+- Changed OpenCode Zen and Go so Claude models that accept per-message effort keep that effort across the conversation, and thinking stays available to turn off except on models that reject disabled thinking.
+
+- Changed the output-token clamp so a long context keeps a safety margin proportional to the estimate, while the existing estimate pad stays in place.
+
+- Changed model catalog requests so a KnightCode user agent is served the catalog for that version without a version redirect.
+
+### Fixed
+
+- Fixed non-strict Anthropic tool schemas so root `$defs` and `definitions` stay in place and property references still resolve.
+
+- Fixed Codex retries so a finished retry drops its abort listener and a later abort cannot cancel the completed stream.
+
+- Fixed branch summaries so they apply context edits that hide or replace earlier entries.
+
+- Fixed `knightcode update` so it lists each package that changed and does not report success when warnings were printed or offline mode skipped the update.
+
 ## 0.23.5
 
 ### Changed
