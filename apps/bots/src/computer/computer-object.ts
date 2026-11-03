@@ -176,6 +176,12 @@ export class ComputerObject extends DurableObject<Env> {
 		await this.#arm();
 	}
 
+	/** Ten minutes; a development server may shorten it for its browser tests. */
+	get #idleMs(): number {
+		const dev = this.env.BOTS_DEV_SEED === "1" ? Number(this.env.BOTS_DEV_COMPUTER_IDLE_MS) : Number.NaN;
+		return dev > 0 ? dev : IDLE_MS;
+	}
+
 	/** The start in progress, shared by every acquisition that needs it. */
 	#starting: Promise<boolean> | undefined;
 
@@ -271,7 +277,7 @@ export class ComputerObject extends DurableObject<Env> {
 		const block = this.#get("block");
 		const times = [
 			...(block ? [(JSON.parse(block) as { endsAt: number }).endsAt] : []),
-			...(leases.length === 0 ? [Number(this.#get("last_active") ?? clock()) + IDLE_MS] : []),
+			...(leases.length === 0 ? [Number(this.#get("last_active") ?? clock()) + this.#idleMs] : []),
 			...leases.map((lease) => lease.expires_at),
 		];
 		// Due times are on the computer's clock; the alarm is set that far from now.
@@ -313,7 +319,7 @@ export class ComputerObject extends DurableObject<Env> {
 		this.#renewLive(now);
 		this.#sql.exec("DELETE FROM leases WHERE expires_at <= ?", now);
 		if (this.#state === "running") {
-			const idle = this.#leases().length === 0 && now - Number(this.#get("last_active") ?? now) >= IDLE_MS;
+			const idle = this.#leases().length === 0 && now - Number(this.#get("last_active") ?? now) >= this.#idleMs;
 			const block = this.#get("block");
 			const blockEnded = !block || (JSON.parse(block) as { endsAt: number }).endsAt <= now;
 			if (idle) await this.#sleep("idle");

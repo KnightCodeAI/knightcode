@@ -466,3 +466,43 @@ test("A user hits their spending limit: the computer stops, chat keeps working",
 	await send("Are you still there?");
 	await expect(page.getByText("Chat still works.")).toBeVisible({ timeout: 60_000 });
 });
+
+test("A bot uses the computer's browser, the computer sleeps after idling, and on the next run the same tabs are open and still signed in (fake computer provider)", async ({ context, page }) => {
+	test.setTimeout(180_000);
+	const api = apiOf(context.request);
+	const tag = Date.now().toString(36).slice(-4);
+	const bot = await api.createBot({ name: `Reader${tag}`, purpose: "Reads the news for the owner" });
+	await api.updateBot({ botId: bot.id, computerAccess: true, approvals: "never" });
+	const login = await api.putVault({ kind: "login", name: "News", origin: "https://news.example", value: JSON.stringify({ username: "ada", password: `pw-${tag}` }) });
+	await script(context.request, {
+		[bot.name]: [
+			{ tool: "tool_search", args: { query: "browser_navigate browser_act browser_snapshot" } },
+			{ tool: "browser_navigate", args: { url: "https://news.example/login" } },
+			// Having read a page, the next computer step asks the owner first.
+			{ tool: "browser_act", args: { ref: "password", do: "type", vaultItem: login.id, field: "password" } },
+			"I asked to keep using the computer.",
+			{ tool: "browser_act", args: { ref: "password", do: "type", vaultItem: login.id, field: "password" } },
+			{ tool: "browser_navigate", args: { url: "https://docs.example/start" } },
+			"Signed in to the news site and opened the docs.",
+			{ tool: "browser_snapshot", args: {} },
+			"Both tabs are still open, and I'm still signed in.",
+		],
+	});
+	const send = async (text: string) => {
+		await page.getByRole("textbox", { name: "Message" }).fill(text);
+		await page.getByRole("textbox", { name: "Message" }).press("Enter");
+	};
+	await page.goto(`/bots/${bot.id}`);
+	await send("Sign in to the news site, then open the docs");
+	await expect(page.getByText("I asked to keep using the computer.")).toBeVisible({ timeout: 60_000 });
+	await page.getByRole("button", { name: "Allow once" }).first().click();
+	await expect(page.getByText("Signed in to the news site and opened the docs.")).toBeVisible({ timeout: 60_000 });
+	// Idle: the computer saves and sleeps (this server's idle time is 15 seconds).
+	await until(async () => (await api.getComputer({})).status === "sleeping", "the computer asleep", 90_000);
+	await send("What's open?");
+	await expect(page.getByText("Both tabs are still open, and I'm still signed in.")).toBeVisible({ timeout: 60_000 });
+	const seen = (await modelRequests(context.request)).filter((request) => request.bot === bot.name && request.tool?.includes("Tabs:")).at(-1);
+	expect(seen?.tool).toContain("Tabs: https://news.example/login, https://docs.example/start");
+	expect(seen?.tool).toContain("Signed in to: https://news.example");
+	expect((await api.getComputer({})).status).toBe("awake");
+});

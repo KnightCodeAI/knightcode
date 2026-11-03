@@ -94,13 +94,13 @@ it("3: a credentialed write waits for the owner's approval and is then sent once
 	expect(seen[0]!.headers.get("authorization")).toBe("Bearer sk_live_write_secret");
 });
 
-it("3: computer tools refuse in a run outside text started unless its grant includes computer.use", async () => {
+it("3: computer tools run only when allowed; otherwise they answer with the ask or refusal text", async () => {
 	let ran = 0;
 	const tool = { name: "bash", description: "", parameters: {}, execute: async () => (ran++, { output: [{ type: "text", text: "ok" }] }) } as never;
-	const refused = (await guardComputerTool(tool, async () => false).execute({} as never, undefined as never, undefined as never)) as { isError?: boolean };
+	const refused = (await guardComputerTool(tool, async () => "asked the owner").execute({} as never, undefined as never, undefined as never)) as { isError?: boolean };
 	expect(refused.isError).toBe(true);
 	expect(ran).toBe(0);
-	await guardComputerTool(tool, async () => true).execute({} as never, undefined as never, undefined as never);
+	await guardComputerTool(tool, async () => undefined).execute({} as never, undefined as never, undefined as never);
 	expect(ran).toBe(1);
 });
 
@@ -197,3 +197,45 @@ it("14: a revocation that fails stops the deletion before anything is deleted, s
 	expect((await user.credentialList()).some((item) => item.providerId.startsWith("plaid:"))).toBe(true);
 	expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM bots WHERE account_id = ?").bind(owner.accountId).first()).toEqual({ n: 1 });
 });
+
+it("the owner's Block list stops an action in every mode, and the Allow list skips the card", async () => {
+	const models = fakeModels([
+		{ toolCall: { name: "send_email", args: { to: "dana@example.com", subject: "Hi", body: "blocked" } } },
+		{ text: "refused" },
+		// The memory pass after the first run.
+		{ text: "[]" },
+		{ toolCall: { name: "send_email", args: { to: "dana@example.com", subject: "Hi", body: "allowed" } } },
+		{ text: "sent" },
+	]);
+	setModelsFactory(() => models);
+	const sent: string[] = [];
+	const unregister = registerAdapter({ id: "email.send", kind: "neither", send: async (action) => (sent.push((action.intent.args as { body: string }).body), { ok: true }) });
+	try {
+		const owner = await signedInPrincipal();
+		const user = env.USER.get(env.USER.idFromName(owner.accountId));
+		await bot("r3-rules").claim(owner, { provider: "fake", modelId: "fake-model" });
+		await bot("r3-rules").updateSettings(owner, { approvals: "never" });
+		await user.updateApprovalSettings({ block: [{ id: "rule_b", kind: "tool", value: "email.send" }] });
+		await bot("r3-rules").submit(owner, "Mail Dana", "r-rules-1");
+		await waitFor(async () => (await answerOf("r3-rules")) === "refused", "the refusal");
+		expect(sent).toEqual([]);
+		expect(await bot("r3-rules").pendingApprovals(owner)).toEqual([]);
+		// Allowed instead, in a mode that would ask.
+		await user.updateApprovalSettings({ block: [], allow: [{ id: "rule_a", kind: "tool", value: "email.send" }] });
+		await bot("r3-rules").updateSettings(owner, { approvals: "ask" });
+		await bot("r3-rules").submit(owner, "Mail Dana again", "r-rules-2");
+		await waitFor(async () => sent.length === 1, "the allowed send");
+		expect(sent).toEqual(["allowed"]);
+	} finally {
+		unregister();
+	}
+}, 20_000);
+
+/** The bot's newest answer text. */
+const answerOf = (botId: string) =>
+	runInDurableObject(bot(botId), async (instance) => {
+		const root = await (instance as unknown as BotObject).memory.conversation();
+		const entry = (await root.entries({}, 10, undefined, undefined as never)).items.find((item) => item.kind === "knightcode.assistant");
+		const message = entry?.model?.[0] as { content?: { type: string; text?: string }[] } | undefined;
+		return message?.content?.find((block) => block.type === "text")?.text;
+	});

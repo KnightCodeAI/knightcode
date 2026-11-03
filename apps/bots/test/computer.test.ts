@@ -43,6 +43,28 @@ it("sleeps after 10 idle minutes and reserves computer time in 5-minute blocks",
 	expect((await balance(account)).reserved).toBe(0);
 });
 
+it("after an idle sleep the bot's tabs are open again and still signed in, restored from the save", async () => {
+	const account = "acct-tabs";
+	await grant(account, 1_000);
+	const lease = await acquire(account, "b1");
+	const browse = (request: Parameters<ComputerObject["browser"]>[1]) => computer(account).browser("b1", request);
+	const login = await user(account).vaultPut({ kind: "login", name: "News", origin: "https://news.example", value: JSON.stringify({ username: "ada", password: "hunter2" }) });
+	await browse({ action: "navigate", url: "https://news.example/login" });
+	await computer(account).fillLogin("b1", "password", login.id, "password");
+	await browse({ action: "navigate", url: "https://docs.example/start" });
+	await computer(account).release(lease);
+	now += 11 * MINUTE;
+	await runDurableObjectAlarm(computer(account));
+	expect(await computer(account).status()).toMatchObject({ state: "stopped", stoppedReason: "idle" });
+	// The container's disk is gone while it sleeps.
+	expect(fakeComputers.get(account)!.files.size).toBe(0);
+	await acquire(account, "b1");
+	const page = await browse({ action: "snapshot" });
+	expect(page.snapshot).toContain("Tabs: https://news.example/login, https://docs.example/start");
+	expect(page.snapshot).toContain("Signed in to: https://news.example");
+	expect(JSON.stringify(page)).not.toContain("hunter2");
+});
+
 it("stays awake while a bot run holds it", async () => {
 	const account = "acct-busy";
 	await grant(account, 100);
@@ -186,6 +208,37 @@ it("stops a running computer as soon as the user lowers the spending limit to wh
 	await acquire(account, "b1");
 	expect(fakeComputers.get(account)!.running).toBe(true);
 });
+
+it("after the bot reads a page, its next computer step asks the owner once; allowed, the run goes on", async () => {
+	const principal: Principal = { accountId: "acct-ask", workspaceId: "acct-ask", client: "web" };
+	await grant(principal.accountId, 1_000);
+	const login = await user(principal.accountId).vaultPut({ kind: "login", name: "News", origin: "https://news.example", value: "pw-ask" });
+	const models = fakeModels([
+		{ toolCall: { name: "browser_navigate", args: { url: "https://news.example/login" } } },
+		{ toolCall: { name: "browser_act", args: { ref: "password", do: "type", vaultItem: login.id, field: "password" } } },
+		{ text: "I asked to keep going." },
+		// The memory pass after the first run.
+		{ text: "[]" },
+		{ toolCall: { name: "browser_act", args: { ref: "password", do: "type", vaultItem: login.id, field: "password" } } },
+		{ text: "Signed in." },
+	]);
+	setModelsFactory(() => models);
+	const bot = env.BOT.get(env.BOT.idFromName("ask-bot"));
+	await bot.claim(principal, { provider: "fake", modelId: "fake-model" });
+	await bot.updateSettings(principal, { computerAccess: true, approvals: "never" });
+	await bot.submit(principal, "Sign in to the news site", "r-ask");
+	expect(await lastAnswer("ask-bot")).toBe("I asked to keep going.");
+	// Nothing was filled; one card asks, even in the most permissive mode.
+	const fills = () => fakeComputers.get(principal.accountId)!.browserRequests.filter((request) => request.action === "fill");
+	expect(fills()).toHaveLength(0);
+	const pending = await bot.pendingApprovals(principal);
+	expect(pending.map((approval) => approval.action.tool)).toEqual(["computer.use"]);
+	expect(await bot.answerApproval(principal, pending[0]!.id, "allow")).toBe("ok");
+	const deadline = Date.now() + 4_000;
+	while (fills().length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+	expect(fills()).toHaveLength(1);
+	expect(await lastAnswer("ask-bot")).toBe("Signed in.");
+}, 20_000);
 
 const user = (account: string) => env.USER.get(env.USER.idFromName(account));
 const grant = (account: string, cents: number) => user(account).grantCredits(cents, `grant-${crypto.randomUUID()}`);

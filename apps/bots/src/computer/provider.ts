@@ -63,7 +63,7 @@ export class FakeComputerProvider implements ComputerProvider {
 	readonly calls: string[] = [];
 	readonly files = new Map<string, FakeFile>();
 	readonly users = new Set<string>();
-	workspace = new Uint8Array();
+	workspace: Uint8Array = new Uint8Array();
 	readonly snapshots: SnapshotHandle[] = [];
 	screens: (id: string, botId: string, mode: "view" | "control") => Promise<CapabilityUrl> = async (_id, botId, mode) => ({
 		url: `https://fake/${botId}/${mode}`,
@@ -74,6 +74,9 @@ export class FakeComputerProvider implements ComputerProvider {
 		this.calls.push(`provision:${id}`);
 		this.provisioned = true;
 		this.running = true;
+		// A new container: an empty disk until a save is imported.
+		this.files.clear();
+		this.users.clear();
 	}
 	async reconnect(id: string) {
 		this.calls.push(`reconnect:${id}`);
@@ -82,6 +85,9 @@ export class FakeComputerProvider implements ComputerProvider {
 	async stop(id: string) {
 		this.calls.push(`stop:${id}`);
 		this.running = false;
+		// The container and its disk are gone; only the save (archive or snapshot) brings them back.
+		this.files.clear();
+		this.users.clear();
 	}
 	async destroy(id: string) {
 		this.calls.push(`destroy:${id}`);
@@ -145,8 +151,23 @@ export class FakeComputerProvider implements ComputerProvider {
 		return this.screens(id, botId, mode);
 	}
 
+	/** The disk as a save carries it: every file with its owner and mode. */
+	#disk(): string {
+		return JSON.stringify([...this.files]);
+	}
+	#restore(disk: string) {
+		this.files.clear();
+		this.users.clear();
+		for (const [path, file] of JSON.parse(disk) as [string, FakeFile][]) {
+			this.files.set(path, file);
+			const home = /^\/home\/([^/]+)\//.exec(path)?.[1];
+			if (home) this.users.add(home);
+		}
+	}
+
 	async *exportWorkspace(id: string): AsyncIterable<Uint8Array> {
 		this.calls.push(`export:${id}`);
+		this.workspace = new TextEncoder().encode(this.#disk());
 		yield this.workspace;
 	}
 	async importWorkspace(id: string, data: AsyncIterable<Uint8Array>) {
@@ -160,22 +181,54 @@ export class FakeComputerProvider implements ComputerProvider {
 			offset += part.length;
 		}
 		this.workspace = all;
+		if (all.length > 0) this.#restore(new TextDecoder().decode(all));
 	}
 	async snapshot(id: string, generation: number) {
 		this.calls.push(`snapshot:${id}:${generation}`);
 		const handle = { id: `snap-${generation}`, generation, createdAt: Date.now() };
 		this.snapshots.push(handle);
+		this.#snapshotDisks.set(handle.id, this.#disk());
 		return handle;
 	}
+	readonly #snapshotDisks = new Map<string, string>();
 	async restoreSnapshot(id: string, handle: SnapshotHandle) {
 		this.calls.push(`restore-snapshot:${id}:${handle.generation}`);
+		const disk = this.#snapshotDisks.get(handle.id);
+		if (disk === undefined) throw new Error("no such snapshot");
+		this.#restore(disk);
 		this.running = true;
 	}
 	/** The browser requests the bridge would get, for tests to inspect. */
 	readonly browserRequests: BrowserRequest[] = [];
-	async browser(_id: string, _botUser: string, request: BrowserRequest): Promise<BrowserResult> {
+	/**
+	 * A browser whose state lives in the bot's Chrome profile on disk, as Chrome's does: its open tabs ("Current
+	 * Session") and the sites it is signed in to (a password filled on a site's page signs in). A page opened on a site
+	 * with no tab yet gets a new tab. Before anything is opened the page is a checkout (the payment tests' shop).
+	 */
+	async browser(_id: string, botUser: string, request: BrowserRequest): Promise<BrowserResult> {
 		this.browserRequests.push(request);
-		return { url: "https://shop.example/checkout", title: "Checkout" };
+		this.addUser(botUser);
+		const sessionPath = `${chromeProfileDir(botUser)}/Default/Current Session`;
+		const session = JSON.parse(this.files.get(sessionPath)?.data ?? '{"tabs":[],"active":0,"signedIn":[]}') as { tabs: string[]; active: number; signedIn: string[] };
+		const save = () => this.files.set(sessionPath, { owner: botUser, mode: 0o600, data: JSON.stringify(session) });
+		const current = () => session.tabs[session.active] ?? "https://shop.example/checkout";
+		if (request.action === "navigate") {
+			const origin = new URL(request.url).origin;
+			const tab = session.tabs.findIndex((url) => new URL(url).origin === origin);
+			if (tab === -1) session.tabs.push(request.url);
+			else session.tabs[tab] = request.url;
+			session.active = tab === -1 ? session.tabs.length - 1 : tab;
+			save();
+		}
+		if (request.action === "fill" && /password/i.test(request.ref)) {
+			const origin = new URL(current()).origin;
+			if (!session.signedIn.includes(origin)) session.signedIn.push(origin);
+			save();
+		}
+		const url = current();
+		if (request.action === "snapshot")
+			return { url, title: new URL(url).host, snapshot: `Tabs: ${session.tabs.join(", ") || "none"}. Signed in to: ${session.signedIn.join(", ") || "nothing"}.` };
+		return { url, title: url === "https://shop.example/checkout" ? "Checkout" : new URL(url).host };
 	}
 
 	async runSetup(id: string, script: string) {

@@ -39,8 +39,8 @@ export interface BotToolDeps {
 	/** Runs after update_bot changes a setting. */
 	settingsChanged?: (settings: BotSettings, before: BotSettings) => Promise<void>;
 	/** Each model response, for the usage page (provider usage reports). */
-	/** Whether this run may use the computer (false in an outside-started run whose grant lacks computer.use). */
-	computerAllowed?: () => Promise<boolean>;
+	/** Undefined when this run may use the computer now; otherwise what the tool answers instead (it asked, or refused). */
+	computerAllowed?: () => Promise<string | undefined>;
 	onResponse?: (message: { provider?: string; model?: string; usage?: { input?: number; output?: number; cost?: { total?: number } } }) => void;
 	/** What chat may change right now: the outside mark and the user's models. */
 	settingsRules?: () => UpdateRules;
@@ -116,21 +116,18 @@ export function botTools(deps: BotToolDeps): ToolRegistration[] {
 }
 
 /**
- * A computer tool that refuses while `allowed` says no: in a run outside text started or entered, the bot's computer is
- * used only when the run's grant includes computer.use.
+ * A computer tool that runs only while `allowed` says so: in a run outside text started or entered, the computer is used
+ * within the run's grant (computer.use) or once the owner allows it; otherwise the tool answers with `allowed`'s text.
  */
-export function guardComputerTool(tool: ToolRegistration, allowed: (() => Promise<boolean>) | undefined): ToolRegistration {
+export function guardComputerTool(tool: ToolRegistration, allowed: (() => Promise<string | undefined>) | undefined): ToolRegistration {
 	if (!allowed) return tool;
 	const execute = tool.execute as (...args: unknown[]) => unknown;
 	return {
 		...tool,
-		execute: (async (...args: unknown[]) =>
-			(await allowed())
-				? execute(...args)
-				: {
-						output: [{ type: "text", text: "Outside text started or entered this run, and its grant does not include the computer (computer.use); ask the owner." }],
-						isError: true,
-					}) as ToolRegistration["execute"],
+		execute: (async (...args: unknown[]) => {
+			const instead = await allowed();
+			return instead === undefined ? execute(...args) : { output: [{ type: "text", text: instead }], isError: true };
+		}) as ToolRegistration["execute"],
 	} as ToolRegistration;
 }
 
