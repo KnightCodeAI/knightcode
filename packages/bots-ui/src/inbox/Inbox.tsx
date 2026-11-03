@@ -3,7 +3,7 @@
 import type { Bot, InboxItem } from "@knightcode/bots-protocol";
 import { Check, Circle, Pin, PinOff } from "lucide-react";
 import { useState } from "react";
-import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { BotAvatar } from "../avatar/BotAvatar.tsx";
 import { formatDay, formatTime } from "../chat/layout.ts";
 import { Chips } from "../connectors/Catalog.tsx";
 import { navigate } from "../shell/routes.ts";
@@ -81,7 +81,7 @@ export function Inbox() {
 						<h2 className="kb-inbox__group-title">
 							{group.bot && (
 								<span className="kb-inbox__avatar" data-avatar-box="">
-									<BotAvatarView shape={group.bot.avatar.shape} color={group.bot.avatar.color} size={18} />
+									<BotAvatar bot={group.bot} size={18} />
 								</span>
 							)}
 							{group.title}

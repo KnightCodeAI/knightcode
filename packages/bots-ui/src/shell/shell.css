@@ -90,21 +90,52 @@
 	background-color: var(--kb-color-fill-active);
 }
 .kb-row__avatar {
+	--kb-avatar-box: 36px;
+	--kb-badge-at: 26px;
+	--kb-badge-size: 10px;
+	--kb-badge-gap: 1.5px;
 	position: relative;
 	flex: none;
 	width: 36px;
 	height: 36px;
 }
-.kb-row__badge {
+/*
+ * The star badge on an avatar's lower-right edge. Its avatar box (a `data-avatar-box`) sets --kb-avatar-box (the
+ * avatar's size), --kb-badge-at (the badge's top and left), --kb-badge-size and --kb-badge-gap. Whole pixels keep the
+ * star sharp at 1x.
+ */
+.kb-star-badge {
 	position: absolute;
-	top: 26.4px;
-	left: 26.4px;
-	width: 9.6px;
-	height: 9.6px;
+	top: var(--kb-badge-at);
+	left: var(--kb-badge-at);
+	width: var(--kb-badge-size);
+	height: var(--kb-badge-size);
 	border-radius: var(--kb-radius-full);
 	background-color: var(--kb-avatar-yellow);
 	box-shadow: var(--kb-shadow-control-faint);
 	color: var(--kb-color-mark-ink);
+	pointer-events: none;
+}
+.kb-star-badge svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+/*
+ * The gap: a ring cut out of the avatar around the badge, transparent so it matches every background (row hover,
+ * selection, dialogs). Cut from the canvas, which overflows the avatar box, so its motion is never clipped; the
+ * badge's centre moves into the canvas's box by half the overflow.
+ */
+[data-avatar-box]:has(> .kb-star-badge) .kb-avatar__canvas {
+	--kb-badge-centre: calc(var(--kb-badge-at) + var(--kb-badge-size) / 2 + (100% - var(--kb-avatar-box)) / 2);
+	--kb-badge-cut: calc(var(--kb-badge-size) / 2 + var(--kb-badge-gap));
+	--kb-badge-mask: radial-gradient(
+		circle at var(--kb-badge-centre) var(--kb-badge-centre),
+		transparent var(--kb-badge-cut),
+		#000 calc(var(--kb-badge-cut) + 0.5px)
+	);
+	-webkit-mask-image: var(--kb-badge-mask);
+	mask-image: var(--kb-badge-mask);
 }
 .kb-row__body {
 	display: flex;
@@ -344,6 +375,69 @@
 	letter-spacing: var(--kb-tracking-base);
 }
 
+/* Reveal only the affordance: keep the face and lettering at their natural size. */
+.kb-identity--details {
+	--kb-identity-reveal: 0;
+	gap: 0;
+	min-width: 0;
+	max-width: 100%;
+	transition:
+		background-color var(--kb-duration-enter) var(--kb-ease-out),
+		transform var(--kb-duration-enter) var(--kb-ease-out);
+}
+.kb-identity--details .kb-identity__avatar {
+	flex: none;
+	margin-inline-end: var(--kb-space-8);
+}
+.kb-identity--details .kb-identity__name {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.kb-identity__chevron {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	width: calc(14px * var(--kb-identity-reveal));
+	margin-inline-start: calc(var(--kb-space-4) * var(--kb-identity-reveal));
+	overflow: hidden;
+	color: var(--kb-color-text-tertiary);
+	opacity: var(--kb-identity-reveal);
+	/* A local layout transition makes real room for the icon, rather than scaling text or a pill's rounded ends. */
+	transition:
+		width var(--kb-duration-pane) var(--kb-ease-out),
+		margin-inline-start var(--kb-duration-pane) var(--kb-ease-out),
+		opacity var(--kb-duration-enter) var(--kb-ease-out);
+}
+.kb-identity__chevron svg {
+	flex: none;
+	transform: translateX(calc(-4px * (1 - var(--kb-identity-reveal))));
+	transition: transform var(--kb-duration-pane) var(--kb-ease-out);
+}
+.kb-identity--details[aria-expanded="false"]:focus-visible {
+	--kb-identity-reveal: 1;
+	background-color: color-mix(in srgb, var(--kb-color-text) 6%, var(--kb-color-surface));
+}
+@media (hover: hover) {
+	.kb-identity--details[aria-expanded="false"]:hover {
+		--kb-identity-reveal: 1;
+		background-color: color-mix(in srgb, var(--kb-color-text) 6%, var(--kb-color-surface));
+	}
+}
+.kb-identity--details:active {
+	transform: scale(0.98);
+	transition-duration: var(--kb-duration-press);
+}
+@media (hover: none) {
+	.kb-identity--details {
+		min-height: 44px;
+	}
+	.kb-identity--details[aria-expanded="false"] {
+		--kb-identity-reveal: 1;
+	}
+}
+
 /* Details pane */
 .kb-pane {
 	position: relative;
@@ -356,6 +450,13 @@
 }
 .kb-pane[data-closed] {
 	width: 0;
+}
+@media (width > 639px) {
+	/* Clip a full-width surface during the slide, rather than reflowing its text at every animation frame. */
+	.kb-pane__top,
+	.kb-pane__scroll {
+		width: var(--kb-layout-info-pane);
+	}
 }
 .kb-pane::before {
 	content: "";
@@ -374,19 +475,11 @@
 	flex: none;
 	gap: var(--kb-space-8);
 	height: 60px;
-	/* The window controls of the desktop app sit in this corner; the web app keeps the same room. */
-	padding: var(--kb-space-12) calc(140px / 0.9 + 12px) var(--kb-space-12) var(--kb-space-12);
-}
-.kb-pane__divider {
-	position: absolute;
-	top: 17px;
-	right: calc(140px / 0.9 + 12px - 11px);
-	width: 1px;
-	height: 18px;
-	border-radius: 1px;
-	background-color: var(--kb-color-window-divider);
+	padding: var(--kb-space-12);
 }
 .kb-pane__scroll {
+	/* Keep sticky tabs and their fade below the pane's frame, regardless of their local z-index. */
+	isolation: isolate;
 	flex: 1;
 	min-height: 0;
 	overflow-y: auto;
@@ -401,6 +494,11 @@
 	padding: var(--kb-space-8) 0 var(--kb-space-12);
 }
 .kb-pane__avatar {
+	--kb-avatar-box: 64px;
+	--kb-badge-at: 46px;
+	--kb-badge-size: 16px;
+	--kb-badge-gap: 2px;
+	position: relative;
 	display: inline-flex;
 	width: 64px;
 	height: 64px;
@@ -681,6 +779,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.kb-identity--details,
+	.kb-identity--details:active,
+	.kb-identity__chevron,
+	.kb-identity__chevron svg {
+		transition: none;
+		transform: none;
+	}
 	.kb-pane,
 	.kb-palette {
 		transition: none;

@@ -1,7 +1,7 @@
 // The bots this bot manages (a Chief of Staff): it may edit their profiles, instructions and models, always through an
 // approval card showing the full change. It manages only bots it created or that the user assigns here.
 import type { Bot } from "@knightcode/bots-protocol";
-import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { BotAvatar } from "../avatar/BotAvatar.tsx";
 import { useBots, useResource, useStore } from "../state/store.ts";
 
 /** Checkboxes for the user's other bots. */
@@ -25,7 +25,7 @@ export function ManagedBots({ bot }: { bot: Bot }) {
 				<label key={other.id} className="kb-recipe__check kb-member">
 					<input type="checkbox" checked={managed.has(other.id)} onChange={(e) => set(other.id, e.target.checked)} />
 					<span className="kb-member__avatar" data-avatar-box="">
-						<BotAvatarView shape={other.avatar.shape} color={other.avatar.color} size={20} />
+						<BotAvatar bot={other} size={20} pointerArea=".kb-member" />
 					</span>
 					<span>{other.name}</span>
 				</label>

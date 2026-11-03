@@ -58,7 +58,7 @@ export function PlanCard() {
 			<div className="kb-plan-card__art" aria-hidden>
 				{(bots?.bots ?? []).slice(0, 4).map((bot) => (
 					<span key={bot.id} className="kb-plan-card__avatar" data-avatar-box="">
-						<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={32} />
+						<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} state="showcase" size={32} />
 					</span>
 				))}
 			</div>

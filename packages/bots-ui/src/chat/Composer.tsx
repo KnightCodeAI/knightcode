@@ -32,12 +32,24 @@ export interface ComposerProps {
 	context?: { replyTo?: { id: string; text: string }; quote?: string; nonce: number };
 	/** Opens Teach a task on the bot's computer; a group chat has none. */
 	onTeach?: () => void;
+	/** Called on every keystroke in the message box. */
+	onType?: () => void;
 }
 
 type Trigger = { char: "@" | "/"; start: number; query: string };
 
 /** The composer at the foot of a chat. */
-export function Composer({ placeholder, running, onSend, onStop, mentions, skills, context, onTeach }: ComposerProps) {
+export function Composer({
+	placeholder,
+	running,
+	onSend,
+	onStop,
+	mentions,
+	skills,
+	context,
+	onTeach,
+	onType,
+}: ComposerProps) {
 	const [text, setText] = useState("");
 	const [files, setFiles] = useState<File[]>([]);
 	const [replyTo, setReplyTo] = useState<Draft["replyTo"]>();
@@ -98,7 +110,10 @@ export function Composer({ placeholder, running, onSend, onStop, mentions, skill
 		setQuote(undefined);
 	};
 	const addFiles = (list: FileList | null) => {
-		if (list) setFiles((current) => [...current, ...Array.from(list)]);
+		if (!list) return;
+		// FileList is live: the input resets before React may run the state updater.
+		const added = Array.from(list);
+		setFiles((current) => [...current, ...added]);
 	};
 	const listName = open?.char === "@" ? "Mentions" : "Skills";
 
@@ -195,6 +210,7 @@ export function Composer({ placeholder, running, onSend, onStop, mentions, skill
 							setText(event.target.value);
 							setCaret(event.target.selectionStart);
 							setDismissed(undefined);
+							onType?.();
 						}}
 						onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
 						onPaste={(event) => {

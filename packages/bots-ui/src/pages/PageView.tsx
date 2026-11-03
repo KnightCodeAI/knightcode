@@ -2,7 +2,7 @@
 import type { Page } from "@knightcode/bots-protocol";
 import { ChevronLeft, Download, History, Pin, PinOff } from "lucide-react";
 import { useState } from "react";
-import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { BotAvatar } from "../avatar/BotAvatar.tsx";
 import { formatDay, formatTime } from "../chat/layout.ts";
 import { IconButton } from "../primitives/IconButton.tsx";
 import { Menu, MenuItem } from "../primitives/Menu.tsx";
@@ -87,7 +87,7 @@ export function PageView({ pageId }: { pageId: string }) {
 				<p className="kb-page__meta">
 					{owner && (
 						<span className="kb-page__owner" data-avatar-box="">
-							<BotAvatarView shape={owner.avatar.shape} color={owner.avatar.color} size={16} />
+							<BotAvatar bot={owner} size={16} />
 						</span>
 					)}
 					{owner?.name ?? "A bot"} · Updated {formatDay(page.updatedAt)} {formatTime(page.updatedAt)}

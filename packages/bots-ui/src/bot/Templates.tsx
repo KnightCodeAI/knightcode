@@ -2,6 +2,7 @@
 import type { Template } from "@knightcode/bots-protocol";
 import { ArrowDownToLine, ChevronRight } from "lucide-react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { StarBadge } from "../avatar/StarBadge.tsx";
 import { useResource } from "../state/store.ts";
 import { TEMPLATE_AREAS } from "./templates-data.ts";
 
@@ -38,6 +39,7 @@ export function Templates({ onPick, onImport }: { onPick: (template: Template) =
 									<button type="button" className="kb-templates__item" onClick={() => onPick(template)}>
 										<span className="kb-templates__avatar" data-avatar-box="">
 											<BotAvatarView shape={template.avatar.shape} color={template.avatar.color} size={32} />
+											<StarBadge of={template} />
 										</span>
 										<span className="kb-templates__text">
 											<span className="kb-templates__name">{template.name}</span>

@@ -2,6 +2,7 @@
 // share one dialog of fixed size; the tabs sit at the foot so the create form keeps its measured layout.
 import { ApiError, AVATAR_COLORS, type Avatar, type Template } from "@knightcode/bots-protocol";
 import { useRef, useState } from "react";
+import { useAvatarReaction, useMoment } from "../avatar/BotAvatar.tsx";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
 import { PICKER_SHAPES } from "../avatar/shapes.ts";
 import { Button } from "../primitives/Button.tsx";
@@ -26,6 +27,12 @@ export function CreateBot({ tab, onClose }: { tab: CreateTab; onClose: () => voi
 	const [error, setError] = useState<string>();
 	const [busy, setBusy] = useState(false);
 	const nameField = useRef<HTMLInputElement>(null);
+	const [isTyping, onType] = useMoment();
+	const [reaction, react] = useAvatarReaction();
+	const pickAvatar = (next: Avatar) => {
+		setAvatar(next);
+		react("excited");
+	};
 	const go = (next: CreateTab) => navigate({ name: "new", tab: next }, { replace: true });
 
 	const create = async () => {
@@ -37,6 +44,7 @@ export function CreateBot({ tab, onClose }: { tab: CreateTab; onClose: () => voi
 			navigate({ name: "bot", botId: bot.id, pane: "details" });
 		} catch (cause) {
 			setError(describeError(cause));
+			react("confused");
 		} finally {
 			setBusy(false);
 		}
@@ -97,7 +105,14 @@ export function CreateBot({ tab, onClose }: { tab: CreateTab; onClose: () => voi
 				<div className="kb-dialog__body kb-create__body">
 					<div className="kb-create__form">
 						<span className="kb-create__preview" data-avatar-box="">
-							<BotAvatarView shape={avatar.shape} color={avatar.color} size={122} />
+							<BotAvatarView
+								shape={avatar.shape}
+								color={avatar.color}
+								state={busy ? "spawning" : isTyping ? "listening" : "idle"}
+								reaction={reaction}
+								size={122}
+								pointerArea=".kb-create__preview"
+							/>
 						</span>
 						<Input
 							ref={nameField}
@@ -106,7 +121,10 @@ export function CreateBot({ tab, onClose }: { tab: CreateTab; onClose: () => voi
 							placeholder="Name your Bot"
 							value={name}
 							maxLength={60}
-							onChange={(event) => setName(event.target.value)}
+							onChange={(event) => {
+								setName(event.target.value);
+								onType();
+							}}
 							onKeyDown={(event) => event.key === "Enter" && name.trim() && void create()}
 							data-ref="name-input"
 						/>
@@ -123,7 +141,7 @@ export function CreateBot({ tab, onClose }: { tab: CreateTab; onClose: () => voi
 								{error}
 							</p>
 						)}
-						<AvatarPicker value={avatar} onChange={setAvatar} />
+						<AvatarPicker value={avatar} onChange={pickAvatar} />
 					</div>
 				</div>
 			)}
@@ -149,9 +167,8 @@ export function AvatarPicker({ value, onChange }: { value: Avatar; onChange: (av
 						data-ref={i === 0 ? "shape-option" : undefined}
 						onClick={() => onChange({ ...value, shape })}
 					>
-						<span className="kb-avatar-picker__highlight" aria-hidden />
 						<span className="kb-avatar-picker__mark" data-avatar-box="">
-							<BotAvatarView shape={shape} color={value.color} size={40} />
+							<BotAvatarView shape={shape} color={value.color} size={40} isFollowingPointer={false} hasOutline />
 						</span>
 					</button>
 				))}

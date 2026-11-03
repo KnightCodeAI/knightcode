@@ -3,6 +3,7 @@
 import type { ComputerState } from "@knightcode/bots-protocol";
 import type { ReactNode } from "react";
 import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { computerState } from "../avatar/BotAvatar.tsx";
 
 export interface ScreenViewerProps {
 	/** The capability URL from the API; view and control are separate capabilities. */
@@ -66,7 +67,7 @@ export function ScreenStatus({ computer }: { computer: ComputerState | undefined
 	return (
 		<>
 			<span className="kb-screen__mark">
-				<BotAvatarView shape="blob" color="gray" state={status === "off" ? "sleeping" : "idle"} size={32} />
+				<BotAvatarView shape="blob" color="gray" state={computerState(computer)} size={32} pointerArea=".kb-screen" />
 			</span>
 			<span className="kb-screen__label">
 				<span className={busy ? "kb-shimmer" : undefined} role="status">

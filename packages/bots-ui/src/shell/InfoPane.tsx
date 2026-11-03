@@ -2,7 +2,8 @@
 import type { Bot, ModelOption } from "@knightcode/bots-protocol";
 import { Share, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { BotAvatar } from "../avatar/BotAvatar.tsx";
+import { StarBadge } from "../avatar/StarBadge.tsx";
 import { IconButton } from "../primitives/IconButton.tsx";
 import { Select } from "../primitives/Select.tsx";
 import { Tabs } from "../primitives/Tabs.tsx";
@@ -61,7 +62,6 @@ export function InfoPane({ bot, view, routineId }: InfoPaneProps) {
 						onClick={() => bot && navigate({ name: "bot", botId: bot.id, pane: "closed" })}
 					/>
 				</span>
-				<span className="kb-pane__divider" aria-hidden />
 			</header>
 			{bot && (
 				<div className="kb-pane__scroll">
@@ -119,7 +119,8 @@ function PaneHead({ bot }: { bot: Bot }) {
 					aria-label="Edit Bot avatar"
 					onClick={() => navigate(`/bots/${encodeURIComponent(bot.id)}/settings?edit=1`)}
 				>
-					<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={64} />
+					<BotAvatar bot={bot} size={64} pointerArea=".kb-pane" />
+					<StarBadge of={bot} />
 				</button>
 				<input
 					className="kb-pane__name"

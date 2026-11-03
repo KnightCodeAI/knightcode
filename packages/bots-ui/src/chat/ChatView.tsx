@@ -1,9 +1,10 @@
 // A bot's chat: the identity pill that toggles the details pane, the transcript, and the composer, wired to the
 // socket (send, stop, answer) and the API (approvals, reactions, files, cards).
 import type { Bot, ConversationView } from "@knightcode/bots-protocol";
-import { AtSign, CalendarClock, Plug, Sparkles, Users } from "lucide-react";
+import { AtSign, CalendarClock, ChevronRight, Plug, Sparkles, Users } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
-import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { BotAvatar, EMOJI_REACTIONS, threadState, useAvatarReaction, useMoment } from "../avatar/BotAvatar.tsx";
+import type { AvatarState } from "../avatar/sequencer.ts";
 import { useToast } from "../primitives/Toast.tsx";
 import { navigate, useQueryParam } from "../shell/routes.ts";
 import type { ThreadTarget } from "../state/socket.ts";
@@ -24,14 +25,25 @@ export interface ChatViewProps {
 export function ChatView({ bot, paneOpen, phone }: ChatViewProps) {
 	const target = useMemo(() => ({ botId: bot.id }), [bot.id]);
 	const view = useConversation(target);
+	const [isTyping, onType] = useMoment();
+	const [isUploading, setUploading] = useState(false);
+	const [reaction, react] = useAvatarReaction();
+	// Waiting on the user outranks everything; then the user's upload, the bot's turn, and the user typing.
+	const thread = threadState(view);
+	const state =
+		thread === "blocked" || thread === "waiting"
+			? thread
+			: isUploading
+				? "uploading"
+				: (thread ?? (isTyping ? "listening" : undefined));
 	return (
 		<>
 			<header className="kb-toolbar" data-ref="toolbar">
-				<div role="group" data-ref="chat-header" style={{ display: "flex", justifyContent: "center" }}>
-					<span role="heading" aria-level={1} aria-label={bot.name}>
+				<div role="group" data-ref="chat-header" style={{ display: "flex", justifyContent: "center", minWidth: 0 }}>
+					<span role="heading" aria-level={1} aria-label={bot.name} style={{ display: "flex", minWidth: 0 }}>
 						<button
 							type="button"
-							className="kb-identity"
+							className="kb-identity kb-identity--details"
 							aria-label="View conversation details"
 							aria-expanded={paneOpen}
 							data-ref="header-identity"
@@ -47,17 +59,29 @@ export function ChatView({ bot, paneOpen, phone }: ChatViewProps) {
 							}
 						>
 							<span className="kb-identity__avatar" data-ref="header-avatar" data-avatar-box="">
-								<BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={24} />
+								<BotAvatar bot={bot} state={state} reaction={reaction} size={24} pointerArea=".kb-chat" />
 							</span>
 							<span className="kb-identity__name" data-ref="header-name">
 								{bot.name}
+							</span>
+							<span className="kb-identity__chevron" aria-hidden="true">
+								<ChevronRight size={14} strokeWidth={2} />
 							</span>
 						</button>
 					</span>
 				</div>
 			</header>
 			{/* Keyed by bot: a draft, its reply and its files never carry over to another conversation. */}
-			<Thread key={bot.id} target={target} view={view} name={bot.name} botId={bot.id} />
+			<Thread
+				key={bot.id}
+				target={target}
+				view={view}
+				name={bot.name}
+				botId={bot.id}
+				onType={onType}
+				onUploading={setUploading}
+				onReact={react}
+			/>
 		</>
 	);
 }
@@ -69,6 +93,9 @@ export function Thread({
 	name,
 	botId,
 	below,
+	onType,
+	onUploading,
+	onReact,
 }: {
 	target: ThreadTarget;
 	view: ConversationView | undefined;
@@ -76,6 +103,12 @@ export function Thread({
 	botId?: string;
 	/** Shown between the transcript and the composer (a group's turn indicator). */
 	below?: ReactNode;
+	/** Called on every keystroke in the composer. */
+	onType?: () => void;
+	/** Called as attachments start and finish uploading. */
+	onUploading?: (isUploading: boolean) => void;
+	/** Called with how the bot takes something the user did (an approval, an answer, an emoji). */
+	onReact?: (state: AvatarState) => void;
 }) {
 	const store = useStore();
 	const toast = useToast();
@@ -100,7 +133,10 @@ export function Thread({
 	const refreshBots = () => store.reload(BOTS);
 
 	const actions: ChatActions = {
-		answer: (entryId, value) => store.socket.answer(target, entryId, value),
+		answer: (entryId, value) => {
+			store.socket.answer(target, entryId, value);
+			onReact?.("approving");
+		},
 		connectApp: (appId) => navigate({ name: "connectors", appId }),
 		answerApproval: async (approval, decision) => {
 			// A purchase goes ahead only with the person's passkey over this exact action.
@@ -117,16 +153,18 @@ export function Thread({
 			store.reload(INBOX);
 			refreshBots();
 			if (result.result === "expired") toast({ text: "That approval expired. Ask the bot to try again." });
-			if (result.result === "changed") toast({ text: "The action changed, so this approval no longer applies." });
+			else if (result.result === "changed") toast({ text: "The action changed, so this approval no longer applies." });
+			else if (decision !== "deny") onReact?.("approving");
 		},
 		takeControl: () => botId && navigate(`/bots/${encodeURIComponent(botId)}/computer?control=1`),
 		answerSuggestion: (id, accept) => void store.api.answerSuggestion({ id, accept }),
 		undoSettings: (entryId) => botId && void store.api.undoSettingsChange({ botId, entryId }).then(refreshBots),
 		saveSkillDraft: (entryId, draft) =>
 			botId &&
-			void store.api
-				.saveSkillDraft({ botId, entryId, ...draft })
-				.then(() => toast({ text: `Saved the skill "${draft.name}"` })),
+			void store.api.saveSkillDraft({ botId, entryId, ...draft }).then(() => {
+				toast({ text: `Saved the skill "${draft.name}"` });
+				onReact?.("proud");
+			}),
 		discardSkillDraft: (entryId) => botId && void store.api.discardSkillDraft({ botId, entryId }),
 		answerSecret: (entryId, value) => botId && void store.api.answerSecretRequest({ botId, entryId, value }),
 		runSetup: (skill) => store.socket.submit(target, `/${skill}`),
@@ -139,6 +177,8 @@ export function Thread({
 				.appAction({ botId, entryId, action })
 				.then((result) => result.approval && toast({ text: "That needs your approval first. It is in the chat." })),
 		react: (entryId, emoji) => {
+			const felt = EMOJI_REACTIONS[emoji];
+			if (felt) onReact?.(felt);
 			if ("botId" in target) void store.api.react({ botId: target.botId, entryId, emoji });
 			else void store.api.reactInGroup({ groupId: target.groupId, entryId, emoji });
 		},
@@ -147,6 +187,7 @@ export function Thread({
 	};
 
 	const send = async (text: string, draft: Draft) => {
+		if (draft.files.length > 0) onUploading?.(true);
 		const attachments = await Promise.all(
 			draft.files.map(
 				async (file) =>
@@ -160,7 +201,7 @@ export function Thread({
 						})
 					).id,
 			),
-		);
+		).finally(() => onUploading?.(false));
 		store.socket.submit(target, text, {
 			attachments: attachments.length ? attachments : undefined,
 			replyTo: draft.replyTo?.id,
@@ -181,6 +222,7 @@ export function Thread({
 				skills={skills}
 				context={context}
 				onTeach={botId ? () => navigate(`/bots/${encodeURIComponent(botId)}/computer?teach=1`) : undefined}
+				onType={onType}
 			/>
 		</>
 	);
@@ -200,7 +242,7 @@ function useMentions(currentBot: string | undefined): Suggestion[] {
 					label: bot.name,
 					detail: bot.purpose,
 					kind: "Bot",
-					icon: <BotAvatarView shape={bot.avatar.shape} color={bot.avatar.color} size={16} />,
+					icon: <BotAvatar bot={bot} size={16} />,
 					insert: `@${bot.name}`,
 				});
 		for (const group of data?.groups ?? [])

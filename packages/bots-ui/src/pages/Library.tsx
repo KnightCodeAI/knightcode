@@ -1,7 +1,7 @@
 // The pages library: every page, searchable, pinned ones first, with its owner bot and last update.
 import { Pin, Search } from "lucide-react";
 import { useState } from "react";
-import { BotAvatarView } from "../avatar/BotAvatarView.tsx";
+import { BotAvatar } from "../avatar/BotAvatar.tsx";
 import { formatDay } from "../chat/layout.ts";
 import { navigate } from "../shell/routes.ts";
 import { useBots, useResource } from "../state/store.ts";
@@ -49,7 +49,7 @@ export function PagesLibrary() {
 									>
 										{owner && (
 											<span className="kb-list__avatar" data-avatar-box="">
-												<BotAvatarView shape={owner.avatar.shape} color={owner.avatar.color} size={24} />
+												<BotAvatar bot={owner} size={24} />
 											</span>
 										)}
 										<span className="kb-list__main">

@@ -28,13 +28,13 @@
 	flex-direction: column;
 	gap: var(--kb-space-12);
 }
-/* A 147 px box centred where the 96 px one was, as measured; the avatar sits in its middle. */
+/* Keep the measured avatar position; the full-width area above the name field owns its cursor attention. */
 .kb-create__preview {
 	display: flex;
 	align-items: center;
 	align-self: center;
 	justify-content: center;
-	width: 147px;
+	width: 100%;
 	height: 147px;
 	margin: -25.5px 0;
 	line-height: 0;
@@ -100,26 +100,21 @@
 	padding: 0;
 	border: 0;
 	background: transparent;
-	color: var(--kb-avatar-black);
+	color: var(--kb-color-text);
 	font: inherit;
 	cursor: pointer;
 }
-.kb-avatar-picker__highlight {
-	position: absolute;
-	inset: 2px;
-	border-radius: var(--kb-radius-full);
-	background-color: color-mix(in srgb, var(--kb-color-text) 10%, transparent);
+.kb-avatar-picker__shape [data-avatar-outline] {
+	color: var(--kb-color-text);
 	opacity: 0;
 	transition: opacity var(--kb-duration-hover) var(--kb-ease-hover);
 }
-.kb-avatar-picker__shape:hover .kb-avatar-picker__highlight {
-	opacity: 1;
+.kb-avatar-picker__shape:hover [data-avatar-outline] {
+	opacity: 0.1;
 }
-/* The chosen shape wears a thin ring, as measured. */
-.kb-avatar-picker__shape[aria-checked="true"] .kb-avatar-picker__highlight {
-	background-color: transparent;
-	box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--kb-color-text) 30%, transparent);
-	opacity: 1;
+/* The ring uses the animated body's silhouette, not the button's circular box. */
+.kb-avatar-picker__shape[aria-checked="true"] [data-avatar-outline] {
+	opacity: 0.3;
 }
 .kb-avatar-picker__mark {
 	position: relative;
@@ -207,6 +202,11 @@
 	background-color: var(--kb-color-fill-active);
 }
 .kb-templates__avatar {
+	--kb-avatar-box: 32px;
+	--kb-badge-at: 23px;
+	--kb-badge-size: 10px;
+	--kb-badge-gap: 1.5px;
+	position: relative;
 	display: flex;
 	flex: none;
 	width: 32px;
