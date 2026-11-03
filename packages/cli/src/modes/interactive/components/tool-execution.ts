@@ -61,6 +61,7 @@ export class ToolExecutionComponent extends Container {
 	private ui: TUI;
 	private cwd: string;
 	private executionStarted = false;
+	private executionStartedAt = 0;
 	private argsComplete = false;
 	/** `updateArgs()` ran since the last display update; the next render applies it. */
 	private argsPending = false;
@@ -125,9 +126,13 @@ export class ToolExecutionComponent extends Container {
 		return this.toolDefinition?.renderShell ?? "default";
 	}
 
-	/** Status bullet: neutral until a final result, then succeeded or failed. */
+	/** Status bullet: blinking grey while running, then steady success or error. */
 	private bulletGutter(): string {
-		const colorKey = this.result && !this.isPartial ? (this.result.isError ? "error" : "success") : "dim";
+		const finalResult = !this.isPartial ? this.result : undefined;
+		if (!finalResult && this.executionStarted && Math.floor((Date.now() - this.executionStartedAt) / 500) % 2 === 1) {
+			return "  ";
+		}
+		const colorKey = finalResult ? (finalResult.isError ? "error" : "success") : "dim";
 		return `${theme.fg(colorKey, BULLET)} `;
 	}
 
@@ -198,6 +203,7 @@ export class ToolExecutionComponent extends Container {
 
 	markExecutionStarted(): void {
 		this.executionStarted = true;
+		this.executionStartedAt = Date.now();
 		this.updateDisplay();
 		this.ui.requestRender();
 	}
@@ -279,6 +285,10 @@ export class ToolExecutionComponent extends Container {
 			return lines;
 		}
 
+		// The working indicator already requests animation frames; blink without another timer or re-running renderers.
+		if (this.executionStarted && this.isPartial) {
+			this.callGutter.setPrefixes(this.bulletGutter(), BLOCK_INDENT);
+		}
 		const pad = Math.max(0, this.outputPad);
 		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
 	}

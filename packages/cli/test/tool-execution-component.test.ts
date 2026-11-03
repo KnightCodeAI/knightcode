@@ -106,6 +106,45 @@ describe("ToolExecutionComponent parity", () => {
 		}
 	});
 
+	test.each([false, true])("blinks only the running bullet and stops on completion (isError=%s)", (isError) => {
+		vi.useFakeTimers();
+		vi.setSystemTime(0);
+		const renderCall = vi.fn(() => new Text("custom call", 0, 0));
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-blink",
+			{},
+			{},
+			{ ...createBaseToolDefinition(), renderCall },
+			createFakeTui(),
+			process.cwd(),
+		);
+		const queued = component.render(120);
+		vi.advanceTimersByTime(500);
+		expect(component.render(120)).toEqual(queued);
+
+		component.markExecutionStarted();
+		const visible = component.render(120);
+		const callsBeforeBlink = renderCall.mock.calls.length;
+		vi.advanceTimersByTime(500);
+		const hidden = component.render(120);
+		expect(stripAnsi(hidden.join("\n"))).not.toContain(BULLET);
+		expect(stripAnsi(hidden.join("\n"))).toContain("custom call");
+		expect(hidden.map(visibleWidth)).toEqual(visible.map(visibleWidth));
+		component.updateResult({ content: [], isError: false }, true);
+		expect(stripAnsi(component.render(120).join("\n"))).not.toContain(BULLET);
+		vi.advanceTimersByTime(500);
+		expect(component.render(120)).toEqual(visible);
+		// Only the partial result, not animation frames, re-runs the tool renderer.
+		expect(renderCall.mock.calls.length).toBe(callsBeforeBlink + 1);
+
+		component.updateResult({ content: [], isError });
+		const completed = component.render(120);
+		expect(completed.join("\n")).toContain(theme.fg(isError ? "error" : "success", BULLET));
+		vi.advanceTimersByTime(500);
+		expect(component.render(120)).toEqual(completed);
+	});
+
 	// The component loads the PNG transcoder itself, so this works in any TUI host.
 	// A replaced partial image must not resurface.
 	test("converts non-PNG tool images once the transcoder loads", async () => {
