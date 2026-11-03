@@ -1,0 +1,77 @@
+// Helpers for the stop-condition suite: the API as the signed-in test account, the fake model's script, waiting, and
+// signing webhooks the way each service does.
+import { createHmac } from "node:crypto";
+import { type ApiClient, createApiClient } from "@knightcode/bots-protocol";
+import type { APIRequestContext, BrowserContext } from "@playwright/test";
+import type { Reply } from "../../test/fake-model-server.ts";
+
+export const WEB = "http://localhost:5190";
+
+/** The contract's client, as the test's signed-in account (its session cookie rides on `request`). */
+export function apiOf(request: APIRequestContext): ApiClient {
+	return createApiClient(async (input, init) => {
+		const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+		const response = await request.fetch(url, {
+			method: init?.method ?? "GET",
+			// As the browser sends it: state changes carry the web app's own origin.
+			headers: { ...Object.fromEntries(new Headers(init?.headers)), origin: WEB },
+			...(init?.body ? { data: init.body as string } : {}),
+		});
+		const status = response.status();
+		return new Response(status === 204 ? null : new Uint8Array(await response.body()), { status, headers: response.headers() });
+	}, WEB);
+}
+
+const modelServer = () => process.env.BOTS_FAKE_MODEL_URL!.replace(/\/v1$/, "");
+
+/** What a bot answers next, in order (text, or { tool, args } for a tool call). */
+export async function script(request: APIRequestContext, forBot: Record<string, Reply[]>): Promise<void> {
+	await request.post(`${modelServer()}/__script`, { data: { forBot } });
+}
+
+/** What the fake model was asked, per bot. */
+export async function modelRequests(request: APIRequestContext): Promise<{ bot?: string; user: string; tool?: string }[]> {
+	return ((await (await request.get(`${modelServer()}/__requests`)).json()) as { requests: { bot?: string; user: string; tool?: string }[] }).requests;
+}
+
+export async function until<T>(check: () => Promise<T | undefined | false>, what: string, timeoutMs = 30_000): Promise<T> {
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const value = await check().catch(() => undefined);
+		if (value) return value;
+		if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+}
+
+/** The texts of a bot's thread. */
+export async function threadTexts(api: ApiClient, botId: string): Promise<string[]> {
+	const view = await api.getHistory({ botId, limit: 500 });
+	return view.entries.flatMap((entry) => (entry.kind === "message" ? [entry.text] : []));
+}
+
+export const hmacHex = (secret: string, text: string) => createHmac("sha256", secret).update(text).digest("hex");
+
+/** A GitHub webhook delivery, signed as GitHub signs it. */
+export function postGitHub(request: APIRequestContext, event: string, payload: unknown) {
+	const body = JSON.stringify(payload);
+	return request.post(`${WEB}/hooks/github`, {
+		headers: { "x-github-event": event, "x-hub-signature-256": `sha256=${hmacHex(process.env.E2E_GITHUB_WEBHOOK_SECRET!, body)}`, "content-type": "application/json" },
+		data: body,
+	});
+}
+
+/** A Slack Events API delivery, signed as Slack signs it. */
+export function postSlack(request: APIRequestContext, payload: unknown) {
+	const body = JSON.stringify(payload);
+	const timestamp = String(Math.floor(Date.now() / 1000));
+	return request.post(`${WEB}/hooks/slack`, {
+		headers: { "x-slack-request-timestamp": timestamp, "x-slack-signature": `v0=${hmacHex(process.env.E2E_SLACK_SIGNING_SECRET!, `v0:${timestamp}:${body}`)}`, "content-type": "application/json" },
+		data: body,
+	});
+}
+
+/** The account id of the test's session. */
+export async function accountId(context: BrowserContext): Promise<string> {
+	return ((await (await context.request.get(`${WEB}/api/account`)).json()) as { id: string }).id;
+}

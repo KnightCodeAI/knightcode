@@ -1,3 +1,4 @@
+import { completeSlackInstall } from "./channels/slack-install.ts";
 import { sha256 } from "./auth/util.ts";
 import { randomToken } from "./auth/util.ts";
 import { verifyTicket } from "./auth/tickets.ts";
@@ -74,6 +75,7 @@ async function auth(request: Request, env: Env, pathname: string): Promise<Respo
 		if (pathname === `/auth/${provider}`) return startOAuth(env, provider, url.searchParams.get("next") ?? "/");
 		if (pathname === `/auth/${provider}/callback`) return completeOAuth(env, request);
 	}
+	if (request.method === "GET" && pathname === "/auth/slack/callback") return completeSlackInstall(env, request);
 	// The desktop app signs in through the browser: a signed-in browser hands it a one-time code for its state.
 	if (request.method === "GET" && pathname === "/auth/desktop") {
 		const state = url.searchParams.get("state") ?? "";

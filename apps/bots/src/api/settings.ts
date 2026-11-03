@@ -1,6 +1,7 @@
 // Settings (approvals, 1Password, payments, finance, home routing, Tailscale), channels, billing and recipe import.
 import { StripeBilling, TopUpTooSmall } from "../billing/stripe.ts";
 import { appOrigin } from "../auth/oauth.ts";
+import { slackInstallUrl } from "../channels/slack-install.ts";
 import { createBot } from "./bots.ts";
 import { botOf, defined, type Handlers, HttpError, notFound, ownedBot, userOf } from "./http.ts";
 
@@ -40,13 +41,9 @@ export const settingsHandlers: Handlers = {
 
 	getChannels: async (env, principal) => userOf(env, principal).channels(),
 	createTelegramCode: async (env, principal, { botId }) => userOf(env, principal).telegramCode(await ownedBot(env, principal, botId)),
-	slackInstall: async (env) => {
+	slackInstall: async (env, principal) => {
 		if (!env.SLACK_CLIENT_ID) throw new HttpError(503, "unavailable", "Slack is not set up");
-		const url = new URL("https://slack.com/oauth/v2/authorize");
-		url.searchParams.set("client_id", env.SLACK_CLIENT_ID);
-		url.searchParams.set("scope", "app_mentions:read,channels:history,chat:write,im:history,im:write,users:read");
-		url.searchParams.set("redirect_uri", `${appOrigin(env)}/auth/slack/callback`);
-		return { url: url.href };
+		return { url: await slackInstallUrl(env, principal.accountId) };
 	},
 	linkSlackDms: async (env, principal, { botId }) => userOf(env, principal).linkSlackDms(await ownedBot(env, principal, botId)),
 	updateChannelLink: async (env, principal, { id, ...patch }) => {

@@ -5,6 +5,7 @@ import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { generateKeyPairSync } from "node:crypto";
 import { createEmulator } from "emulate";
 import { TEST_OAUTH } from "../../emulate.config.ts";
 import { emulatorBindings, stopEmulators } from "../../test/emulators.ts";
@@ -19,6 +20,10 @@ const at = (path: string) => resolve(app, path).replace(/\\/g, "/");
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
 	const bindings = await emulatorBindings();
+	// The GitHub App: a key of its own, its webhooks sent to the Worker, installed on the test user's account.
+	const appKey = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs1", format: "pem" }, publicKeyEncoding: { type: "pkcs1", format: "pem" } }).privateKey;
+	const githubWebhookSecret = "e2e-github-webhook-secret";
+	const slackSigningSecret = "e2e-slack-signing-secret";
 	// GitHub sign-in in the browser comes back to the web app's own origin.
 	const github = await createEmulator({
 		service: "github",
@@ -26,12 +31,48 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 		seed: {
 			github: {
 				users: [{ login: "ada-test", name: "Ada Test", email: "ada@example.com" }],
+				repos: [{ owner: "ada-test", name: "widgets", auto_init: true }],
+				apps: [
+					{
+						app_id: 4242,
+						slug: "knightcode-bots",
+						name: "KnightCode Bots",
+						private_key: appKey,
+						permissions: { pull_requests: "write", issues: "write", contents: "read" },
+						events: ["pull_request", "issue_comment"],
+						webhook_url: `${WORKER_URL}/hooks/github`,
+						webhook_secret: githubWebhookSecret,
+						installations: [{ installation_id: 7701, account: "ada-test", repository_selection: "all" }],
+					},
+				],
 				oauth_apps: [
 					{
 						client_id: TEST_OAUTH.github.clientId,
 						client_secret: TEST_OAUTH.github.clientSecret,
 						name: "KnightCode Bots",
 						redirect_uris: [`${WEB_ORIGIN}/auth/github/callback`],
+					},
+				],
+			},
+		},
+	});
+	// Slack: one workspace, and the app's OAuth registered for the web app's callback.
+	const slack = await createEmulator({
+		service: "slack",
+		port: 0,
+		seed: {
+			slack: {
+				team: { name: "Acme", domain: "acme" },
+				users: [{ name: "ada", real_name: "Ada Test", email: "ada@example.com" }],
+				channels: [{ name: "general", topic: "General" }],
+				oauth_apps: [
+					{
+						client_id: "kb-e2e-slack",
+						client_secret: "kb-e2e-slack-secret",
+						app_id: "A0E2E0001",
+						name: "KnightCode Bots",
+						redirect_uris: [`${WEB_ORIGIN}/auth/slack/callback`],
+						scopes: ["app_mentions:read", "channels:history", "chat:write", "im:history", "im:write", "users:read"],
 					},
 				],
 			},
@@ -74,6 +115,14 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 					BOTS_DEV_MODEL_URL: models.url,
 					BOTS_DEV_MODEL_IDS: FAKE_MODELS.join(","),
 					STRIPE_WEBHOOK_SECRET: "e2e-stripe-webhook-secret",
+					GITHUB_APP_ID: "4242",
+					GITHUB_APP_PRIVATE_KEY: appKey,
+					GITHUB_APP_WEBHOOK_SECRET: githubWebhookSecret,
+					SLACK_SIGNING_SECRET: slackSigningSecret,
+					SLACK_CLIENT_ID: "kb-e2e-slack",
+					SLACK_CLIENT_SECRET: "kb-e2e-slack-secret",
+					SLACK_OAUTH_URL: slack.url,
+					SLACK_API_URL: `${slack.url}/api`,
 				},
 			},
 			null,
@@ -108,6 +157,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 		});
 		dev.stdout?.on("data", keep);
 		dev.stderr?.on("data", keep);
+		// The stop-condition suite kills the Worker mid-run, so it needs the process to stop.
+		writeFileSync(`${state}/worker.pid`, String(dev.pid ?? ""));
 		dev.on("exit", () => {
 			if (stopping) return;
 			appendFileSync(logFile, "\n[e2e] wrangler dev exited; starting it again\n");
@@ -126,11 +177,16 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 		await new Promise((done) => setTimeout(done, 500));
 	}
 	process.env.BOTS_FAKE_MODEL_URL = models.url;
+	process.env.E2E_GITHUB_URL = github.url;
+	process.env.E2E_SLACK_URL = slack.url;
+	process.env.E2E_GITHUB_WEBHOOK_SECRET = githubWebhookSecret;
+	process.env.E2E_SLACK_SIGNING_SECRET = slackSigningSecret;
+	process.env.E2E_WORKER_PID_FILE = `${state}/worker.pid`;
 	return async () => {
 		stopping = true;
 		// The whole tree: wrangler starts workerd under it.
 		if (dev.pid && process.platform === "win32") spawnSync("taskkill", ["/T", "/F", "/PID", String(dev.pid)]);
 		else dev.kill("SIGTERM");
-		await Promise.all([models.close(), github.close(), stopEmulators()]);
+		await Promise.all([models.close(), github.close(), slack.close(), stopEmulators()]);
 	};
 }

@@ -46,6 +46,9 @@ export interface Env {
 	DESKTOP_ORIGIN?: string;
 	/** Slack's OAuth client id, for installing the app into a workspace. */
 	SLACK_CLIENT_ID?: string;
+	/** Slack's OAuth client secret (a secret), and (tests) the emulator's web origin for its authorize page. */
+	SLACK_CLIENT_SECRET?: string;
+	SLACK_OAUTH_URL?: string;
 	/** Development and browser tests only, never in a deployed configuration: "1" serves the seed import. */
 	BOTS_DEV_SEED?: string;
 	/** Development only: an OpenAI-compatible server (the fake model server) offered as the provider "fake". */
