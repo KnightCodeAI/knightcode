@@ -15,6 +15,7 @@
     "./json": "./src/json.ts",
     "./watch": "./src/watch.ts",
     "./telemetry-sqlite": "./src/telemetry-sqlite/index.ts",
+    "./telemetry-sqlite/node": "./src/telemetry-sqlite/node.ts",
     "./sqlite": "./src/sqlite/index.ts",
     "./sqlite/node": "./src/sqlite/node.ts",
     "./sqlite/cloudflare": "./src/sqlite/cloudflare.ts",
@@ -28,8 +29,6 @@
     "./react": "./src/react/index.ts",
     "./tui": "./src/tui/index.ts",
     "./tui/launcher": "./src/node/tui/index.ts",
-    "./old": "./src/old/index.ts",
-    "./old/node": "./src/old/node.ts",
     "./package.json": "./package.json",
     "./*": "./src/*.ts"
   },
