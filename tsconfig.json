@@ -41,6 +41,7 @@
         "./packages/chord/test/examples/61-tutorial/src/api/*.ts",
         "./packages/chord/test/examples/61-tutorial/src/api/*/index.ts"
       ],
+      "@tally/app/*": ["./packages/chord/test/examples/62-telemetry/app/*.ts"],
       "@knightcode/chord/http": ["./packages/chord/src/node/http/index.ts"],
       "@knightcode/chord/workers": ["./packages/chord/src/node/workers/index.ts"],
       "@knightcode/chord/plugins": ["./packages/chord/src/node/plugins/index.ts"],
@@ -51,10 +52,9 @@
       "@knightcode/chord/react": ["./packages/chord/src/react/index.ts"],
       "@knightcode/chord/tui": ["./packages/chord/src/tui/index.ts"],
       "@knightcode/chord/tui/launcher": ["./packages/chord/src/node/tui/index.ts"],
-      "@knightcode/chord/old": ["./packages/chord/src/old/index.ts"],
-      "@knightcode/chord/old/node": ["./packages/chord/src/old/node.ts"],
       "@knightcode/chord/output": ["./packages/chord/src/output.ts"],
       "@knightcode/chord/telemetry-sqlite": ["./packages/chord/src/telemetry-sqlite/index.ts"],
+      "@knightcode/chord/telemetry-sqlite/node": ["./packages/chord/src/telemetry-sqlite/node.ts"],
       "@knightcode/chord/sqlite": ["./packages/chord/src/sqlite/index.ts"],
       "@knightcode/chord/sqlite/node": ["./packages/chord/src/sqlite/node.ts"],
       "@knightcode/chord/sqlite/cloudflare": ["./packages/chord/src/sqlite/cloudflare.ts"],
@@ -72,5 +72,5 @@
     }
   },
   "include": ["scripts/model-catalog-protocol.ts", "scripts/model-catalog-protocol.test.ts", "packages/*/src/**/*", "packages/*/test/**/*", "packages/ai/catalog/**/*", "packages/evals/evals/**/*"],
-  "exclude": ["**/dist/**", "**/node_modules/**"]
+  "exclude": ["**/dist/**", "**/node_modules/**", "packages/cli/test/subagent-extension.test.ts"]
 }
