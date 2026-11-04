@@ -65,7 +65,7 @@ async function runProjectAgent(options: RunOptions): Promise<{ confirmCalls: num
 	}
 }
 
-describe("regression #8261: subagent project trust", () => {
+describe("subagent project trust", () => {
 	it("skips per-call confirmation for trusted projects", async () => {
 		const result = await runProjectAgent({ trusted: true });
 

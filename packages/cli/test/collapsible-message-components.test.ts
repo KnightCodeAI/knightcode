@@ -1,5 +1,6 @@
 import type { Component, TuiMouseEvent } from "@knightcode/tui";
 import { beforeAll, describe, expect, test } from "vitest";
+import type { MarkdownTransformContext, MarkdownTransformer } from "../src/core/extensions/types.ts";
 import { BranchSummaryMessageComponent } from "../src/modes/interactive/components/branch-summary-message.ts";
 import { countedSummary } from "../src/modes/interactive/components/call-block.ts";
 import { CompactionSummaryMessageComponent } from "../src/modes/interactive/components/compaction-summary-message.ts";
@@ -85,5 +86,78 @@ describe("collapsible message components", () => {
 	test("counts an empty body as zero lines", () => {
 		expect(countedSummary("Summarized", "")).toBe("Summarized · 0 lines");
 		expect(countedSummary("Summarized", "a\nb\n")).toBe("Summarized · 2 lines");
+	});
+
+	describe("Markdown transformers", () => {
+		const seen: Array<{ markdown: string; context: MarkdownTransformContext }> = [];
+		const transformers: MarkdownTransformer[] = [
+			(markdown, context) => {
+				seen.push({ markdown, context });
+				return markdown.replace("details", "transformed");
+			},
+		];
+
+		test.each([
+			{
+				kind: "compaction summary",
+				messageType: "summary",
+				header: "1,234 tokens",
+				create: () =>
+					new CompactionSummaryMessageComponent(
+						{ role: "compactionSummary", summary: "details", tokensBefore: 1234, timestamp: Date.now() },
+						undefined,
+						1,
+						transformers,
+						"entry-1",
+					),
+			},
+			{
+				kind: "branch summary",
+				messageType: "summary",
+				header: "Branch(",
+				create: () =>
+					new BranchSummaryMessageComponent(
+						{ role: "branchSummary", summary: "details", fromId: "entry-0", timestamp: Date.now() },
+						undefined,
+						1,
+						transformers,
+						"entry-1",
+					),
+			},
+			{
+				kind: "skill",
+				messageType: "custom",
+				header: "Skill(",
+				create: () =>
+					new SkillInvocationMessageComponent(
+						{
+							name: "example-skill",
+							location: "/tmp/example-skill.md",
+							content: "details",
+							userMessage: undefined,
+						},
+						undefined,
+						1,
+						transformers,
+						"entry-1",
+					),
+			},
+		])(
+			"runs as $messageType on expanded $kind content without KnightCode's header",
+			({ messageType, header, create }) => {
+				seen.length = 0;
+				const component = create();
+				component.setExpanded(true);
+
+				const rendered = renderText(component);
+				expect(rendered).toContain(header);
+				expect(rendered).toContain("transformed");
+				expect(rendered).not.toContain("details");
+				expect(seen[0]).toMatchObject({
+					markdown: "details",
+					context: { messageType, messageId: "entry-1" },
+				});
+			},
+		);
 	});
 });

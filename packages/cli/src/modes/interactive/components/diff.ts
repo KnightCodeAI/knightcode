@@ -54,12 +54,23 @@ function parseRows(diffText: string): Row[] {
 
 /** Character ranges that differ between two lines, or none when most of the line changed. */
 function wordRanges(oldText: string, newText: string): [Range[], Range[]] {
+	// Common leading whitespace is not part of the word diff. A leading insertion would otherwise
+	// consume the indentation and highlight the whole indent.
+	let indent = 0;
+	while (
+		indent < oldText.length &&
+		indent < newText.length &&
+		oldText[indent] === newText[indent] &&
+		/\s/.test(oldText[indent] ?? "")
+	) {
+		indent++;
+	}
 	const oldRanges: Range[] = [];
 	const newRanges: Range[] = [];
-	let oldOffset = 0;
-	let newOffset = 0;
+	let oldOffset = indent;
+	let newOffset = indent;
 	let changed = 0;
-	for (const part of Diff.diffWordsWithSpace(oldText, newText)) {
+	for (const part of Diff.diffWordsWithSpace(oldText.slice(indent), newText.slice(indent))) {
 		const length = part.value.length;
 		if (part.removed) {
 			oldRanges.push({ start: oldOffset, end: oldOffset + length });
