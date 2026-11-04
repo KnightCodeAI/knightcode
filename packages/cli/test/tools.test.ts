@@ -1279,7 +1279,7 @@ describe("Coding Agent Tools", () => {
 			for (const limit of [0, -5, 0.5, 1.9]) {
 				const result = await lsTool.execute("test-call-ls-small-limit", { path: testDir, limit });
 				expect(getTextOutput(result)).toBe("a.txt\n\n[1 entries limit reached. Use limit=2 for more]");
-				expect(result.details).toEqual({ entryLimitReached: 1 });
+				expect(result.details).toEqual({ pathCount: 1, entryLimitReached: 1 });
 			}
 		});
 
@@ -1288,7 +1288,7 @@ describe("Coding Agent Tools", () => {
 
 			const result = await lsTool.execute("test-call-ls-exact-limit", { path: testDir, limit: 3 });
 			expect(getTextOutput(result)).toBe("a.txt\nb.txt\nc.txt");
-			expect(result.details).toBeUndefined();
+			expect(result.details).toEqual({ pathCount: 3 });
 		});
 	});
 });

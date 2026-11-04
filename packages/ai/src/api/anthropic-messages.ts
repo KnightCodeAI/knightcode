@@ -232,6 +232,15 @@ function shouldUseServerSideFallbackBeta(model: Model<"anthropic-messages">): bo
 	return (model.compat?.allowedFallbackModels?.length ?? 0) > 0;
 }
 
+/** True when the base URL's host is Anthropic's API, not a string that merely contains that name. */
+function isAnthropicHost(baseUrl: string): boolean {
+	try {
+		return new URL(baseUrl).hostname === "api.anthropic.com";
+	} catch {
+		return false;
+	}
+}
+
 function getAnthropicCompat(model: Model<"anthropic-messages">) {
 	const isOpenRouter = model.provider === "openrouter" || model.baseUrl.includes("openrouter.ai");
 	return {
@@ -249,8 +258,7 @@ function getAnthropicCompat(model: Model<"anthropic-messages">) {
 		// without the earlier conversation, so the default is limited to Anthropic's own endpoint.
 		// Widen or remove this restriction once proxies generally forward the `thread` field.
 		supportsMessageThreads:
-			model.compat?.supportsMessageThreads ??
-			(model.provider === "anthropic" && model.baseUrl.includes("api.anthropic.com")),
+			model.compat?.supportsMessageThreads ?? (model.provider === "anthropic" && isAnthropicHost(model.baseUrl)),
 	};
 }
 

@@ -772,6 +772,15 @@ function createClient(
 	});
 }
 
+/** True when the base URL's host is OpenAI's API, not a string that merely contains that name. */
+function isOpenAIHost(baseUrl: string): boolean {
+	try {
+		return new URL(baseUrl).hostname === "api.openai.com";
+	} catch {
+		return false;
+	}
+}
+
 function buildParams(
 	model: Model<"openai-completions">,
 	context: TranscriptContext,
@@ -797,7 +806,7 @@ function buildParams(
 	const supportsPromptCacheKey =
 		promptCacheKeyMode === "enabled" ||
 		(promptCacheKeyMode === "auto" &&
-			(model.baseUrl.includes("api.openai.com") || (cacheRetention === "long" && compat.supportsLongCacheRetention)));
+			(isOpenAIHost(model.baseUrl) || (cacheRetention === "long" && compat.supportsLongCacheRetention)));
 
 	const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
 		model: model.id,

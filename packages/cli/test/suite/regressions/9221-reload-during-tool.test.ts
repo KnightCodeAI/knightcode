@@ -81,7 +81,9 @@ describe("reload during an active session operation", () => {
 			await started.promise;
 			try {
 				if (source === "command") {
-					await h.session.prompt("/reload-runtime", { source: "rpc" });
+					await expect(h.session.prompt("/reload-runtime", { source: "rpc" })).rejects.toThrow(
+						"Wait for the current response to finish before reloading.",
+					);
 				} else {
 					await expect(h.session.reload()).rejects.toThrow("Wait for the current response to finish before reloading.");
 				}

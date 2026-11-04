@@ -10,6 +10,7 @@ const methods = InteractiveMode.prototype as unknown as {
 	renderWidgets(): void;
 	showStatus(message: string): void;
 	renderWidgetContainer(container: Container, widgets: Map<string, Component>, spacer: boolean, leading: boolean): void;
+	createChangelogMarkdown(markdown: string, paddingX: number, paddingY: number, defaultTextStyle?: object): unknown;
 };
 
 function fixture() {
@@ -21,6 +22,8 @@ function fixture() {
 		updateNoteVersion: undefined as string | undefined,
 		chatContainer: new Container(),
 		getMarkdownThemeWithSettings: getMarkdownTheme,
+		getMarkdownTransformers: () => [],
+		createChangelogMarkdown: methods.createChangelogMarkdown,
 		widgetContainerAbove: new Container(),
 		widgetContainerBelow: new Container(),
 		extensionWidgetsAbove: new Map<string, Component>(),
