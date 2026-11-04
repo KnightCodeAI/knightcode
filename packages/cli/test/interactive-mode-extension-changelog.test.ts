@@ -1,10 +1,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { Container } from "@knightcode/tui";
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { InMemorySettingsStorage, SettingsManager } from "../src/core/settings-manager.ts";
 import { getSourcePackageKey, type SourceInfo } from "../src/core/source-info.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
+import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 type ExtensionChangelogUpdate = { name: string; version: string; highlights: string[] };
 
@@ -17,9 +20,20 @@ type ExtensionChangelogContext = {
 	readPackageJson(packageRoot: string): { name?: string; version?: string } | undefined;
 };
 
+type StartupNoticesContext = {
+	startupNoticesShown: boolean;
+	changelogHighlights: string[] | undefined;
+	extensionChangelogUpdates: ExtensionChangelogUpdate[];
+	version: string;
+	chatContainer: Container;
+	outputPad: number;
+	settingsManager: SettingsManager;
+};
+
 const prototype = InteractiveMode.prototype as unknown as {
 	getExtensionChangelogUpdates(this: ExtensionChangelogContext): ExtensionChangelogUpdate[];
 	readPackageJson(packageRoot: string): { name?: string; version?: string } | undefined;
+	showStartupNoticesIfNeeded(this: StartupNoticesContext): void;
 };
 
 const CHANGELOG = `# Changelog
@@ -116,6 +130,27 @@ describe("InteractiveMode extension changelog", () => {
 		expect(display()).toEqual([]);
 	});
 
+	test("does not repeat entries for a prerelease version", () => {
+		writePackage("1.0.0");
+		display();
+		writePackage("1.2.0-20261020.7");
+
+		expect(display()).toHaveLength(1);
+		expect(display()).toEqual([]);
+	});
+
+	test("shows nothing for an unreadable last seen version and records the current one", () => {
+		const key = getSourcePackageKey(sourceInfo);
+		settingsManager.setExtensionChangelogVersion(key, "latest");
+		writePackage("1.0.0");
+
+		expect(display()).toEqual([]);
+		expect(settingsManager.getExtensionChangelogVersion(key)).toBe("1.0.0");
+
+		writePackage("1.2.0");
+		expect(display()).toHaveLength(1);
+	});
+
 	test("skips resumed sessions", () => {
 		writePackage("1.0.0");
 		display();
@@ -134,5 +169,40 @@ describe("InteractiveMode extension changelog", () => {
 		sourceInfo = { ...sourceInfo, origin: "package", changelogPath: undefined };
 		expect(display()).toEqual([]);
 		expect(settingsManager.getExtensionChangelogVersion(getSourcePackageKey(sourceInfo))).toBeUndefined();
+	});
+});
+
+describe("InteractiveMode startup notices", () => {
+	beforeAll(() => initTheme("dark"));
+
+	function renderNotices(): string {
+		const context: StartupNoticesContext = {
+			startupNoticesShown: false,
+			changelogHighlights: [":warning: KnightCode change"],
+			extensionChangelogUpdates: [
+				{
+					name: "demo",
+					version: "1.2.0",
+					highlights: [":warning: Demo change"],
+				},
+			],
+			version: "2.0.0",
+			chatContainer: new Container(),
+			outputPad: 0,
+			settingsManager: SettingsManager.fromStorage(new InMemorySettingsStorage()),
+		};
+		Object.setPrototypeOf(context, InteractiveMode.prototype);
+		prototype.showStartupNoticesIfNeeded.call(context);
+		return stripAnsi(context.chatContainer.render(120).join("\n"));
+	}
+
+	test("shows startup highlights without expanding the full notes", () => {
+		const rendered = renderNotices();
+
+		expect(rendered).toContain("What's new in v2.0.0");
+		expect(rendered).toContain(":warning: KnightCode change");
+		expect(rendered).toContain("demo");
+		expect(rendered).toContain(":warning: Demo change");
+		expect(rendered).toContain("/changelog");
 	});
 });

@@ -27,6 +27,7 @@
  */
 
 import { join, resolve } from "node:path";
+import { createMcpToolName, mcpNamespace } from "@knightcode/mcp";
 import type { SelectItem } from "@knightcode/tui";
 import type { TSchema } from "typebox";
 import { CONFIG_DIR_NAME, getAgentDir } from "../../config.ts";
@@ -44,7 +45,6 @@ import {
 	MCP_APPS_EXTENSION,
 	type McpAppAnswer,
 	type McpAppRequest,
-	mcpNamespace,
 } from "../../core/mcp-servers.ts";
 import type { ModelRegistry } from "../../core/model-registry.ts";
 import { openBrowser } from "../../utils/open-browser.ts";
@@ -71,7 +71,6 @@ import type * as McpRuntime from "./runtime.ts";
 import type { McpServerConnection, McpServerLog, McpTransportFactory } from "./runtime.ts";
 import {
 	createMcpToolDefinition,
-	createMcpToolName,
 	createMcpToolRenderers,
 	type McpToolDetails,
 	mcpAppOf,

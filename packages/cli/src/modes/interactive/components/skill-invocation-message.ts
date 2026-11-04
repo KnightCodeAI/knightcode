@@ -1,4 +1,5 @@
 import type { MarkdownTheme } from "@knightcode/tui";
+import type { MarkdownTransformer } from "../../../core/extensions/types.ts";
 import type { ParsedSkillBlock } from "../../../core/agent-session.ts";
 import { CollapsibleCallComponent, countedSummary } from "./call-block.ts";
 
@@ -8,7 +9,14 @@ import { CollapsibleCallComponent, countedSummary } from "./call-block.ts";
  * rendered separately.
  */
 export class SkillInvocationMessageComponent extends CollapsibleCallComponent {
-	constructor(skillBlock: ParsedSkillBlock, markdownTheme?: MarkdownTheme, outputPad = 1) {
+	constructor(
+		skillBlock: ParsedSkillBlock,
+		markdownTheme?: MarkdownTheme,
+		outputPad = 1,
+		markdownTransformers: readonly MarkdownTransformer[] = [],
+		messageId?: string,
+		timestamp?: string,
+	) {
 		super(
 			"Skill",
 			skillBlock.name,
@@ -16,6 +24,10 @@ export class SkillInvocationMessageComponent extends CollapsibleCallComponent {
 			skillBlock.content,
 			markdownTheme,
 			outputPad,
+			markdownTransformers,
+			messageId,
+			timestamp,
+			"custom",
 		);
 	}
 }

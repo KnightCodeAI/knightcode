@@ -10,9 +10,11 @@ import {
 	type TuiMouseEvent,
 	visibleWidth,
 } from "@knightcode/tui";
+import type { MarkdownMessageType, MarkdownTransformer } from "../../../core/extensions/types.ts";
 import { formatToolCall, formatToolSummary, plural } from "../../../core/tools/render-utils.ts";
 import { BLOCK_INDENT, BULLET_GUTTER, RESULT_GUTTER, RESULT_INDENT } from "../glyphs.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
+import { createMarkdownTransform } from "./markdown-transform.ts";
 
 const IMAGE_LINE = /\x1b_G|\x1b]1337;File=/;
 
@@ -60,22 +62,34 @@ export class CollapsibleCallComponent extends Container {
 	private body: string;
 	private markdownTheme: MarkdownTheme;
 	private outputPad: number;
+	private markdownTransformers: readonly MarkdownTransformer[];
+	private messageId: string | undefined;
+	private timestamp: string | undefined;
+	private messageType: MarkdownMessageType;
 
 	constructor(
 		name: string,
 		arg: string | undefined,
 		summary: string,
 		body: string,
-		markdownTheme: MarkdownTheme = getMarkdownTheme(),
+		markdownTheme?: MarkdownTheme,
 		outputPad = 1,
+		markdownTransformers: readonly MarkdownTransformer[] = [],
+		messageId?: string,
+		timestamp?: string,
+		messageType: MarkdownMessageType = "custom",
 	) {
 		super();
 		this.name = name;
 		this.arg = arg;
 		this.summary = summary;
 		this.body = body;
-		this.markdownTheme = markdownTheme;
+		this.markdownTheme = markdownTheme ?? getMarkdownTheme();
 		this.outputPad = outputPad;
+		this.markdownTransformers = markdownTransformers;
+		this.messageId = messageId;
+		this.timestamp = timestamp;
+		this.messageType = messageType;
 		this.updateDisplay();
 	}
 
@@ -110,9 +124,23 @@ export class CollapsibleCallComponent extends Container {
 		result.addChild(new Text(formatToolSummary(theme, this.summary, !this.expanded), 0, 0));
 		if (this.expanded) {
 			result.addChild(
-				new Markdown(this.body, 0, 0, this.markdownTheme, {
-					color: (text: string) => theme.fg("toolOutput", text),
-				}),
+				new Markdown(
+					this.body,
+					0,
+					0,
+					this.markdownTheme,
+					{ color: (text: string) => theme.fg("toolOutput", text) },
+					{
+						// Transformers see the body only. The call header is drawn outside the markdown.
+						transform: createMarkdownTransform(
+							this.messageType,
+							() => false,
+							this.markdownTransformers,
+							this.messageId,
+							this.timestamp,
+						),
+					},
+				),
 			);
 		}
 		const call = formatToolCall(theme, this.name, this.arg === undefined ? undefined : theme.fg("accent", this.arg));

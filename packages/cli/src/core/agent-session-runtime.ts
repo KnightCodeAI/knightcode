@@ -438,6 +438,7 @@ export class AgentSessionRuntime {
 
 	async dispose(): Promise<void> {
 		this.session.holdBackgroundWake();
+		await this.session.abort();
 		await emitSessionShutdownEvent(this.session.extensionRunner, {
 			type: "session_shutdown",
 			reason: "quit",

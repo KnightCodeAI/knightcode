@@ -2,13 +2,14 @@ import type { TextContent } from "@knightcode/ai";
 import { checkView } from "@knightcode/app-server-protocol";
 import type { Component, TuiMouseEvent } from "@knightcode/tui";
 import { Container, Markdown, type MarkdownTheme, Spacer } from "@knightcode/tui";
-import type { MessageRenderer } from "../../../core/extensions/types.ts";
+import type { MarkdownTransformer, MessageRenderer } from "../../../core/extensions/types.ts";
 import type { CustomMessage } from "../../../core/messages.ts";
 import { formatToolCall } from "../../../core/tools/render-utils.ts";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 import { callBlock, paddedMouseEvent, prefixOutputPad } from "./call-block.ts";
 import { ViewComponent } from "./view-component.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
+import { createMarkdownTransform } from "./markdown-transform.ts";
 
 /**
  * Component that renders a custom message entry from extensions. Without a custom renderer it is drawn like a
@@ -22,18 +23,27 @@ export class CustomMessageComponent extends Container {
 	private markdownTheme: MarkdownTheme;
 	private _expanded = false;
 	private outputPad: number;
+	private markdownTransformers: readonly MarkdownTransformer[];
+	private messageId?: string;
+	private timestamp?: string;
 
 	constructor(
 		message: CustomMessage<unknown>,
 		customRenderer?: MessageRenderer,
 		markdownTheme: MarkdownTheme = getMarkdownTheme(),
 		outputPad = 1,
+		markdownTransformers: readonly MarkdownTransformer[] = [],
+		messageId?: string,
+		timestamp?: string,
 	) {
 		super();
 		this.message = message;
 		this.customRenderer = customRenderer;
 		this.markdownTheme = markdownTheme;
 		this.outputPad = outputPad;
+		this.markdownTransformers = markdownTransformers;
+		this.messageId = messageId;
+		this.timestamp = timestamp;
 
 		this.addChild(new Spacer(1));
 
@@ -117,9 +127,22 @@ export class CustomMessageComponent extends Container {
 			formatToolCall(theme, this.message.customType),
 			"view" in checked
 				? new ViewComponent(checked.view)
-				: new Markdown(text, 0, 0, this.markdownTheme, {
-						color: (text: string) => theme.fg("toolOutput", text),
-					}),
+				: new Markdown(
+						text,
+						0,
+						0,
+						this.markdownTheme,
+						{ color: (text: string) => theme.fg("toolOutput", text) },
+						{
+							transform: createMarkdownTransform(
+								"custom",
+								() => false,
+								this.markdownTransformers,
+								this.messageId,
+								this.timestamp,
+							),
+						},
+					),
 		);
 		this.addChild(this.defaultComponent);
 	}

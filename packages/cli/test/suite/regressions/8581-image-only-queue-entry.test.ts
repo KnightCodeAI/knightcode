@@ -4,7 +4,7 @@ import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { createHarness, type Harness } from "../harness.ts";
 
-describe("issue #8581 image-only queue entry", () => {
+describe("image-only queue entry", () => {
 	const harnesses: Harness[] = [];
 
 	afterEach(() => {
@@ -56,7 +56,13 @@ describe("issue #8581 image-only queue entry", () => {
 
 		const promptPromise = harness.session.prompt("start");
 		await waitForToolStart;
-		await harness.session.steer("", [{ type: "image", mimeType: "image/png", data: "ZmFrZQ==" }]);
+		await harness.session.steer("", [
+			{
+				type: "image",
+				mimeType: "image/png",
+				data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+			},
+		]);
 		expect(harness.session.pendingMessageCount).toBe(1);
 		releaseToolExecution?.();
 		await promptPromise;
