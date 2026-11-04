@@ -1,5 +1,91 @@
 # @knightcodeai/cli
 
+## 0.23.7
+
+### Added
+
+- Added the Qwen Token Plan Individual provider on the China endpoint.
+
+- Added glm-5.3 to Qwen Token Plan Individual, with its reasoning effort levels.
+
+- Added a model option that sends an empty assistant message when a proxy rejects a null one.
+
+- Added syntax highlighting for Dart, Nix, and Groovy in read and write views.
+
+- Added markdown transformers that can target custom messages, branch and compaction summaries, and changelog notices.
+
+- Added Anthropic message threads, so a session on api.anthropic.com sends only the new messages and continues from the previous reply, with a full request when earlier history changed.
+
+### Changed
+
+- Changed terminal Mermaid rendering so diagrams in the transcript use the current diagram set, including diagrams inside expanded summaries.
+
+- Changed the grey tool status dot to blink while a tool is running and stay steady when it finishes.
+
+### Fixed
+
+- Fixed session disposal so a tool result settles before the session is torn down.
+
+- Fixed an aborted model request so the stop reason stays aborted when setup has not finished.
+
+- Fixed image-only queued entries so they are cleared once they have been delivered.
+
+- Fixed OpenAI Responses requests so the session header is session-id.
+
+- Fixed Azure GPT-6 models so they use the 1,050,000 token context window.
+
+- Fixed connection errors so the message keeps the underlying cause.
+
+- Fixed auth.json locking so two paths that resolve to the same file share one lock.
+
+- Fixed user keybindings so they load from the user config.
+
+- Fixed selector windows so their height stays within the terminal.
+
+- Fixed bash output tracking so text the user discarded is still accounted for.
+
+- Fixed rendered diffs so a shared indent is not painted as a word change.
+
+- Fixed session tree search so the cursor stays on the matching row.
+
+- Fixed plan mode progress so a partial plan file does not drop the progress display.
+
+- Fixed extension loading so the extension path is resolved before it is imported.
+
+- Fixed the prompt so it does not accept a message while the session tree is open.
+
+- Fixed the editor so pasted text is still there after the editor is restored.
+
+- Fixed subagent progress and failure reports so a child that stops is shown as stopped.
+
+- Fixed changelog highlights so a prerelease package version is not announced again on every launch.
+
+- Fixed grep so context lines come from ripgrep, including UTF-16 files and lines that contain only a carriage return.
+
+- Fixed find and ls so a limit below 1 means one result, and exactly the limit is not reported as truncated.
+
+- Fixed MCP stream reading so a CR-only event stream is recognized and a large stdio message is read in linear time.
+
+- Fixed prompt cache keys so a compatible proxy can send them.
+
+- Fixed Claude Sonnet 5 requests so temperature is omitted.
+
+- Fixed llama.cpp errors so they name the server that failed to connect.
+
+- Fixed queued steering and follow-up images so they are resized before they are sent, the same way images in an idle prompt are.
+
+- Fixed Ctrl+V so it pastes on Windows and WSL.
+
+- Fixed reload so it is refused while a turn is running or compacting.
+
+- Fixed clipped inline image previews in Orca's fullscreen terminal, where row clears erased the image but left its reserved space.
+
+- Fixed Alacritty hyperlinks when the terminal is identified by TERM or ALACRITTY_WINDOW_ID and TERM_PROGRAM is unset.
+
+- Fixed copied selections and terminal output so cursor-position markers never appear in the text.
+
+- Fixed terminal markdown so HTML comments stay hidden, including comments inside lists and quotes, without leaving an extra blank line.
+
 ## 0.23.6
 
 ### Added
