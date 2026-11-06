@@ -1,5 +1,43 @@
 # @knightcodeai/cli
 
+## 0.23.8
+
+### Added
+
+- Added `knightcode auth login` and `knightcode auth logout` so a provider can be signed in or signed out from the terminal without starting a session. Logging in to Radius also adds its MCP server when no global server uses that login yet.
+
+### Changed
+
+- Changed consecutive cache-warming notices so they collapse to one line with the combined cost.
+
+- Changed codemode and tool search so descriptions follow local schema references in tool output.
+
+- Changed custom overlays so a component that waits for an answer reports blocked program status until it finishes, including while it is hidden or covered, and the most recently shown blocking prompt supplies the status.
+
+- Changed prompt-template arguments so an apostrophe inside a word stays as text, an unmatched quote is kept as text, and a backslash before the surrounding quote keeps that quote.
+
+- Changed session shutdown so dispose waits for an OAuth token refresh that has already started to finish saving before the process exits.
+
+- Changed the read tool so a streaming read keeps only the lines it shows, and an extension can supply `ReadOperations.createReadStream` instead of loading the whole file.
+
+- Changed built-in provider default models to newer models, including Claude Opus 5.5 for Anthropic.
+
+- Changed `knightcode mcp list` and `knightcode mcp login` so a server that uses a provider's credentials tells you to sign in with that provider instead of starting a separate MCP login.
+
+### Fixed
+
+- Fixed a bash timeout that fires after the shell has already exited so the message includes that exit code.
+
+- Fixed model cycling so the only in-scope model is selected when the current model is outside that list.
+
+- Fixed reload and session switches so every extension overlay is removed and KnightCode's own overlays stay.
+
+- Fixed the subagent example so a Windows Bun virtual entry path is not passed to the child process.
+
+- Fixed text truncation so a cut never splits a surrogate pair.
+
+- Fixed the model selector and the llama model list so a catalog refresh keeps the row you had selected.
+
 ## 0.23.7
 
 ### Added
