@@ -293,14 +293,18 @@ describe("subagent example extension", () => {
 			expect(statuses.filter((status) => status === "pending")).toHaveLength(1);
 		});
 
-		it("treats signal termination as a failed child with a diagnostic", async () => {
-			const result = await executeSubagent(singleTask(fixtureScenario.signal));
+		// Windows reports TerminateProcess as an exit code, not SIGTERM.
+		it.skipIf(process.platform === "win32")(
+			"treats signal termination as a failed child with a diagnostic",
+			async () => {
+				const result = await executeSubagent(singleTask(fixtureScenario.signal));
 
-			const child = detailsOf(result).results[0];
-			expect(child.status).toBe("failed");
-			expect(child.terminationSignal).toBe("SIGTERM");
-			expect(resultText(result)).toContain("SIGTERM");
-		});
+				const child = detailsOf(result).results[0];
+				expect(child.status).toBe("failed");
+				expect(child.terminationSignal).toBe("SIGTERM");
+				expect(resultText(result)).toContain("SIGTERM");
+			},
+		);
 
 		it("preserves spawn errors for a nonexistent working directory", async () => {
 			const result = await executeSubagent(
@@ -453,6 +457,49 @@ describe("subagent example extension", () => {
 		});
 	});
 
+	describe("child invocation", () => {
+		// Bun on Windows resolves `knightcode` to an installed knightcode.exe and does not
+		// see a PATH change, so a shim in front of PATH never runs.
+		it.skipIf(process.platform === "win32")("does not pass a Windows Bun virtual entry path to the child", async () => {
+			// Inside a Windows Bun-compiled binary, argv[1] is "B:/~BUN/root/knightcode.exe" and
+			// fs.existsSync() reports it as present. On other platforms that string is a relative
+			// path, so recreate it under the cwd. On Windows "B:" is a drive and cannot live in
+			// the temp directory.
+			const virtualScript = "B:/~BUN/root/knightcode.exe";
+			if (process.platform !== "win32") {
+				mkdirSync(join(tempDir, "B:", "~BUN", "root"), { recursive: true });
+				writeFileSync(join(tempDir, virtualScript), readFileSync(SUBAGENT_FIXTURE_PATH));
+			}
+			// The test runs under node, so the fallback spawns "knightcode" from PATH.
+			const binDir = join(tempDir, "bin");
+			mkdirSync(binDir);
+			const shimPath = join(binDir, process.platform === "win32" ? "knightcode.cmd" : "knightcode");
+			const shim =
+				process.platform === "win32"
+					? `@echo off\r\n"${process.execPath}" "${SUBAGENT_FIXTURE_PATH}" %*\r\n`
+					: `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(SUBAGENT_FIXTURE_PATH)} "$@"\n`;
+			writeFileSync(shimPath, shim, { mode: 0o755 });
+			const argvFile = join(tempDir, "virtual-entry-argv.json");
+			const originalCwd = process.cwd();
+			const originalScript = process.argv[1];
+			const originalPath = process.env.PATH;
+			try {
+				process.chdir(tempDir);
+				process.argv[1] = virtualScript;
+				process.env.PATH = `${binDir}${process.platform === "win32" ? ";" : ":"}${originalPath ?? ""}`;
+				await tool.execute("test", singleTask(fixtureScenario.recordArgv(argvFile)), undefined, undefined, ctx);
+			} finally {
+				process.chdir(originalCwd);
+				process.argv[1] = originalScript;
+				process.env.PATH = originalPath;
+			}
+
+			const childArgv = JSON.parse(readFileSync(argvFile, "utf8")) as string[];
+			expect(childArgv.slice(1)).not.toContain(virtualScript);
+			expect(childArgv[1]).toBe(SUBAGENT_FIXTURE_PATH);
+		});
+	});
+
 	describe("task cwd agent discovery", () => {
 		it("resolves a relative task cwd against the session cwd for discovery and execution", async () => {
 			const startupRoot = join(tempDir, "startup-project");
@@ -589,7 +636,8 @@ describe("subagent example extension", () => {
 			expect(fullText.split("\n").length).toBeGreaterThan(DEFAULT_MAX_LINES);
 		});
 
-		it("shows failure diagnostics in collapsed results", async () => {
+		// Windows reports TerminateProcess as an exit code, not SIGTERM.
+		it.skipIf(process.platform === "win32")("shows failure diagnostics in collapsed results", async () => {
 			const result = await executeSubagent({
 				chain: [{ agent: "worker", task: fixtureScenario.signal }],
 				agentScope: "project",

@@ -294,7 +294,7 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} update [source|self|knightcode]   Update KnightCode, extensions, or model catalogs
   ${APP_NAME} list                      List installed extensions from settings
   ${APP_NAME} config [-l]               Open TUI to enable/disable package resources (Tab switches scope)
-  ${APP_NAME} auth <command>            Print credentials or check provider readiness
+  ${APP_NAME} auth <command>            Log in or out, print credentials, or check provider readiness
   ${APP_NAME} mcp <command>             Add, remove, list, and sign in to MCP servers
   ${APP_NAME} plugin <command>          Install and manage Claude Code and Grok Build plugins
   ${APP_NAME} <command> --help          Show help for app-server/install/remove/uninstall/update/list/config/auth/mcp/plugin

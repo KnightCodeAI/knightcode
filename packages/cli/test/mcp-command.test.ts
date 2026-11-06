@@ -7,6 +7,7 @@ import { LATEST_PROTOCOL_VERSION } from "@knightcode/mcp";
 import { afterEach, describe, expect, it } from "vitest";
 import { ProjectTrustStore } from "../src/core/trust-manager.ts";
 import { runMcpCommand } from "../src/extensions/mcp/cli.ts";
+import { startOAuthMcpServer } from "./suite/mcp-oauth-server.ts";
 
 const FIXTURE = resolve(import.meta.dirname, "../../mcp/test/fixtures/stdio-server.mjs");
 
@@ -122,7 +123,7 @@ describe("knightcode mcp", () => {
 			const signedOut = await run(["list"], config, undefined, async () => undefined);
 			expect(signedOut.exitCode).toBe(1);
 			expect(signedOut.output).toContain("radius: needs sign-in");
-			expect(signedOut.output).toContain("sign in with: /login radius in a knightcode session");
+			expect(signedOut.output).toContain("sign in with: /login radius in knightcode");
 		} finally {
 			await new Promise((resolve) => server.close(resolve));
 		}
@@ -144,6 +145,36 @@ describe("knightcode mcp", () => {
 		expect((await run(["login", "fixtures"], servers)).output).toBe(
 			'No MCP server named "fixtures". Did you mean "fixture"? Configured: fixture, broken, parked.',
 		);
+	});
+
+	it("sends the token of the provider named by auth.provider", async () => {
+		const server = await startOAuthMcpServer();
+		try {
+			const radius = { radius: { url: server.url, auth: { provider: "radius" } } };
+			const token = server.issueAccessToken();
+			const requested: string[] = [];
+			const signedIn = await run(["list"], radius, undefined, async (provider) => {
+				requested.push(provider);
+				return token;
+			});
+			expect(signedIn).toMatchObject({ exitCode: 0, output: expect.stringContaining("radius: connected, 1 tool") });
+			expect(requested).toContain("radius");
+
+			// Without the provider's credentials the hint names the provider's /login, not `KnightCode mcp login`.
+			const signedOut = await run(["list"], radius, undefined, async () => undefined);
+			expect(signedOut.exitCode).toBe(1);
+			expect(signedOut.output).toContain("radius: needs sign-in (codemode, global)");
+			expect(signedOut.output).toContain("  sign in with: /login radius in knightcode");
+
+			for (const command of ["login", "logout"]) {
+				expect(await run([command, "radius"], radius)).toMatchObject({
+					exitCode: 1,
+					output: `MCP server "radius" uses the credentials of provider "radius". Run "knightcode auth ${command} radius".`,
+				});
+			}
+		} finally {
+			await server.close();
+		}
 	});
 
 	it("reports options as typed", async () => {
