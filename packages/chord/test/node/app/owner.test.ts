@@ -72,7 +72,7 @@ describe("the owner token file", () => {
 	it("is written at first start with mode 0600, signs in as the owner, and is kept across starts", async () => {
 		const first = await testApp({ plugins: { whoami: { "server.ts": WHOAMI } } });
 		const file = first.app.ownerTokenFile;
-		expect((await stat(file)).mode & 0o777).toBe(0o600);
+		if (process.platform !== "win32") expect((await stat(file)).mode & 0o777).toBe(0o600);
 		const token = (await readFile(file, "utf8")).trim();
 		const whoami = await send(first.port, "GET", "/whoami", { headers: { authorization: `Bearer ${token}` } });
 		expect(JSON.parse(whoami.body.toString())).toEqual({ kind: "owner" });
@@ -106,7 +106,7 @@ describe("the owner token file", () => {
 		const second = await testApp({ dataDir: first.dataDir, root: first.root });
 		const replaced = (await readFile(second.app.ownerTokenFile, "utf8")).trim();
 		expect(replaced).not.toBe(token);
-		expect((await stat(second.app.ownerTokenFile)).mode & 0o777).toBe(0o600);
+		if (process.platform !== "win32") expect((await stat(second.app.ownerTokenFile)).mode & 0o777).toBe(0o600);
 		await second.app.close(context);
 	});
 });

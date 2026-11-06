@@ -272,8 +272,8 @@ function runner(
 	);
 }
 
-describe("jobs across a reload (slice 7b §8)", () => {
-	it("an older run finishes on its old code across a swap; its finish runs on the new code, mapped forwards once", async () => {
+describe('jobs across a reload (slice 7b §8; decision "Reload restarts every affected object")', () => {
+	it("an older in-memory run is cut at the restart's seal; its finish runs on the new code, mapped forwards once", async () => {
 		const finished: Finished[] = [];
 		const gate = Promise.withResolvers<void>();
 		const host = createHost({ onError: () => {} });
@@ -283,17 +283,15 @@ describe("jobs across a reload (slice 7b §8)", () => {
 		await flushed();
 		await host.reload([{ name: "@test/app", facet: runner("v2", WorkV2, finished) }], context);
 		await flushed();
-		// Listed with its args mapped forwards.
-		expect(jobs.running.value).toMatchObject([{ version: 1, args: { text: "a", priority: 0 }, phase: "running" }]);
 		gate.resolve();
 		await flushed();
 		expect(finished).toEqual([
 			{
 				code: "v2",
 				outcome: expect.objectContaining({
-					kind: "done",
+					kind: "failed",
 					args: { text: "a", priority: 0 },
-					result: { text: "a by v1" },
+					error: { kind: "aborted", reason: "reload" },
 				}),
 			},
 		]);
@@ -315,7 +313,12 @@ describe("jobs across a reload (slice 7b §8)", () => {
 		expect(finished).toEqual([]);
 		await host.reload([{ name: "@test/app", facet: runner("v1b", Work, finished) }], context);
 		await flushed();
-		expect(finished).toEqual([{ code: "v1b", outcome: expect.objectContaining({ kind: "done", result: "a by v1" }) }]);
+		expect(finished).toEqual([
+			{
+				code: "v1b",
+				outcome: expect.objectContaining({ kind: "failed", error: { kind: "aborted", reason: "reload" } }),
+			},
+		]);
 		expect(jobs.running.value).toEqual([]);
 		await host.close(context);
 	});
@@ -356,12 +359,17 @@ describe("jobs across a reload (slice 7b §8)", () => {
 		expect(finished).toEqual([]);
 		await host.reload([{ name: "@test/app", facet: runner("v3", Work, finished) }], context);
 		await flushed();
-		expect(finished).toEqual([{ code: "v3", outcome: expect.objectContaining({ kind: "done", result: "a by v1" }) }]);
+		expect(finished).toEqual([
+			{
+				code: "v3",
+				outcome: expect.objectContaining({ kind: "failed", error: { kind: "aborted", reason: "reload" } }),
+			},
+		]);
 		await host.close(context);
 	});
 });
 
-describe("a reservation released after a swap (final review)", () => {
+describe("a reservation released during a restart (final review)", () => {
 	it("starts the old code's run with its own args, not the new version's mapping (Sol)", async () => {
 		const Owner = local("app.reserve-owner", { version: 1, params: {}, members: {} });
 		const V1 = defineJob("app.reserve", {
@@ -400,7 +408,7 @@ describe("a reservation released after a swap (final review)", () => {
 			],
 			context,
 		);
-		// The run's reservation (the second commit) waits on `gate` until the swap to V2 happened.
+		// The run's reservation (the second commit) waits on `gate` until the reload to V2 committed.
 		const entered = Promise.withResolvers<void>();
 		const gate = Promise.withResolvers<void>();
 		const commit = store.commit.bind(store);

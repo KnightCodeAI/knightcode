@@ -70,7 +70,8 @@ describe.skipIf(process.platform === "win32")("socket file locks (macOS, the BSD
 	});
 });
 
-describe("clearStaleLockAt", () => {
+// Windows locks with a named pipe and cannot listen on a socket file path (EACCES).
+describe.skipIf(process.platform === "win32")("clearStaleLockAt", () => {
 	it("removes a socket file nobody accepts on: the lock can be taken again", async () => {
 		await inTemporaryDirectory(async (dir) => {
 			const address = join(dir, "lock.sock");
