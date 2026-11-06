@@ -110,23 +110,28 @@ async function connect(url: string): Promise<Inspector> {
 		ws.once("error", reject);
 	});
 	let id = 0;
-	const pending = new Map<number, (value: never) => void>();
+	const replies = new Map<number, { result?: { usedSize?: number } }>();
 	ws.on("message", (raw) => {
-		const message = JSON.parse(String(raw)) as { id?: number };
-		const replyId = message.id;
-		if (typeof replyId !== "number") return;
-		// The id is one this process sent. Take that waiter out, then call it as a plain function.
-		const resolve = pending.get(replyId);
-		pending.delete(replyId);
-		if (resolve === undefined) return;
-		resolve(message as never);
+		const message = JSON.parse(String(raw)) as { id?: number; result?: { usedSize?: number } };
+		if (typeof message.id !== "number") return;
+		replies.set(message.id, message);
 	});
 	const inspector: Inspector = {
 		call: (method) =>
 			new Promise((resolve) => {
-				const n = ++id;
-				pending.set(n, resolve as (value: never) => void);
-				ws.send(JSON.stringify({ id: n, method }));
+				const replyId = ++id;
+				ws.send(JSON.stringify({ id: replyId, method }));
+				// The reply is stored by id. This call waits for its own id and resolves itself.
+				const take = () => {
+					const message = replies.get(replyId);
+					if (message === undefined) {
+						setImmediate(take);
+						return;
+					}
+					replies.delete(replyId);
+					resolve(message);
+				};
+				setImmediate(take);
 			}),
 		close: () => ws.close(),
 	};
