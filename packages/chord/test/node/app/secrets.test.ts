@@ -34,12 +34,12 @@ describe("secret files", () => {
 		const path = join(dir, "secret");
 		expect(await readSecret(path)).toBeUndefined();
 		expect(await writeSecret(path, "one", "create")).toBe("written");
-		expect((await stat(path)).mode & 0o777).toBe(0o600);
+		if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
 		expect(await writeSecret(path, "two", "create")).toBe("exists");
 		expect(await readSecret(path)).toBe("one");
 		expect(await writeSecret(path, "three", "replace")).toBe("written");
 		expect(await readFile(path, "utf8")).toBe("three\n");
-		expect((await stat(path)).mode & 0o777).toBe(0o600);
+		if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
 		expect(await readdir(dir)).toEqual(["secret"]);
 	});
 
@@ -49,10 +49,11 @@ describe("secret files", () => {
 		const first = await secretFile(path);
 		expect(first).toMatch(/^[A-Za-z0-9_-]{43}$/);
 		expect(await secretFile(path)).toBe(first);
-		expect((await stat(path)).mode & 0o777).toBe(0o600);
+		if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
 	});
 
-	it("keeps the mode 0600 under a permissive umask", async () => {
+	// Windows stat does not report the mode umask would set.
+	it.skipIf(process.platform === "win32")("keeps the mode 0600 under a permissive umask", async () => {
 		const dir = await tempDir();
 		const previous = process.umask(0);
 		try {

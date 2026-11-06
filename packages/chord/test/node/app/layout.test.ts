@@ -4,7 +4,7 @@
 
 import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hostKind, str } from "../../../src/contracts/index.ts";
 import { createLayout, defaultDataDir, workerDirectory } from "../../../src/node/app/layout.ts";
@@ -17,7 +17,7 @@ describe("the data directory", () => {
 		const dataDir = join(await tempDir(), "data");
 		const layout = await createLayout(dataDir);
 		expect((await readdir(dataDir)).sort()).toEqual(["logs", "plugins", "server", "workers"]);
-		expect((await stat(dataDir)).mode & 0o777).toBe(0o700);
+		if (process.platform !== "win32") expect((await stat(dataDir)).mode & 0o777).toBe(0o700);
 		expect([layout.serverStore, layout.ownerToken, layout.cookieSecret]).toEqual([
 			join(dataDir, "server", "store.sqlite"),
 			join(dataDir, "owner-token"),
@@ -30,7 +30,7 @@ describe("the data directory", () => {
 describe("worker directories", () => {
 	it("encodes an address key as one directory name under its kind", () => {
 		const dir = workerDirectory("/data", Doc({ id: "../../etc/x" }));
-		expect(dirname(dir)).toBe("/data/workers/doc");
+		expect(dirname(dir).split(sep).join("/")).toBe("/data/workers/doc");
 		expect(basename(dir)).toBe("doc%7C%2E%2E%2F%2E%2E%2Fetc%2Fx");
 		expect(basename(workerDirectory("/data", Doc({ id: "." })))).toBe("doc%7C%2E");
 	});

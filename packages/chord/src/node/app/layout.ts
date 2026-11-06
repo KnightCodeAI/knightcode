@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { chmod, mkdir, open, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, parse } from "node:path";
+import { join, parse, resolve } from "node:path";
 import type { Address } from "../../contracts/index.ts";
 
 /** The paths of a data directory. */
@@ -33,6 +33,13 @@ export function defaultDataDir(name: string): string {
  * tightening a directory others use or failing on `EPERM`). Its mode is set on the real path, never through a link.
  */
 export async function openDataDir(path: string): Promise<string> {
+	// mkdir of a drive root is EPERM on Windows, so the refusal below would never run.
+	const resolved = resolve(path);
+	if (resolved === parse(resolved).root) {
+		throw new Error(
+			`startServer: the data directory ${resolved} is a file system's root; name a directory of the app's own`,
+		);
+	}
 	await mkdir(path, { recursive: true, mode: 0o700 });
 	const dataDir = await realpath(path);
 	const home = await realpath(homedir());
