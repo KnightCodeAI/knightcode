@@ -12,6 +12,8 @@ knightcode uninstall <source> [options]
 knightcode update [target] [options]
 knightcode list
 knightcode config [options]
+knightcode auth login <provider> [--api-key] [--no-browser]
+knightcode auth logout <provider>
 knightcode auth <check|print-api-key|print-bearer-token> [options]
 knightcode mcp <add|remove|list|login|logout> [options]
 knightcode plugin <install|list|details|enable|disable|update|uninstall|validate|marketplace> [options]
@@ -359,11 +361,22 @@ A configured command replaces KnightCode's own update for every install method, 
 
 ## Credential commands
 
+`knightcode auth login <provider>` logs in to a provider in the terminal and exits, without starting a session. It signs in with an account and opens the browser, like `/login <provider>`. Providers without account sign-in ask for an API key. Logging in to Radius also adds the Radius MCP server to `~/.knightcode/agent/mcp.json` when no global server uses that login yet. It requires an interactive terminal.
+
+| Option | Description |
+|---|---|
+| `--api-key` | Save an API key instead of signing in with an account; the key is read without echoing it |
+| `--no-browser` | Do not open a browser; use the provider's other sign-in method, such as a device code, for example over SSH. Asks when there are several. Not allowed with `--api-key` |
+
+`knightcode auth logout <provider>` removes the credentials that `knightcode auth login` or `/login` stored, like `/logout`. Environment variables and `models.json` config are unchanged. It exits with status `0` when nothing is stored, so it is safe to repeat.
+
 ```sh
+knightcode auth login radius
+knightcode auth logout radius
 knightcode auth check --provider openai --json
 ```
 
-Authentication commands require `--provider <provider>` or `--model <model>`. See [Providers](providers.md) for supported methods.
+The other authentication commands require `--provider <provider>` or `--model <model>`. See [Providers](providers.md) for supported methods.
 
 | Command | Description |
 |---|---|
