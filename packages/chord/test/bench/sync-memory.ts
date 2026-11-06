@@ -113,8 +113,13 @@ async function connect(url: string): Promise<Inspector> {
 	const pending = new Map<number, (value: never) => void>();
 	ws.on("message", (raw) => {
 		const message = JSON.parse(String(raw)) as { id?: number };
-		if (message.id !== undefined) pending.get(message.id)?.(message as never);
-		pending.delete(message.id ?? -1);
+		const replyId = message.id;
+		if (typeof replyId !== "number") return;
+		// The id is one this process sent. Take that waiter out, then call it as a plain function.
+		const resolve = pending.get(replyId);
+		pending.delete(replyId);
+		if (resolve === undefined) return;
+		resolve(message as never);
 	});
 	const inspector: Inspector = {
 		call: (method) =>
