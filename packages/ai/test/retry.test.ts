@@ -116,6 +116,12 @@ describe("provider retry classification", () => {
 		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
 	});
 
+	it("matches gateway wording for a stream cut short mid-reply", () => {
+		// A gateway can report that the provider stream ended after the reply had started.
+		const errorMessage = "The provider stream was cut short after the reply had begun";
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
+	});
+
 	it("matches OpenAI Responses streams that end before terminal events", () => {
 		expect(
 			isRetryableAssistantError(
