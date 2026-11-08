@@ -102,6 +102,10 @@ export interface CodemodeNestedCall {
 	error?: string;
 	/** Cost in USD of a `models.*` call that reported usage. */
 	cost?: number;
+	/** File an `edit` or `write` call targets; `args` of a long write end mid-JSON. */
+	path?: string;
+	/** Display diff (`generateDiffString` format) of the file change an `edit` or `write` call made. */
+	diff?: string;
 }
 
 export interface CodemodeToolDetails {

@@ -5,6 +5,7 @@ import type { AgentToolResult } from "@knightcode/agent";
 import { type Component, type TUI, visibleWidth } from "@knightcode/tui";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ToolRenderContext } from "../src/core/extensions/types.ts";
+import { generateDiffString } from "../src/core/tools/edit-diff.ts";
 import { codemodeRenderers } from "../src/extensions/codemode/renderer.ts";
 import type { CodemodeNestedCall, CodemodeToolDetails } from "../src/extensions/codemode/tool.ts";
 import { keyHint, keyText } from "../src/modes/interactive/components/keybinding-hints.ts";
@@ -167,6 +168,44 @@ describe("codemode renderer", () => {
 			expanded,
 		);
 		expect(text.split("\n").find((line) => line.startsWith("✓"))).toMatch(/^✓ Write\(notes.md\)\s+5ms$/);
+	});
+
+	it.each([false, true])("shows the diff under nested file changes (expanded: %s)", (expanded) => {
+		const text = render(
+			{
+				content: [HEADER],
+				details: {
+					calls: [
+						{
+							id: "call/1",
+							name: "edit",
+							args: '{"path":"a.ts","edits":[{"oldText":"one","newText":"two"}]}',
+							path: "a.ts",
+							status: "ok",
+							diff: generateDiffString("const one = 1;\n", "const two = 2;\n").diff,
+						},
+						// Content cuts the stored arguments mid-JSON; the recorded path keeps the header.
+						{
+							id: "call/2",
+							name: "write",
+							args: '{"path":"notes.md","content":"first line\\nsec',
+							path: "notes.md",
+							status: "ok",
+							diff: generateDiffString("", "first line\nsecond line\n").diff,
+						},
+					],
+				},
+			},
+			false,
+			expanded,
+		);
+		const lines = text.split("\n");
+		const update = lines.findIndex((line) => line.startsWith("✓ Update(a.ts)"));
+		const write = lines.findIndex((line) => line.startsWith("✓ Write(notes.md)"));
+		expect(update).toBeGreaterThan(-1);
+		expect(write).toBeGreaterThan(update);
+		expect(lines.slice(update + 1, write).join("\n")).toMatch(/1 -const one = 1;[\s\S]*1 \+const two = 2;/);
+		expect(lines.slice(write + 1).join("\n")).toMatch(/1 \+first line[\s\S]*2 \+second line/);
 	});
 
 	it("uses the cancelled icon without repeating the status in row metadata", () => {

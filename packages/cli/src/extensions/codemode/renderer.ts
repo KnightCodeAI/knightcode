@@ -1,6 +1,7 @@
 /**
  * Presentation for codemode: a compact script header and nested calls using the regular tool
- * headers. Expanding reveals the source, arguments and errors. Model-facing output stays intact.
+ * headers, with the diff of each file an edit or write changed. Expanding reveals the source,
+ * arguments and errors. Model-facing output stays intact.
  */
 
 import { type Component, Container, Spacer, Text, truncateToWidth, visibleWidth } from "@knightcode/tui";
@@ -21,6 +22,7 @@ import {
 	toolTimerText,
 } from "../../core/tools/render-utils.ts";
 import { createAllToolRenderers } from "../../core/tools/renderers/index.ts";
+import { diffView } from "../../modes/interactive/components/diff.ts";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { VisualLinePreview, expandHint } from "../../modes/interactive/components/visual-truncate.ts";
 import { CodeHighlighter, type Theme } from "../../modes/interactive/theme/theme.ts";
@@ -67,7 +69,10 @@ function nestedCallHeader(call: CodemodeNestedCall, theme: Theme, context: ToolR
 		// Stored arguments are bounded previews and may end in the middle of JSON.
 		args = JSON.parse(call.args);
 	} catch {
-		return new Text(formatToolCall(theme, call.name, theme.fg("muted", replaceTabs(call.args))), 0, 0);
+		// A write's content usually cuts its arguments short; its header only needs the recorded path.
+		if (call.path === undefined)
+			return new Text(formatToolCall(theme, call.name, theme.fg("muted", replaceTabs(call.args))), 0, 0);
+		args = { path: call.path };
 	}
 	if (typeof args === "object" && args !== null && !Array.isArray(args)) {
 		const displayArgs: Record<string, unknown> = { ...args };
@@ -82,8 +87,8 @@ function nestedCallHeader(call: CodemodeNestedCall, theme: Theme, context: ToolR
 				return new Text(formatToolCallWithArgs(call.name, args, theme, false), 0, 0);
 			}
 		}
-		// Full Write/Edit renderers own content highlighting and filesystem diff preflight.
-		// Nested rows only need their path header, even when the call or script failed.
+		// Full Write/Edit renderers own content highlighting and filesystem diff preflight. Nested rows
+		// need only their path header, even when the call or script failed; the diff follows the row.
 		if (call.name === "write" || call.name === "edit") {
 			const path = renderToolPath(str(displayArgs.file_path ?? displayArgs.path), theme, context.cwd);
 			return new Text(formatToolCall(theme, call.name === "write" ? "Write" : "Update", path), 0, 0);
@@ -219,6 +224,7 @@ export const codemodeRenderers: Pick<
 			component.addChild(nestedCallRow(call, theme, context));
 			if (options.expanded && call.args)
 				component.addChild(new Text(theme.fg("muted", `  ${replaceTabs(call.args)}`), 0, 0));
+			if (call.diff) component.addChild(diffView(call.diff, { filePath: call.path }));
 			if (call.error) {
 				const error = theme.fg("error", replaceTabs(call.error));
 				component.addChild(

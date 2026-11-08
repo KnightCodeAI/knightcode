@@ -22,6 +22,7 @@ import {
 	createToolDefinitionFromAgentTool,
 	type TypeBoxAgentTool,
 } from "../../src/core/tools/tool-definition-wrapper.ts";
+import { generateDiffString } from "../../src/core/tools/edit-diff.ts";
 import { readCodemodeStore } from "../../src/extensions/codemode/execute.ts";
 import { createCodemodeExtension } from "../../src/extensions/codemode/index.ts";
 import {
@@ -687,6 +688,32 @@ describe("codemode options and store", () => {
 			"==> text 1/2 <==\nhello\n==> text 2/2 <==\nRead image file [image/png]\n<saved>\n<image>",
 		);
 		expect(result.content.at(-1)).toEqual({ type: "image", data: TINY_PNG_BASE64, mimeType: "image/png" });
+	});
+
+	it("records the path and display diff of nested edits and writes", async () => {
+		const harness = await createHarness({
+			initialActiveToolNames: ["codemode", "edit", "write"],
+			extensionFactories: [createCodemodeExtension()],
+		});
+		harnesses.push(harness);
+		writeFileSync(join(harness.tempDir, "a.ts"), "const one = 1;\n");
+		// Longer than the stored argument preview, so the path must not come from it.
+		const content = `${"x".repeat(300)}\nend\n`;
+		const result = await run(
+			harness,
+			[
+				'await tools.edit({ path: "a.ts", edits: [{ oldText: "one = 1", newText: "two = 2" }] });',
+				`await tools.write({ path: "new.txt", content: ${JSON.stringify(content)} });`,
+				'await tools.write({ path: "a.ts", content: "const two = 2;\\n" });',
+			].join("\n"),
+		);
+		expect(result.isError).toBe(false);
+		const [edit, created, unchanged] = (result.details as unknown as CodemodeToolDetails).calls;
+		expect(edit).toMatchObject({ path: "a.ts", status: "ok", diff: expect.stringMatching(/\+1 const two = 2;/) });
+		expect(created).toMatchObject({ path: "new.txt", status: "ok", diff: generateDiffString("", content).diff });
+		// Writing the same contents changes nothing, so there is no diff to show.
+		expect(unchanged).toMatchObject({ path: "a.ts", status: "ok" });
+		expect(unchanged.diff).toBeUndefined();
 	});
 
 	it("persists store() writes as custom entries for later calls", async () => {

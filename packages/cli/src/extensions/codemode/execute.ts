@@ -27,9 +27,11 @@ import {
 import { getCodemodeWorkerSpecifier, getQuickJSWasmPath } from "../../config.ts";
 import type { ExtensionToolContext, ToolNamespace } from "../../core/extensions/types.ts";
 import type { SessionEntry } from "../../core/session-manager.ts";
+import { generateDiffString, normalizeToLF } from "../../core/tools/edit-diff.ts";
 import { formatSize, sliceHead, sliceTail } from "../../core/tools/truncate.ts";
 import { combineUsage } from "../../core/usage-totals.ts";
 import { writeOutputFile } from "../../utils/output-files.ts";
+import { stripBom } from "../../utils/text.ts";
 import { Bm25Ranker, createToolSearchDocument, DEFAULT_TOOL_SEARCH_LIMIT } from "../tool-search/tool.ts";
 import {
 	CODEMODE_DOCS_PATH,
@@ -46,6 +48,30 @@ import {
 
 const ARGS_PREVIEW_CHARS = 200;
 const ERROR_PREVIEW_CHARS = 500;
+
+const isFileTool = (name: string) => name === "edit" || name === "write";
+
+/** The file an `edit` or `write` call targets, read the way their renderers read it. */
+function filePathOf(name: string, args: unknown): string | undefined {
+	if (!isFileTool(name) || typeof args !== "object" || args === null) return undefined;
+	const { file_path, path } = args as { file_path?: unknown; path?: unknown };
+	const value = file_path ?? path;
+	return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * The display diff of a file change, so the script's row can show it the way a direct call does:
+ * the `diff` an edit or overwrite returns, or a created file as added lines. Write sends no patch
+ * past its size cap, and then a created file gets no diff either.
+ */
+function fileChangeDiff(name: string, args: unknown, details: unknown): string | undefined {
+	if (!isFileTool(name) || typeof details !== "object" || details === null) return undefined;
+	const { diff, patch, created } = details as { diff?: unknown; patch?: unknown; created?: unknown };
+	if (typeof diff === "string") return diff;
+	const content = (args as { content?: unknown } | null)?.content;
+	if (created !== true || typeof patch !== "string" || typeof content !== "string") return undefined;
+	return generateDiffString("", normalizeToLF(stripBom(content))).diff;
+}
 /** `models.classify()` and `models.generateImages()` calls one script may have in flight; `Promise.all` over many items queues the rest. */
 const MAX_CONCURRENT_MODEL_CALLS = 4;
 /**
@@ -532,6 +558,8 @@ export async function executeCodemode(
 				args: previewArgs(args),
 				status: "running",
 			};
+			const path = filePathOf(tool.name, args);
+			if (path !== undefined) record.path = path;
 			calls.push(record);
 			publish();
 			const callStartedAt = performance.now();
@@ -545,6 +573,8 @@ export async function executeCodemode(
 				record.error = truncateText(textOf(outcome.result) || `Tool "${tool.name}" failed`, ERROR_PREVIEW_CHARS);
 			} else {
 				record.status = "ok";
+				const diff = fileChangeDiff(tool.name, args, outcome.result.details);
+				if (diff) record.diff = diff;
 			}
 			publish();
 			return toScriptValue(tool, outcome);

@@ -28,6 +28,7 @@ type LiveItem = {
 	output?: unknown;
 	startedAt?: number;
 	completedAt?: number;
+	fileChanges?: unknown[];
 };
 const itemOf = (n: Note) => n.params.item as LiveItem;
 const isItemEvent = (n: Note) => n.method === "item/started" || n.method === "item/completed";
@@ -699,6 +700,20 @@ test("nested calls have live times but no read-back items", async () => {
 			result: { content: [{ type: "text", text: "ok" }], details: {} },
 			isError: false,
 		});
+		mapper.handle({
+			type: "tool_execution_start",
+			toolCallId: "nested-2",
+			toolName: "edit",
+			args: { path: "a.ts" },
+			parentToolCallId: "parent-1",
+		});
+		mapper.handle({
+			type: "tool_execution_end",
+			toolCallId: "nested-2",
+			toolName: "edit",
+			result: { content: [{ type: "text", text: "ok" }], details: { diff: "", patch: "@@ -1 +1 @@\n-a\n+b" } },
+			isError: false,
+		});
 	} finally {
 		held.release();
 	}
@@ -708,6 +723,9 @@ test("nested calls have live times but no read-back items", async () => {
 		.map(itemOf);
 	expect(nested).toHaveLength(1);
 	expect(nested[0].completedAt!).toBeGreaterThanOrEqual(nested[0].startedAt!);
+	// A nested edit carries its patch, so the client can show the diff like a direct edit's.
+	const edit = a.notifications.find((n) => n.method === "item/completed" && itemOf(n).id === "nested-2");
+	expect(edit && itemOf(edit).fileChanges).toEqual([{ path: "a.ts", kind: "modify", diff: "@@ -1 +1 @@\n-a\n+b" }]);
 	expect((await a.readTurns(thread.id)).flatMap((t) => t.items).some((i) => i.id === "nested-1")).toBe(false);
 });
 
