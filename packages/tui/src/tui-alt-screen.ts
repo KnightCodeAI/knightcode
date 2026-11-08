@@ -1700,12 +1700,8 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		const imageAnchorsNeedRedraw = screen.some(
 			(line, row) => changedRows[row] && (isImageLine(line) || isImageLine(this.previousScreen[row] ?? "")),
 		);
-		const termProgram = process.env.TERM_PROGRAM?.toLowerCase();
-		const imagesErasedByRowWrites =
-			Boolean(process.env.WEZTERM_PANE) || termProgram === "wezterm" || termProgram === "orca";
 		const imageCellsNeedRedraw =
 			!imageAnchorsNeedRedraw &&
-			imagesErasedByRowWrites &&
 			this.imageProtocol === "kitty" &&
 			changedRows.some(Boolean) &&
 			screen.some((line, row) => {
@@ -1738,11 +1734,11 @@ export class TuiAltScreen extends TuiBase implements ViewportTUI {
 		}
 		buffer += preparedKittyScreen.evictedImageDeletion;
 
-		// WezTerm and Orca erase intersecting Kitty image cells when a later row write touches a covered row.
-		// Draw image placements after every clear and text write so nothing later intersects them; preserve
-		// the existing interleaved output for text-only frames and every other terminal.
-		const drawKittyImagesLast =
-			redrawImages && this.imageProtocol === "kitty" && screen.some(isImageLine) && imagesErasedByRowWrites;
+		// Some terminals store Kitty images in the cells they cover (WezTerm, xterm.js's image addon in Orca),
+		// so clearing or writing a covered row erases that part of the image. Draw placements after every clear
+		// and text write so nothing later intersects them. Terminals that keep images on a separate layer
+		// (Kitty, Ghostty) render the same result; text-only frames keep the interleaved output.
+		const drawKittyImagesLast = redrawImages && this.imageProtocol === "kitty" && screen.some(isImageLine);
 		if (drawKittyImagesLast) {
 			for (let row = 0; row < height; row++) {
 				if (!fullRedraw && !imagesNeedRedraw && screen[row] === this.previousScreen[row]) continue;
