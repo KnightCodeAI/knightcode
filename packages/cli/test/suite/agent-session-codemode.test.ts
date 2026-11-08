@@ -703,13 +703,14 @@ describe("codemode options and store", () => {
 			harness,
 			[
 				'await tools.edit({ path: "a.ts", edits: [{ oldText: "one = 1", newText: "two = 2" }] });',
-				`await tools.write({ path: "new.txt", content: ${JSON.stringify(content)} });`,
+				`await tools.write({ content: ${JSON.stringify(content)}, path: "new.txt" });`,
 				'await tools.write({ path: "a.ts", content: "const two = 2;\\n" });',
 			].join("\n"),
 		);
 		expect(result.isError).toBe(false);
 		const [edit, created, unchanged] = (result.details as unknown as CodemodeToolDetails).calls;
 		expect(edit).toMatchObject({ path: "a.ts", status: "ok", diff: expect.stringMatching(/\+1 const two = 2;/) });
+		expect(created.args).not.toContain("new.txt");
 		expect(created).toMatchObject({ path: "new.txt", status: "ok", diff: generateDiffString("", content).diff });
 		// Writing the same contents changes nothing, so there is no diff to show.
 		expect(unchanged).toMatchObject({ path: "a.ts", status: "ok" });
