@@ -1,5 +1,29 @@
 # @knightcodeai/cli
 
+## 0.23.9
+
+### Added
+
+- Added `requiresToolsWithToolHistory` for Chat Completions models. When it is on, a request whose history contains tool calls sends `"tools": []` instead of leaving `tools` out. The default stays off, so the field is still omitted.
+
+### Fixed
+
+- Fixed a provider error that says the stream was cut short after the reply had begun. KnightCode retries that request.
+
+- Fixed edit diffs so they are computed around each change. Time and memory follow the size of the edit, and a diff that cannot be built leaves the file unchanged.
+
+- Fixed search globs so a folder pattern is relative to the path you searched. `migrations/main/*.js` matches that folder under the path, and `**/migrations/main/*.js` matches it at any depth. A leading `./` is ignored.
+
+- Fixed Ctrl+O so it also expands user bash output that is still on screen while the agent is working.
+
+- Fixed the thinking level after you move to an earlier point in the session. The level you are using now is stored on the new branch before the next prompt, so the following turn keeps it.
+
+- Fixed image reads so the resize worker has finished shutting down before the next image starts one. A second read no longer overlaps a worker that is still terminating.
+
+- Fixed file edits so a line the edit does not touch keeps the line ending it already had, including when the file mixes LF and CRLF. New lines take the ending of the line they replace.
+
+- Fixed fullscreen Kitty images so each image is drawn after the rows it covers. A later write on a covered row no longer erases part of the image.
+
 ## 0.23.8
 
 ### Added
