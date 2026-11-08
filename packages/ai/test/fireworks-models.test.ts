@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe("Fireworks models", () => {
 	it("registers Messages API models on the inference base URL", () => {
-		const model = getModel("fireworks", "accounts/fireworks/models/inkling");
+		const model = getModel("fireworks", "accounts/fireworks/models/qwen3p8-max");
 
 		expect(model).toBeDefined();
 		expect(model.api).toBe("anthropic-messages");
@@ -179,8 +179,9 @@ describe("Fireworks models", () => {
 		expect(getSupportedThinkingLevels(getModel("fireworks", modelId))).toEqual(levels);
 	});
 
+	// No catalogued Messages model is toggle-only, so the budget shape is checked on the local fixture.
 	it("keeps toggle-only Messages models without a verified fallback on budget-based thinking", async () => {
-		const model = getModel("fireworks", "accounts/fireworks/models/inkling");
+		const model = createFireworksModel();
 		expect(model.compat?.forceAdaptiveThinking).toBeUndefined();
 		let payload: Record<string, unknown> | undefined;
 		await streamSimple(
@@ -207,7 +208,7 @@ describe("Fireworks models", () => {
 	});
 
 	it("sets Fireworks-specific compat for session affinity and unsupported tool fields", () => {
-		const model = getModel("fireworks", "accounts/fireworks/models/inkling");
+		const model = getModel("fireworks", "accounts/fireworks/models/qwen3p8-max");
 
 		expect(model.compat).toBeDefined();
 		expect(model.compat?.sendSessionAffinityHeaders).toBe(true);
