@@ -4,7 +4,7 @@
 
 export { followActiveLanguage, hostLanguage, type LanguageFollower } from "./active-language.ts";
 export { followActiveTheme, type ThemeFollower } from "./active-theme.ts";
-export { type Client, type ClientError, type ClientOptions, startClient } from "./client.ts";
+export { type Client, type ClientError, type ClientOptions, type ClientStyles, startClient } from "./client.ts";
 export {
 	type ConnectionState,
 	keepConnected,

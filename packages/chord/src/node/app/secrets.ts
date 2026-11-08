@@ -61,7 +61,7 @@ export async function writeSecret(
 	}
 	try {
 		if (mode === "replace") {
-			await rename(temporary, path);
+			await replaceSecret(temporary, path);
 			return "written";
 		}
 		await link(temporary, path);
@@ -71,5 +71,20 @@ export async function writeSecret(
 		throw error;
 	} finally {
 		await unlink(temporary).catch(() => {});
+	}
+}
+
+/**
+ * Renames `temporary` onto `path`. Windows denies that replace while the destination is still open or read-only
+ * (`EPERM`), so there the destination is removed and the rename tried again.
+ */
+async function replaceSecret(temporary: string, path: string): Promise<void> {
+	try {
+		await rename(temporary, path);
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (process.platform !== "win32" || (code !== "EPERM" && code !== "EACCES")) throw error;
+		await unlink(path);
+		await rename(temporary, path);
 	}
 }
