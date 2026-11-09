@@ -430,6 +430,8 @@ export class ItemMapper {
 				item.output = outputOf(blocks);
 				// A nested call stays live only (§4.2): its view travels on this item and nowhere else.
 				const details = (event.result as { details?: unknown })?.details;
+				const changes = fileChangesOf(item.tool, item.input, event.isError, details);
+				if (changes.length > 0) item.fileChanges = changes;
 				const view = viewOf(details);
 				if (view) item.view = view;
 				const app = mcpAppOf(details);
