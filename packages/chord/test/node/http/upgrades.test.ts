@@ -140,11 +140,14 @@ describe("the links endpoint", () => {
 		"takes frames of at most 1 MiB unless links.options says otherwise (Opus's audit H2)",
 		async () => {
 			const server = await served({}, { config: { links: { path: "/chord" } } });
-			const socket = await socketTo(server.port, "/chord", { "x-principal": "owner" });
-			const closed = closeOf(socket);
-			socket.send(Buffer.alloc(1024 * 1024 + 1));
-			expect((await closed).code).toBe(1009);
-			await server.close();
+			try {
+				const socket = await socketTo(server.port, "/chord", { "x-principal": "owner" });
+				const closed = closeOf(socket);
+				socket.send(Buffer.alloc(1024 * 1024 + 1));
+				expect((await closed).code).toBe(1009);
+			} finally {
+				await server.close();
+			}
 		},
 	);
 

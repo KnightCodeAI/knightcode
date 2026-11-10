@@ -44,6 +44,7 @@
       "@tally/app/*": ["./packages/chord/test/examples/62-telemetry/app/*.ts"],
       "@knightcode/chord/http": ["./packages/chord/src/node/http/index.ts"],
       "@knightcode/chord/workers": ["./packages/chord/src/node/workers/index.ts"],
+      "@knightcode/chord/compression": ["./packages/chord/src/node/compression.ts"],
       "@knightcode/chord/workers/child": ["./packages/chord/src/node/workers/child.ts"],
       "@knightcode/chord/plugins": ["./packages/chord/src/node/plugins/index.ts"],
       "@knightcode/chord/plugins/runtime": ["./packages/chord/src/node/plugins/runtime.ts"],
