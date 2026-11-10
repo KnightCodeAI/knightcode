@@ -772,6 +772,9 @@ function Install-GitBashStandalone {
 }
 
 function Get-NpmGlobalPrefix {
+  # Windows PowerShell promotes redirected native stderr to error records, so an
+  # npm warning would abort under Stop. This assignment is local to the function.
+  $ErrorActionPreference = "Continue"
   $previousOutputEncoding = [Console]::OutputEncoding
   try {
     # npm writes UTF-8 to redirected stdout. Decode it explicitly instead of
@@ -941,6 +944,9 @@ if (
 	process.exit(1);
 }
 '@
+  # Windows PowerShell promotes redirected native stderr to error records, so a
+  # Node warning or an invalid marker would abort under Stop.
+  $ErrorActionPreference = "Continue"
   $markerScript | & node - $markerPath *> $null
   return $LASTEXITCODE -eq 0
 }
@@ -1206,6 +1212,9 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version ?? 
 }
 console.log(version);
 '@
+  # The managed install runs in a background job, where Windows PowerShell
+  # promotes native stderr to error records. Rely on node's exit status.
+  $ErrorActionPreference = "Continue"
   $version = $metadataScript | & node - $MetadataPath
   if ($LASTEXITCODE -ne 0) {
     return ""
@@ -1238,6 +1247,9 @@ if (knightcodeEntry?.version !== version) {
 	throw new Error(`managed installer package-lock.json does not include ${knightcodePackage}@${version}`);
 }
 '@
+  # The managed install runs in a background job, where Windows PowerShell
+  # promotes native stderr to error records. Rely on node's exit status.
+  $ErrorActionPreference = "Continue"
   $validationScript | & node - $PackageJsonPath $PackageLockPath $KnightcodePackage $ManagedVersion
   return $LASTEXITCODE -eq 0
 }
@@ -1528,8 +1540,14 @@ function Invoke-KnightcodeManagedInstall {
     }
 
     Write-Host "Verifying managed KnightCode $managedVersion"
-    $managedInstalledVersion = & $managedStagedBin --version
-    $managedStatus = $LASTEXITCODE
+    $savedErrorActionPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = "Continue"
+      $managedInstalledVersion = & $managedStagedBin --version
+      $managedStatus = $LASTEXITCODE
+    } finally {
+      $ErrorActionPreference = $savedErrorActionPreference
+    }
     if ($managedStatus -ne 0) {
       $global:LASTEXITCODE = $managedStatus
       return
