@@ -1,5 +1,39 @@
 # @knightcodeai/cli
 
+## 0.23.10
+
+### Added
+
+- Added Claude Fable 5.2 to the Anthropic catalog. Its fallback list keeps only models that accept a per-message effort change.
+
+### Changed
+
+- Changed Azure OpenAI models so a long-context price tier from the OpenAI catalog is kept.
+
+- Changed the default `cacheWarming` setting to `idle`, so an eligible prompt cache stays warm for up to 30 minutes between runs.
+
+- Changed provider lists in login and logout so Radius and OpenRouter come first, then every other provider by name.
+
+### Fixed
+
+- Fixed model catalog refresh when sign-in has expired. The command warns, names the provider, and continues with the catalog it already has.
+
+- Fixed a request whose strict tool schemas exceed the provider limit. That request is sent again without strict tool schemas.
+
+- Fixed the PowerShell tool on Windows PowerShell 5.1. A native command that exits 0 and only writes a warning to stderr is reported as success.
+
+- Fixed file search on Windows. A pattern that uses backslashes matches the same paths as one that uses slashes, and a cancelled search does not start `fd`.
+
+- Fixed resuming a session whose saved directory is gone. Startup asks whether to continue in the current directory or fork a new session there.
+
+- Fixed codemode scripts that edit or write files so each change shows its diff under the script's call row, as a direct edit or write does, and a nested write keeps its `Write(path)` header when its content is long. The app server now includes these file changes too, so the desktop app can show their diffs.
+
+- Fixed code mode console output. `NaN` and `Infinity` print as those values instead of `null`.
+
+- Fixed pasted-text markers in the editor. Deleting one marker renumbers the markers that remain, including a short marker that has no size.
+
+- Fixed the Windows installer so a warning on npm or node's error stream does not abort the install.
+
 ## 0.23.9
 
 ### Added
