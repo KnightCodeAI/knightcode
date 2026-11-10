@@ -1,6 +1,6 @@
 {
   "name": "@knightcodeai/cli",
-  "version": "0.23.9",
+  "version": "0.23.10",
   "description": "KnightCode — a local, BYOK terminal coding agent powered by OpenRouter.",
   "type": "module",
   "repository": {
