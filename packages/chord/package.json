@@ -21,6 +21,7 @@
     "./sqlite/cloudflare": "./src/sqlite/cloudflare.ts",
     "./http": "./src/node/http/index.ts",
     "./workers": "./src/node/workers/index.ts",
+    "./compression": "./src/node/compression.ts",
     "./workers/child": "./src/node/workers/child.ts",
     "./plugins": "./src/node/plugins/index.ts",
     "./plugins/runtime": "./src/node/plugins/runtime.ts",

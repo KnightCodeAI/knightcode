@@ -305,8 +305,14 @@ describe("keys", () => {
 describe("metadata queries", () => {
 	it("keeps source, ref, key, mime and meta; finds versions by id, ref and key", async () => {
 		const files = await filesOf();
-		const a = await put(files, "a.png", "a", { mime: "image/png", source: "guest:g1", ref: "msg-1", meta: { w: 2 } });
-		const b = await put(files, "b.png", "b", { source: "owner", ref: "msg-1", key: "k" });
+		const a = await put(files, "a.png", "a", {
+			mime: "image/png",
+			source: "guest:g1",
+			ref: "msg-1",
+			meta: { w: 2 },
+			created: 1_000,
+		});
+		const b = await put(files, "b.png", "b", { source: "owner", ref: "msg-1", key: "k", created: 2_000 });
 		await put(files, "c.png", "c", { ref: "msg-2" });
 		expect(a).toEqual({
 			id: a.id,
@@ -326,6 +332,26 @@ describe("metadata queries", () => {
 		expect(page.items).toEqual([a]);
 		expect((await files.byRef({ space: "shared", ref: "msg-1", after: page.next }, context)).items).toEqual([b]);
 		expect(await files.byKey({ space: "shared", key: "k" }, context)).toEqual(b);
+		await files.close();
+	});
+
+	it("orders equal creation times by id in pages and summaries, including after removal", async () => {
+		const files = await filesOf();
+		const written = [];
+		for (const path of ["a.txt", "b.txt", "c.txt"]) {
+			written.push(await put(files, path, path, { created: 1_000, ref: "same-time" }));
+		}
+		const oldest = written.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+		let after: string | undefined;
+		for (const file of oldest) {
+			const page = await files.byRef({ space: "shared", ref: "same-time", limit: 1, after }, context);
+			expect(page.items).toEqual([file]);
+			after = page.next;
+		}
+		expect(after).toBeUndefined();
+		expect((await files.summary.get("shared", context))?.newest).toEqual(oldest.toReversed());
+		await files.remove(oldest[0]!.id, context);
+		expect((await files.summary.get("shared", context))?.newest).toEqual(oldest.slice(1).toReversed());
 		await files.close();
 	});
 });
@@ -451,7 +477,9 @@ describe("chunked uploads", () => {
 
 	it("caps the uploads under way per object: past it begin is refused busy; an ending one frees its slot (recheck N1)", async () => {
 		const files = await filesOf({ limits: { uploads: 3 } });
-		const fds = async () => (await readdir("/proc/self/fd")).length;
+		// Windows has no /dev/fd, so the descriptor ceiling is checked only where that directory exists.
+		const countFds = process.platform !== "win32";
+		const fds = async () => (countFds ? (await readdir("/dev/fd")).length : 0);
 		const before = await fds();
 		const begun: string[] = [];
 		const write = (index: number) => ({ space: "shared", path: `u${index}`, mime: "x", source: "test" });
@@ -460,7 +488,7 @@ describe("chunked uploads", () => {
 			if (result.kind === "upload") begun.push(result.upload);
 		}
 		expect(await rejection(files.begin(write(3), context))).toMatchObject({ code: "unavailable", reason: "busy" });
-		expect((await fds()) - before).toBeLessThanOrEqual(3);
+		if (countFds) expect((await fds()) - before).toBeLessThanOrEqual(3);
 		await files.finish(begun[0]!, context);
 		expect((await files.begin(write(4), context)).kind).toBe("upload");
 		await files.close();
@@ -541,9 +569,9 @@ describe("caps", () => {
 describe("summary", () => {
 	it("counts a space's files, versions and bytes and keeps its newest versions", async () => {
 		const files = await filesOf();
-		const a1 = await put(files, "docs/a.txt", "1");
-		const a2 = await put(files, "docs/a.txt", "22");
-		const b = await put(files, "b.txt", "333");
+		const a1 = await put(files, "docs/a.txt", "1", { created: 1_000 });
+		const a2 = await put(files, "docs/a.txt", "22", { created: 2_000 });
+		const b = await put(files, "b.txt", "333", { created: 3_000 });
 		expect(await files.summary.get("shared", context)).toEqual({
 			files: 2,
 			versions: 3,
@@ -562,7 +590,7 @@ describe("summary", () => {
 
 	it("keeps the newest 20 and stays across a restart", async () => {
 		const first = await filesOf();
-		for (let index = 0; index < 25; index++) await put(first, `f${index}`, "x");
+		for (let index = 0; index < 25; index++) await put(first, `f${index}`, "x", { created: index });
 		const summary = await first.summary.get("shared", context);
 		expect(summary?.newest).toHaveLength(20);
 		expect(summary?.newest[0]?.path).toBe("f24");

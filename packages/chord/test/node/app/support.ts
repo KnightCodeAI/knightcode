@@ -21,7 +21,7 @@ import {
 	WorkerInfo,
 } from "../../../src/node/app/index.ts";
 import { Http } from "../../../src/node/http/index.ts";
-import { writeFiles, writePlugin } from "../plugins/support.ts";
+import { settleFileEvents, writeFiles, writePlugin } from "../plugins/support.ts";
 
 /** The principals of these tests. */
 export type TestPrincipal =
@@ -107,6 +107,7 @@ export async function startTestApp<P extends Principal>(
 	const root = options.root ?? join(base, "plugins");
 	await writeFiles(root, { ".keep": "" });
 	for (const [dir, files] of Object.entries(options.plugins ?? {})) await writePlugin(root, dir, `@test/${dir}`, files);
+	await settleFileEvents();
 	const errors: unknown[] = [];
 	const app = await startServer<P>(
 		// The tests pass worker kinds (`withWorkers`, `workers`) only with `principal.worker`.
@@ -137,7 +138,11 @@ export async function startTestApp<P extends Principal>(
 		context,
 	);
 	// The bases built after the listen: most tests get the app as its first requests see it.
-	if (options.unbuilt !== true) await app.basesBuilt;
+	if (options.unbuilt !== true) {
+		await app.basesBuilt;
+		// Retire startup events before a test makes its first distinct edit.
+		await settleFileEvents();
+	}
 	const port = Number(new URL(app.ownerLink()).port);
 	return { app, errors, dataDir, root, port };
 }
