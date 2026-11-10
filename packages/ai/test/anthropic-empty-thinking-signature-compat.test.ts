@@ -107,6 +107,7 @@ describe("Anthropic empty thinking signature compat", () => {
 	// Regression: Fireworks emits unsigned thinking that must survive replay.
 	it.each([
 		"accounts/fireworks/models/deepseek-v4p1-flash",
+		"accounts/fireworks/models/ember-1",
 		"accounts/fireworks/models/qwen3p8-max",
 		"accounts/fireworks/models/qwen3p8-2p4t-a95b",
 	] as const)("preserves unsigned thinking for Fireworks %s", async (modelId) => {

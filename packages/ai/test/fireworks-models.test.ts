@@ -179,8 +179,8 @@ describe("Fireworks models", () => {
 		expect(getSupportedThinkingLevels(getModel("fireworks", modelId))).toEqual(levels);
 	});
 
-	// No catalogued Messages model is toggle-only, so the budget shape is checked on the local fixture.
-	it("keeps toggle-only Messages models without a verified fallback on budget-based thinking", async () => {
+	// The catalog no longer lists a toggle-only Messages model, so the budget shape is checked on the local fixture.
+	it("keeps non-adaptive Messages models on budget-based thinking", async () => {
 		const model = createFireworksModel();
 		expect(model.compat?.forceAdaptiveThinking).toBeUndefined();
 		let payload: Record<string, unknown> | undefined;

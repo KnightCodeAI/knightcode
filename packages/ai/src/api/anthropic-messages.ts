@@ -62,7 +62,6 @@ import {
 
 import {
 	getJsonSchemaToolParameters,
-	isStrictToolLimitErrorMessage,
 	prefersJsonSchemaStrictSampling,
 	resolveJsonSchemaStrictSampling,
 	type UnsupportedStrictSchemaKeywordCheck,
@@ -75,6 +74,11 @@ import {
 	clampThinkingBudgetToAnswerRoom,
 	MIN_ANSWER_TOKENS,
 } from "./simple-options.ts";
+import {
+	hasExceededStrictToolLimits,
+	isStrictToolLimitErrorMessage,
+	markStrictToolLimitsExceeded,
+} from "./strict-tool-limits.ts";
 import { splitErrorToolResultImages, transformMessages } from "./transform-messages.ts";
 
 /**
@@ -900,7 +904,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (
 					maxRetryDelayMs: options?.maxRetryDelayMs,
 					signal: options?.signal,
 				});
-			let disablePreferredStrictTools = false;
+			let disablePreferredStrictTools = hasExceededStrictToolLimits(options?.sessionId);
 			let response: Response;
 			let params: MessageCreateParamsStreaming;
 			// The thread request that produced the response; undefined when no `thread` was sent.
@@ -942,6 +946,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (
 						throw error;
 					}
 					disablePreferredStrictTools = true;
+					markStrictToolLimitsExceeded(options?.sessionId);
 					appendAssistantMessageDiagnostic(output, {
 						type: "anthropic_strict_tools_fallback",
 						timestamp: Date.now(),
@@ -1430,7 +1435,7 @@ function getBetaFeatures(
 }
 
 interface BuildParamsFlags {
-	/** Send `strict: "prefer"` tools without strict schemas, after Anthropic rejected them. */
+	/** Send `strict: "prefer"` tools without strict schemas, after Anthropic rejected them in this request or session. */
 	disablePreferredStrictTools: boolean;
 	/** The session uses message threads, so the threads beta is sent. */
 	messageThreads: boolean;
