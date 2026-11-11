@@ -8,7 +8,7 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import lockfile from "proper-lockfile";
 import { APP_NAME, getPackageDir, VERSION } from "../config.ts";
 import { canonicalizePath, getCwdRelativePath } from "./paths.ts";
@@ -85,9 +85,23 @@ async function runManagedNpmCi(stageDir: string, options: { quiet?: boolean; sig
 	});
 }
 
+/**
+ * Environment for the managed release smoke test, with the Node.js running this update
+ * first on PATH. On Windows the managed launcher runs KnightCode on the installer's standalone
+ * Node without changing PATH, so the release's `node_modules/.bin` shim may otherwise
+ * run an older system Node that cannot load the new release.
+ */
+function getManagedReleaseVerifyEnv(): NodeJS.ProcessEnv {
+	const nodeDir = dirname(process.execPath);
+	const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === "path") ?? "PATH";
+	const currentPath = process.env[pathKey] ?? "";
+	return { ...process.env, [pathKey]: [nodeDir, currentPath].filter(Boolean).join(delimiter) };
+}
+
 async function verifyManagedRelease(releaseDir: string, expectedVersion: string, signal?: AbortSignal): Promise<void> {
 	const binPath = join(releaseDir, "node_modules", ".bin", process.platform === "win32" ? `${APP_NAME}.cmd` : APP_NAME);
 	const installedVersion = await runUpdateProcess(binPath, ["--version"], {
+		env: getManagedReleaseVerifyEnv(),
 		quiet: true,
 		signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000),
 	});

@@ -12,11 +12,12 @@ export const UPDATE_STEP_TIMEOUT_MS = 10 * 60 * 1000;
 export async function runUpdateProcess(
 	command: string,
 	args: string[],
-	options: { cwd?: string; signal?: AbortSignal; quiet?: boolean } = {},
+	options: { cwd?: string; env?: NodeJS.ProcessEnv; signal?: AbortSignal; quiet?: boolean } = {},
 ): Promise<string> {
 	options.signal?.throwIfAborted();
 	const child = spawnProcess(command, args, {
 		cwd: options.cwd,
+		env: options.env,
 		windowsHide: true,
 		stdio: ["ignore", "pipe", "pipe"],
 	});
