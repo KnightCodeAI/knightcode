@@ -14,14 +14,14 @@ import {
 	type EntryRecord,
 	type GenerationHooks,
 	GenerationTask,
+	type HookTask,
 	hook,
+	hookTask,
 	InboxDoc,
 	LiveDoc,
 	type LiveState,
 	MemoryStorage,
-	type RunEndTask,
 	type RunSummary,
-	runEndTask,
 	type Storage,
 	type TaskId,
 	type Tx,
@@ -125,7 +125,7 @@ function install(setup: ChatSetup, state: Probe, afterRun?: GenerationHooks["aft
 		(async (run) => {
 			state.asked.push(run);
 			if (state.hookGate !== undefined) await state.hookGate.promise;
-			return { tasks: [runEndTask(Tests, { label: `run ${state.asked.length}` })] };
+			return { tasks: [hookTask(Tests, { label: `run ${state.asked.length}` })] };
 		});
 	setup.registry.install(
 		defineExtension({ name: "after-run", tasks: [Tests], hooks: [hook(GenerationTask, { afterRun: handler })] }),
@@ -285,7 +285,7 @@ describe("afterRun", () => {
 						afterRun: async (run) => {
 							state.asked.push(run);
 							// Only the first run gets a task.
-							return state.asked.length === 1 ? { tasks: [runEndTask(Tests, { label: "run 1" })] } : undefined;
+							return state.asked.length === 1 ? { tasks: [hookTask(Tests, { label: "run 1" })] } : undefined;
 						},
 					}),
 				],
@@ -482,7 +482,7 @@ describe("afterRun", () => {
 							afterRun: async (run, _api, ctx) => {
 								state.asked.push(run);
 								if (stage === "finish") await aborted(ctx.abortSignal!);
-								return { tasks: [runEndTask(Tests, { label: "run 1" })] };
+								return { tasks: [hookTask(Tests, { label: "run 1" })] };
 							},
 						}),
 					],
@@ -546,13 +546,13 @@ describe("afterRun", () => {
 			phases: { run: async () => {} },
 			abort: async () => {},
 		});
-		const requests: RunEndTask[] = [
+		const requests: HookTask[] = [
 			{ task: { definition: { ...Tests.definition, name: "test.unknown" } }, input: null },
 			{ task: GenerationTask, input: {} },
 			{ task: Tests, input: { label: () => "not JSON" } as unknown as JsonValue },
-			runEndTask(Throwing, null),
-			runEndTask(BadStart, null),
-			runEndTask(Tests, { label: "ok" }),
+			hookTask(Throwing, null),
+			hookTask(BadStart, null),
+			hookTask(Tests, { label: "ok" }),
 		];
 		setup.registry.install(
 			defineExtension({
@@ -576,7 +576,7 @@ describe("afterRun", () => {
 		setup.registry.install(
 			defineExtension({
 				name: "not-a-list",
-				hooks: [hook(GenerationTask, { afterRun: async () => ({ tasks: "x" as unknown as RunEndTask[] }) })],
+				hooks: [hook(GenerationTask, { afterRun: async () => ({ tasks: "x" as unknown as HookTask[] }) })],
 			}),
 		);
 		setup.faux.setResponses([fauxAssistantMessage("done")]);
@@ -593,7 +593,7 @@ describe("afterRun", () => {
 		const rejected = setup.reports[0] as AggregateError;
 		expect(rejected.errors.map((error: Error) => error.message)).toEqual([
 			"Task test.unknown is not installed",
-			"An afterRun hook cannot start the built-in task knightcode.generation",
+			"A hook cannot start the built-in task knightcode.generation",
 			"Value contains a non-JSON function; expected strict JSON",
 			"initial failed",
 			"Task test.bad-start starts at the unknown phase nowhere",
@@ -624,7 +624,7 @@ describe("afterRun", () => {
 		setup.registry.install(
 			defineExtension({
 				name: "asker",
-				hooks: [hook(GenerationTask, { afterRun: async () => ({ tasks: [runEndTask(Stale, null)] }) })],
+				hooks: [hook(GenerationTask, { afterRun: async () => ({ tasks: [hookTask(Stale, null)] }) })],
 			}),
 		);
 		setup.faux.setResponses([fauxAssistantMessage("done")]);
@@ -809,7 +809,7 @@ describe("afterRun", () => {
 					hook(GenerationTask, {
 						afterRun: async (run) => {
 							state.asked.push(run);
-							return state.asked.length === 1 ? { tasks: [runEndTask(Tests, { label: "run 1" })] } : undefined;
+							return state.asked.length === 1 ? { tasks: [hookTask(Tests, { label: "run 1" })] } : undefined;
 						},
 					}),
 				],
@@ -1124,7 +1124,7 @@ describe("afterRun", () => {
 						afterRun: async (run, _api, ctx) => {
 							state.asked.push(run);
 							if (hookGate !== undefined) await Promise.race([hookGate.promise, aborted(ctx.abortSignal!)]);
-							return { tasks: [runEndTask(Tests, { label: "run" })] };
+							return { tasks: [hookTask(Tests, { label: "run" })] };
 						},
 					}),
 				],
