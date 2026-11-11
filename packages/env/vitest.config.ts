@@ -7,6 +7,7 @@ export default mergeConfig(
 		test: {
 			globals: true,
 			environment: "node",
+			globalSetup: ["test/build-daemon.ts"],
 			reporters: process.env.GITHUB_ACTIONS ? ["dot", "github-actions"] : ["dot"],
 		},
 	}),
