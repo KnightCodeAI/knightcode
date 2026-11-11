@@ -23,7 +23,8 @@ export function prefixOutputPad(lines: string[], outputPad: number, width = Numb
 	if (outputPad <= 0) return lines;
 	const prefix = " ".repeat(outputPad);
 	return lines.map((line) => {
-		if (line.length === 0 || IMAGE_LINE.test(line)) return line;
+		if (line.length === 0) return line;
+		if (IMAGE_LINE.test(line)) return prefix + line;
 		const padded = prefix + line;
 		return visibleWidth(padded) > width ? truncateToWidth(padded, width, "") : padded;
 	});

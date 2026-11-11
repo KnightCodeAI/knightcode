@@ -9,8 +9,8 @@ import { truncateToWidth, visibleWidth } from "../utils.ts";
  * Both prefixes must have the same visible width so the child's wrap width stays
  * constant across the block (that is what keeps `⏺ `/`  ` and `  ⎿  `/`     ` aligned).
  *
- * Image lines pass through unprefixed - terminal image escape sequences must start
- * at the beginning of a line to render.
+ * Image lines get blank padding of the gutter's width instead of the prefix glyphs, and are
+ * never truncated: the escape sequence draws at the cursor, so the padding indents the image.
  */
 export class Gutter implements Component {
 	private child: Component;
@@ -69,7 +69,7 @@ export class Gutter implements Component {
 		for (let i = 0; i < childLines.length; i++) {
 			const line = childLines[i];
 			if (isImageLine(line)) {
-				lines.push(line);
+				lines.push(" ".repeat(this.gutterWidth) + line);
 				continue;
 			}
 			const prefixed = (i === 0 ? this.firstPrefix : this.restPrefix) + line;
