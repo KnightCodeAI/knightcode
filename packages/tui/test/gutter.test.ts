@@ -43,7 +43,7 @@ describe("Gutter", () => {
 		assert.deepStrictEqual(gutter.render(20), []);
 	});
 
-	it("passes image lines through unprefixed", () => {
+	it("indents image lines with blank padding, not the prefix", () => {
 		const imageLine = encodeKitty("iVBORw0KGgo=", { imageId: 1 });
 		const child: Component = {
 			invalidate: () => {},
@@ -51,7 +51,17 @@ describe("Gutter", () => {
 		};
 		const lines = new Gutter(child, "> ", "  ").render(20);
 		assert.strictEqual(lines[0], "> first");
-		assert.strictEqual(lines[1], imageLine);
+		assert.strictEqual(lines[1], `  ${imageLine}`);
+	});
+
+	it("caps image padding so the image starts inside a narrow row", () => {
+		const imageLine = encodeKitty("iVBORw0KGgo=", { imageId: 1 });
+		const child: Component = {
+			invalidate: () => {},
+			render: () => [imageLine],
+		};
+		assert.strictEqual(new Gutter(child, "  ⎿  ", "     ").render(3)[0], `  ${imageLine}`);
+		assert.strictEqual(new Gutter(child, "  ⎿  ", "     ").render(1)[0], imageLine);
 	});
 
 	it("recolors without rebuilding the child", () => {
