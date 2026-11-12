@@ -155,6 +155,8 @@ for (const target of targets) {
 			// preload can crash startup, and a project .env would leak into the process.
 			autoloadBunfig: false,
 			autoloadDotenv: false,
+			// The binary must resolve extension entry points from package.json.
+			autoloadPackageJson: true,
 			...(target.os === "win32" ? { windows: windowsMetadata(version) } : {}),
 		},
 		define: {
