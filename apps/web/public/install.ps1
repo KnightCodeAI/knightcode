@@ -490,7 +490,19 @@ function Install-NodeStandalone {
   Assert-NodeDownloadChecksum $shasumsPath $nodeFile $zipPath
 
   Write-Host "Extracting Node.js to $nodeBaseDir"
-  Expand-Archive $zipPath $nodeTmpDir -Force
+  # Windows 10 1803+ ships bsdtar as System32\tar.exe. It unpacks Node's ~2,000 files in about a second, while
+  # Windows PowerShell 5.1's Expand-Archive runs script code for every entry and takes over 20 seconds. Call it by
+  # full path: a Git for Windows tar.exe earlier on PATH is GNU tar, which cannot read zip files.
+  $systemTar = Join-Path $env:SystemRoot "System32\tar.exe"
+  if (Test-Path $systemTar -PathType Leaf) {
+    & $systemTar -xf $zipPath -C $nodeTmpDir
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "Node.js extraction failed."
+      exit $LASTEXITCODE
+    }
+  } else {
+    Expand-Archive $zipPath $nodeTmpDir -Force
+  }
 
   $extractedDir = Join-Path $nodeTmpDir ($nodeFile -replace "\.zip$", "")
   $currentDir = Join-Path $nodeBaseDir "current"
