@@ -16,7 +16,8 @@
 		"make": "electron-forge make",
 		"check-types": "tsc --noEmit -p tsconfig.json",
 		"test": "vitest --run",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"test:parity": "playwright test --config=playwright.parity.config.ts"
 	},
 	"devDependencies": {
 		"@electron-forge/cli": "8.0.1",
