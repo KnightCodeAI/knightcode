@@ -49,6 +49,8 @@ export class ToolExecutionComponent extends Container {
 	/** Inputs of imageComponents, so updateDisplay can reuse images and keep their converted PNG data. */
 	private imageSources: Array<{ data: string; mimeType: string; widthCells: number }> = [];
 	private imageSpacers: Spacer[] = [];
+	/** What was added as a child for each image: the image itself, or its indenting gutter. */
+	private imageChildren: Component[] = [];
 	private toolName: string;
 	private toolCallId: string;
 	private args: any;
@@ -371,9 +373,10 @@ export class ToolExecutionComponent extends Container {
 
 		const previousImages = this.imageComponents;
 		const previousSources = this.imageSources;
-		for (const img of this.imageComponents) {
-			this.removeChild(img);
+		for (const child of this.imageChildren) {
+			this.removeChild(child);
 		}
+		this.imageChildren = [];
 		this.imageComponents = [];
 		this.imageSources = [];
 		for (const spacer of this.imageSpacers) {
@@ -411,7 +414,10 @@ export class ToolExecutionComponent extends Container {
 					}
 					this.imageComponents.push(imageComponent);
 					this.imageSources.push(source);
-					this.addChild(imageComponent);
+					// Line the image up with the result text under the ⎿ marker; self-framed tools draw images unindented.
+					const child = selfShell ? imageComponent : new Gutter(imageComponent, RESULT_INDENT, RESULT_INDENT);
+					this.imageChildren.push(child);
+					this.addChild(child);
 				}
 			}
 		}
