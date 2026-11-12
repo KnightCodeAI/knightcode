@@ -1,5 +1,31 @@
 # @knightcodeai/cli
 
+## 0.24.0
+
+### Added
+
+- Added clickable links to HTML exports: terminal hyperlinks (OSC 8) in tool output become anchors, with unsafe link schemes dropped.
+
+### Changed
+
+- Changed the default llama.cpp server address to `http://127.0.0.1:9931`, the port `llama serve` listens on. The llama.cpp and NVIDIA RTX guides now start the server with `llama serve`.
+
+### Fixed
+
+- Fixed crashes when a read or a session listing was cancelled while a file was still being opened or read, and when the command a session share runs could not start.
+
+- Fixed find patterns that start with `./`, which matched nothing; the leading `./` is now ignored.
+
+- Fixed the Windows installer taking over 20 seconds to unpack Node.js: it now uses the tar that ships with Windows when available.
+
+- Fixed updates of installer-managed KnightCode failing their final check on Windows when an older Node.js came first on PATH: the check now runs with the Node.js that runs KnightCode.
+
+- Fixed Anthropic message threads so they are on by default for any model served from api.anthropic.com, whatever provider name it is configured under, and stay off for other endpoints unless `compat.supportsMessageThreads` turns them on. Claude subscription requests also report a current Claude Code version.
+
+- Fixed MCP tools restored with a resumed session disappearing when an extension turned off only its own tool before the MCP tools had registered.
+
+- Fixed inline Markdown images followed by a hard line break, which drew the next line on the image row, and Kitty images that disappeared after a full redraw in fullscreen.
+
 ## 0.23.10
 
 ### Added
