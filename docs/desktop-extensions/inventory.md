@@ -30,9 +30,9 @@ without exposing its behavior does not complete a surface.
 | Bottom region | `renderer/components/terminal.tsx`: BottomRegion; `main/terminals.ts` | Region provider and mediated terminal controller; mount does not own process | S7 |
 | Background output | `renderer/components/background-terminals.tsx`; store background snapshots | Background output tabs/status and explicit stop intent | S7 |
 | Settings | `renderer/components/settings.tsx`: Settings, SettingsNav; `packages/cli/src/app-server/configure.ts`, `config.ts`, `plugins.ts` | Declarative schema/sections and optional custom React sections | S8 |
-| Commands | `renderer/components/palette.tsx`; `renderer/keys.ts`; `shared/keybindings.ts` | Palette contributions and configurable bindings | S1/S5 |
+| Commands | `renderer/components/palette.tsx`; `renderer/builtins/commands/index.ts`; `renderer/keys.ts`; `shared/keybindings.ts` | Quick actions use the S1 registry and SDK controllers; configurable command bindings remain S5 | S1/S5 |
 | Appearance | `renderer/appearance.ts`; `renderer/styles.css`; `renderer/app.tsx`: useTheme; `main/host.ts` | Published theme tokens/presets, typography, live owned-overlay theme context | S8 |
-| Feedback | `renderer/app.tsx`: Toasts, ServerBanner, ZoomBanner; `renderer/store.ts`: toast state | Notification controller and presentation; server/recovery notices stay host-owned | S1/S8 |
+| Feedback | `renderer/builtins/feedback/index.tsx`: Toasts; `renderer/app.tsx`: ServerBanner, ZoomBanner; `renderer/store.ts`: toast state | S1 notification controller and feedback provider; server/recovery notices stay host-owned | S1/S8 |
 | App overlays | `renderer/components/dialog.tsx`, `popover.tsx`, `menu.tsx`, `tooltip.tsx` | App overlay registration and owner/revision-aware portal host | S2/S8 |
 | Content scripts | No application extension equivalent yet | Owned activation/disposal lifecycle; not a sandbox | S2 |
 | Recovery | `renderer/app.tsx`: ViewBoundary, ServerBanner; native menus in `main.ts` | Non-replaceable extension settings, fallback notices, native safe-mode restart | S2 |

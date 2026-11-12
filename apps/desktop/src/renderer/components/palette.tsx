@@ -5,27 +5,18 @@
  * the selected one is lit and the others sit at 75%. Arrows move the selection, Enter runs it, Escape closes.
  */
 
-import { type ReactNode, useEffect, useId, useState } from "react";
+import { experimental_Icon as Icon, experimental_KeybindingKeys as KeybindingKeys } from "@knightcodeai/cli/desktop";
+import { type ReactNode, useEffect, useId, useState, useSyncExternalStore } from "react";
 import { GO_TO_THREAD, type KeybindingId } from "../../shared/keybindings.ts";
 import { basename, samePath } from "../format.ts";
 import { bindingLabel, matches } from "../keys.ts";
-import {
-	addProject,
-	getState,
-	navigate,
-	newTerminal,
-	openThread,
-	selectProjects,
-	setPaletteOpen,
-	setSidebarOpen,
-	showNew,
-	threadSlotsOf,
-	toggleTerminal,
-	useStore,
-} from "../store.ts";
+import { getState, navigate, openThread, selectProjects, setPaletteOpen, threadSlotsOf, useStore } from "../store.ts";
+import { useCommandContext } from "../extensions/host.tsx";
+import type { CommandRegistration } from "../extensions/registry.ts";
+import { desktopExtensions } from "../extensions/runtime.ts";
+import { ContributionRoot } from "../extensions/surface.tsx";
 import { Kbd } from "./button.tsx";
 import { Dialog } from "./dialog.tsx";
-import { FolderOpen, Keyboard, PanelLeft, Settings, SquarePen, SquareTerminal } from "./icons.tsx";
 import { SETTINGS_PAGES } from "./settings.tsx";
 
 interface Entry {
@@ -36,14 +27,14 @@ interface Entry {
 	icon?: ReactNode;
 	binding?: KeybindingId;
 	run: () => void;
+	registration?: CommandRegistration;
 }
 
 export function Palette() {
 	const threads = useStore((s) => s.threads);
 	const projects = useStore(selectProjects);
-	const sidebarOpen = useStore((s) => s.sidebarOpen);
-	// The open thread, for the terminal's actions.
-	const open = useStore((s) => (s.view.kind === "thread" ? s.held[s.view.id]?.thread : undefined));
+	const context = useCommandContext();
+	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot);
 	const [query, setQuery] = useState("");
 	const [selected, setSelected] = useState(0);
 	const listId = useId();
@@ -51,61 +42,22 @@ export function Palette() {
 	const slots = threadSlotsOf(getState()).slice(0, GO_TO_THREAD.length);
 	const has = (text: string) => !q || text.toLowerCase().includes(q);
 	const project = (cwd: string) => projects.find((p) => samePath(p.path, cwd))?.name ?? basename(cwd);
-	const actions: Entry[] = [
-		{
-			id: "new",
-			label: "New thread",
-			icon: <SquarePen size={16} />,
-			binding: "desktop.thread.new",
-			run: () => showNew(),
-		},
-		{
-			id: "folder",
-			label: "Open folder",
-			icon: <FolderOpen size={16} />,
-			binding: "desktop.project.open",
-			run: () => void addProject(),
-		},
-		{
-			id: "sidebar",
-			label: sidebarOpen ? "Hide sidebar" : "Show sidebar",
-			icon: <PanelLeft size={16} />,
-			binding: "desktop.sidebar.toggle",
-			run: () => setSidebarOpen(!sidebarOpen),
-		},
-		...(open
-			? [
+	const actions: Entry[] = desktopExtensions.commands(context).flatMap((registration) => {
+		const command = registration.contribution;
+		const label = desktopExtensions.commandLabel(registration, context);
+		return label === undefined
+			? []
+			: [
 					{
-						id: "terminal",
-						label: "Toggle terminal",
-						icon: <SquareTerminal size={16} />,
-						binding: "desktop.terminal.toggle" as const,
-						run: () => toggleTerminal(open.id, open.cwd),
+						id: registration.id,
+						label,
+						icon: command.icon ? <Icon name={command.icon} size={16} /> : undefined,
+						binding: command.binding,
+						registration,
+						run: () => desktopExtensions.runCommand(registration, context),
 					},
-					{
-						id: "newTerminal",
-						label: "New terminal",
-						icon: <SquareTerminal size={16} />,
-						binding: "desktop.terminal.new" as const,
-						run: () => void newTerminal(open.id, open.cwd),
-					},
-				]
-			: []),
-		{
-			id: "settings",
-			label: "Settings",
-			icon: <Settings size={16} />,
-			binding: "desktop.settings",
-			run: () => navigate({ kind: "settings", page: "general" }),
-		},
-		{
-			id: "shortcuts",
-			label: "Keyboard shortcuts",
-			icon: <Keyboard size={16} />,
-			binding: "desktop.shortcuts",
-			run: () => navigate({ kind: "settings", page: "shortcuts" }),
-		},
-	];
+				];
+	});
 	const groups = [
 		{
 			// Before a query, the threads Alt+1-9 reach, in the sidebar's order (as Codex lists them); after one, the
@@ -187,7 +139,7 @@ export function Palette() {
 						<div className="px-2 pt-2 pb-0 text-sm text-tertiary">{group.title}</div>
 						{group.entries.map((entry) => {
 							const i = index++;
-							return (
+							const row = (
 								<div
 									key={entry.id}
 									id={optionId(i)}
@@ -204,10 +156,21 @@ export function Palette() {
 									) : null}
 									{entry.binding ? (
 										<span className="opacity-80">
-											<Kbd>{bindingLabel(entry.binding)}</Kbd>
+											{entry.registration ? (
+												<KeybindingKeys binding={entry.registration.contribution.binding!} />
+											) : (
+												<Kbd>{bindingLabel(entry.binding)}</Kbd>
+											)}
 										</span>
 									) : null}
 								</div>
+							);
+							return entry.registration ? (
+								<ContributionRoot key={entry.id} entry={entry.registration}>
+									{row}
+								</ContributionRoot>
+							) : (
+								row
 							);
 						})}
 					</div>

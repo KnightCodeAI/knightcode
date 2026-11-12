@@ -184,6 +184,18 @@ The app server notes each such call once per thread in `app-server.log`. A widge
 status the server refuses (an invalid view, too large, too many) shows a warning
 once. The protocol side is in [app-server.md](app-server.md#dialogs-and-extension-ui).
 
+### Experimental desktop contributions
+
+The palette's Quick actions and the toast presenter now use a window-local
+contribution registry. The source SDK is `@knightcodeai/cli/desktop`; its
+experimental members can change. It shares the renderer's existing state,
+icons, buttons and configured key hints. Server and recovery banners remain
+host-owned.
+
+This is the built-in registration path only. Loading installed desktop
+extensions, provider settings, native-code consent and authoring commands
+are not available yet. Session extensions described above are unchanged.
+
 ## Keyboard shortcuts
 
 | Action | Default |

@@ -5,6 +5,7 @@
  */
 
 import { useSyncExternalStore } from "react";
+import type { experimental_Toast } from "@knightcodeai/cli/desktop";
 import type {
 	ApprovalMode,
 	ApprovalResult,
@@ -381,11 +382,7 @@ function updateThread(id: string, fn: (view: ThreadView) => ThreadView): void {
 
 let toastId = 0;
 /** A note over the window: an error, a confirmation ("Committed …"), or anything else. */
-export interface Toast {
-	id: number;
-	text: string;
-	kind: "error" | "success" | "info";
-}
+export type Toast = experimental_Toast;
 
 export function toast(text: string, kind: Toast["kind"] = "info"): void {
 	const id = ++toastId;

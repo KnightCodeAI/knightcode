@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, Info, Minus, Plus, X } from "./components/icons.tsx";
+import { CircleAlert, Minus, Plus } from "./components/icons.tsx";
 import { Button, IconButton } from "./components/button.tsx";
 import { Component, type ReactNode, useEffect, useRef, useState } from "react";
 import { customTokens, fontFaces } from "./appearance.ts";
@@ -12,11 +12,11 @@ import { ThreadView } from "./components/thread-view.tsx";
 import { runAppCommand, TitleBar } from "./components/titlebar.tsx";
 import { GO_TO_RECENT, GO_TO_THREAD } from "../shared/keybindings.ts";
 import { isEditable, isMac, runBinding, setBindingOverrides, useBinding, useBindings } from "./keys.ts";
+import { FeedbackSurface } from "./extensions/host.tsx";
 import {
 	addProject,
 	autoArchive,
 	clearUnread,
-	dismissToast,
 	goBack,
 	navigate,
 	selectPreferences,
@@ -75,40 +75,6 @@ class ViewBoundary extends Component<{ children: ReactNode }, { error?: Error }>
 			</div>
 		);
 	}
-}
-
-const TOAST_MARKS = { success: CircleCheck, error: CircleAlert, info: Info };
-
-/** The newest three toasts, top centre under the title bar (styles.css, .kc-toast). */
-function Toasts() {
-	const toasts = useStore((s) => s.toasts);
-	return (
-		<div
-			role="status"
-			aria-label="Notifications"
-			className="pointer-events-none fixed inset-x-0 top-12 z-[60] flex flex-col items-center gap-2 px-2"
-		>
-			{toasts.slice(-3).map((t) => {
-				const Mark = TOAST_MARKS[t.kind];
-				return (
-					<div key={t.id} data-kind={t.kind} className="kc-toast max-w-[min(560px,100%)]">
-						<Mark size={16} className="shrink-0" />
-						<span className="min-w-0 [overflow-wrap:anywhere]">{t.text}</span>
-						<Button
-							size="xs"
-							uniform
-							pill
-							aria-label="Close"
-							onClick={() => dismissToast(t.id)}
-							className="text-current"
-						>
-							<X size={16} />
-						</Button>
-					</div>
-				);
-			})}
-		</div>
-	);
 }
 
 /**
@@ -334,7 +300,7 @@ export function App() {
 				</div>
 			</div>
 			{paletteOpen ? <Palette /> : null}
-			<Toasts />
+			<FeedbackSurface />
 			<ZoomBanner />
 		</div>
 	);

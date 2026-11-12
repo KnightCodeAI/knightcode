@@ -193,4 +193,35 @@ Windows 11 (10.0.26200), 2026-11-12, at `f4e10b2d3`:
   loaded its bundle but `#root` stayed empty and nothing reached the trace. Its
   cause is not established. Main's stdout/stderr and every renderer's console
   are now attached to each test (`electron-output-N`); retries stay disabled.
-- Native macOS/Linux: not executed. S1–S9: not started.
+- Native macOS/Linux: not executed. S1 verification follows; S2–S9 are not started.
+
+### S1 — registry and built-in path
+
+Windows verification after merging `main` (`ca48eaf14`) as `c69294b70`:
+
+- Post-merge, unchanged build: 88/88 parity runs passed, zero changed pixels
+  (8.2 min). Its first run passed 86/88: the Home composer contained unexpected
+  typed text (`make`, 886 changed pixels), and a Git branch poll could not
+  resolve HEAD during branch creation. These were not the known empty-root
+  symptom. A full unchanged rerun passed; neither product code nor baselines
+  were changed to resolve them.
+- S1 app-server staging (`--platform=win32 --arch=x64`) and `bun run package`:
+  passed. The palette's Quick actions and the toast presenter now use the
+  public registration path; server/recovery banners remain host-owned.
+- S1 `bun run test:parity`: **88/88 passed, zero changed pixels** (8.5 min),
+  without a retry or baseline updates. All 424 expected images are unchanged.
+- `bunx vitest --run`: **185 passed, 7 skipped**, across 37 files (one skipped).
+  New coverage includes ordering, atomic duplicate/version rejection,
+  per-set/per-registration abort and disposal, cleanup after errors, provider
+  selection, public controller/store integration and the import boundary.
+- `bun run test:e2e`: **14/14 passed** (36.6 s), including contribution ownership,
+  public notification posting, render failure, fallback and recovery. The
+  existing suite ran through a temporary launcher with scratch HOME/temp/config
+  and offline settings, using the existing fixture environment. The separate
+  client-rendered registry fixture is not an external artifact loader test.
+- Root and desktop `bun run check-types`: passed. `bun run lint:extensions`,
+  changeset validation and whitespace checks: passed.
+- No real provider calls, native macOS/Linux runs or external extension loading.
+  Provider preference persistence/settings, consent and authored CSS remain
+  later-slice gates. See [registry.md](registry.md) for the S1 contracts.
+- Review was a self-review; no independent reviewer tool was available.
