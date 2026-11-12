@@ -122,6 +122,12 @@ describe("provider retry classification", () => {
 		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
 	});
 
+	it("matches gateway wording for a closed connection", () => {
+		// A gateway can end a stream with an api_error whose message is "Connection closed."
+		const errorMessage = '{"type":"error","error":{"type":"api_error","message":"Connection closed."}}';
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
+	});
+
 	it("matches OpenAI Responses streams that end before terminal events", () => {
 		expect(
 			isRetryableAssistantError(
