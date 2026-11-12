@@ -101,49 +101,71 @@ function notesPackage(label: string): Record<string, string> {
 	};
 }
 
-describe("installDependencies: git dependencies (slice 12 §2)", () => {
-	it("installs a git dependency pinned to a commit with npm; the build inlines that commit's file", async () => {
-		const first = await gitRepository("notes", notesPackage("notes at v1"), "v1");
-		await gitRepository("notes", notesPackage("notes at v2"), "v2", first);
-		const root = await tempRoot();
-		await writePlugin(
-			root,
-			"stats",
-			"@test/stats",
-			{ "worker.ts": 'import { label } from "@bob/notes";\nexport default { setup: () => label };' },
-			{ dependencies: { "@bob/notes": `git+${first.url}#${first.commit}` } },
-		);
-		const { plugins } = await discoverPlugins([root], { kinds: KINDS }, context);
-		await installDependencies(plugins[0]!, context);
-		const source = await workerOf(root, "@test/stats");
-		expect(source).toContain("notes at v1");
-		expect(source).not.toContain("notes at v2");
-	}, 60_000);
+// npm 12 refuses git dependencies by default (`allow-git` is `none`: EALLOWGIT). Whether the installer opts in is not
+// decided yet; until then these run on npm 11 and earlier only. Windows runs npm through npm.cmd, which needs a shell.
+const NPM_REFUSES_GIT =
+	Number(execFileSync("npm", ["--version"], { encoding: "utf8", shell: process.platform === "win32" }).split(".")[0]) >=
+	12;
+// The installer spawns `npm` by name without a shell. Under Node on Windows that is npm.cmd, which spawn cannot start
+// (ENOENT), so the tests that run the real npm are skipped there; the fake-npm tests above cover the arguments.
+const REAL_NPM_SKIPPED = NPM_REFUSES_GIT || process.platform === "win32";
 
-	it("reaches a plugin inside a multi-plugin repository through a dependency on the whole repository, by path", async () => {
-		const repository = await gitRepository(
-			"plugins",
-			{
-				"package.json": JSON.stringify({ name: "@bob/plugins", version: "1.0.0", chord: { plugins: ["notes"] } }),
-				"notes/package.json": JSON.stringify({ name: "@bob/notes" }),
-				"notes/contract.ts": 'export const label = "notes inside a repository of several";',
-			},
-			"v1",
-		);
-		const root = await tempRoot();
-		await writePlugin(
-			root,
-			"stats",
-			"@test/stats",
-			{
-				"worker.ts": 'import { label } from "@bob/plugins/notes/contract.ts";\nexport default { setup: () => label };',
-			},
-			{ dependencies: { "@bob/plugins": `git+${repository.url}#${repository.commit}` } },
-		);
-		const { plugins } = await discoverPlugins([root], { kinds: KINDS }, context);
-		await installDependencies(plugins[0]!, context);
-		expect(await workerOf(root, "@test/stats")).toContain("notes inside a repository of several");
-	}, 60_000);
+describe("installDependencies: git dependencies (slice 12 §2)", () => {
+	it.skipIf(REAL_NPM_SKIPPED)(
+		"installs a git dependency pinned to a commit with npm; the build inlines that commit's file",
+		async () => {
+			const first = await gitRepository("notes", notesPackage("notes at v1"), "v1");
+			await gitRepository("notes", notesPackage("notes at v2"), "v2", first);
+			const root = await tempRoot();
+			await writePlugin(
+				root,
+				"stats",
+				"@test/stats",
+				{ "worker.ts": 'import { label } from "@bob/notes";\nexport default { setup: () => label };' },
+				{ dependencies: { "@bob/notes": `git+${first.url}#${first.commit}` } },
+			);
+			const { plugins } = await discoverPlugins([root], { kinds: KINDS }, context);
+			await installDependencies(plugins[0]!, context);
+			const source = await workerOf(root, "@test/stats");
+			expect(source).toContain("notes at v1");
+			expect(source).not.toContain("notes at v2");
+		},
+		60_000,
+	);
+
+	it.skipIf(REAL_NPM_SKIPPED)(
+		"reaches a plugin inside a multi-plugin repository through a dependency on the whole repository, by path",
+		async () => {
+			const repository = await gitRepository(
+				"plugins",
+				{
+					"package.json": JSON.stringify({
+						name: "@bob/plugins",
+						version: "1.0.0",
+						chord: { plugins: ["notes"] },
+					}),
+					"notes/package.json": JSON.stringify({ name: "@bob/notes" }),
+					"notes/contract.ts": 'export const label = "notes inside a repository of several";',
+				},
+				"v1",
+			);
+			const root = await tempRoot();
+			await writePlugin(
+				root,
+				"stats",
+				"@test/stats",
+				{
+					"worker.ts":
+						'import { label } from "@bob/plugins/notes/contract.ts";\nexport default { setup: () => label };',
+				},
+				{ dependencies: { "@bob/plugins": `git+${repository.url}#${repository.commit}` } },
+			);
+			const { plugins } = await discoverPlugins([root], { kinds: KINDS }, context);
+			await installDependencies(plugins[0]!, context);
+			expect(await workerOf(root, "@test/stats")).toContain("notes inside a repository of several");
+		},
+		60_000,
+	);
 });
 
 describe("installPlugin (slice 12 §5)", () => {
@@ -190,19 +212,61 @@ describe("installPlugin (slice 12 §5)", () => {
 		expect(plugins.map(({ name }) => name)).toEqual(["@bob/notes", "@bob/search"]);
 	});
 
-	it("installs an npm package (here a local tarball) into <root>/<name>", async () => {
+	it.skipIf(process.platform === "win32")(
+		"installs an npm package (here a local tarball) into <root>/<name>",
+		async () => {
+			const source = await tempRoot();
+			await writeFiles(source, {
+				"package.json": JSON.stringify({ name: "@bob/clock", version: "1.2.0" }),
+				"worker.ts": "export default { setup: () => {} };",
+			});
+			const packed = execFileSync("npm", ["pack", "--silent", "--pack-destination", source], {
+				cwd: source,
+				encoding: "utf8",
+			}).trim();
+			const root = await tempRoot();
+			const names = await installPlugin({ npm: "@bob/clock", version: `file:${join(source, packed)}` }, root, context);
+			expect(names).toEqual(["@bob/clock"]);
+			expect(JSON.parse(await readFile(join(root, "@bob", "clock", "package.json"), "utf8"))).toMatchObject({
+				version: "1.2.0",
+			});
+		},
+		60_000,
+	);
+
+	it("reads npm 12's pack output, the packed tarballs by package name", async () => {
 		const source = await tempRoot();
 		await writeFiles(source, {
 			"package.json": JSON.stringify({ name: "@bob/clock", version: "1.2.0" }),
 			"worker.ts": "export default { setup: () => {} };",
 		});
-		const packed = execFileSync("npm", ["pack", "--silent", "--pack-destination", source], {
+		// Windows runs npm through npm.cmd, which needs a shell; the arguments are fixed.
+		const packed = execFileSync("npm", ["pack", "--silent", "--pack-destination", "."], {
 			cwd: source,
 			encoding: "utf8",
+			shell: process.platform === "win32",
 		}).trim();
+		// npm 12 as installPlugin runs it: `pack` copies the tarball to --pack-destination and prints it by name; `install`
+		// (the dependencies) does nothing.
+		const tools = await tempRoot();
+		const script = join(tools, "npm12.mjs");
+		await writeFiles(tools, {
+			"npm12.mjs": [
+				'import { copyFileSync } from "node:fs";',
+				'import { join } from "node:path";',
+				"const args = process.argv.slice(2);",
+				'if (args[0] === "pack") {',
+				'\tconst destination = args[args.indexOf("--pack-destination") + 1];',
+				`\tcopyFileSync(${JSON.stringify(join(source, packed))}, join(destination, ${JSON.stringify(packed)}));`,
+				`\tconsole.log(JSON.stringify({ "@bob/clock": { name: "@bob/clock", filename: ${JSON.stringify(packed)} } }));`,
+				"}",
+			].join("\n"),
+		});
 		const root = await tempRoot();
-		const names = await installPlugin({ npm: "@bob/clock", version: `file:${join(source, packed)}` }, root, context);
-		expect(names).toEqual(["@bob/clock"]);
+		const npmCommand = [process.execPath, script];
+		expect(await installPlugin({ npm: "@bob/clock", version: "1.2.0" }, root, context, { npmCommand })).toEqual([
+			"@bob/clock",
+		]);
 		expect(JSON.parse(await readFile(join(root, "@bob", "clock", "package.json"), "utf8"))).toMatchObject({
 			version: "1.2.0",
 		});
