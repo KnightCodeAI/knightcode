@@ -521,6 +521,7 @@ describe("SessionManager listing abort", () => {
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 
+	// Aborting a listing after a non-session file was skipped must not raise an unhandled stream error.
 	it("does not crash when aborted after a file that is not a session was skipped", async () => {
 		// Larger than one 64 KB stream chunk, so the file is still being read when the listing skips it.
 		writeFileSync(join(tempDir, "other.jsonl"), `{"type":"other"}\n${"x".repeat(1024 * 1024)}\n`);
