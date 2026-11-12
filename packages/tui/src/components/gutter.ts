@@ -11,6 +11,7 @@ import { truncateToWidth, visibleWidth } from "../utils.ts";
  *
  * Image lines get blank padding of the gutter's width instead of the prefix glyphs, and are
  * never truncated: the escape sequence draws at the cursor, so the padding indents the image.
+ * On rows narrower than the gutter the padding shrinks so the image still starts on screen.
  */
 export class Gutter implements Component {
 	private child: Component;
@@ -65,11 +66,13 @@ export class Gutter implements Component {
 			return [];
 		}
 
+		// Capped so the image still starts on screen when the gutter fills the row.
+		const imagePad = " ".repeat(Math.max(0, Math.min(this.gutterWidth, width - 1)));
 		const lines: string[] = [];
 		for (let i = 0; i < childLines.length; i++) {
 			const line = childLines[i];
 			if (isImageLine(line)) {
-				lines.push(" ".repeat(this.gutterWidth) + line);
+				lines.push(imagePad + line);
 				continue;
 			}
 			const prefixed = (i === 0 ? this.firstPrefix : this.restPrefix) + line;

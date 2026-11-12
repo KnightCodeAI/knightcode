@@ -54,6 +54,16 @@ describe("Gutter", () => {
 		assert.strictEqual(lines[1], `  ${imageLine}`);
 	});
 
+	it("caps image padding so the image starts inside a narrow row", () => {
+		const imageLine = encodeKitty("iVBORw0KGgo=", { imageId: 1 });
+		const child: Component = {
+			invalidate: () => {},
+			render: () => [imageLine],
+		};
+		assert.strictEqual(new Gutter(child, "  ⎿  ", "     ").render(3)[0], `  ${imageLine}`);
+		assert.strictEqual(new Gutter(child, "  ⎿  ", "     ").render(1)[0], imageLine);
+	});
+
 	it("recolors without rebuilding the child", () => {
 		const gutter = new Gutter(new Text("x", 0, 0), "> ", "  ");
 		gutter.setPrefixes("* ", "  ");

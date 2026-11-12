@@ -18,13 +18,17 @@ import { createMarkdownTransform } from "./markdown-transform.ts";
 
 const IMAGE_LINE = /\x1b_G|\x1b]1337;File=/;
 
-/** Shift transcript lines right, keeping them inside `width`. Blank lines and inline images stay put. */
+/**
+ * Shift transcript lines right, keeping them inside `width`. Blank lines stay put; inline images are shifted
+ * too but never truncated, and their pad is capped so the image still starts on screen.
+ */
 export function prefixOutputPad(lines: string[], outputPad: number, width = Number.POSITIVE_INFINITY): string[] {
 	if (outputPad <= 0) return lines;
 	const prefix = " ".repeat(outputPad);
+	const imagePrefix = " ".repeat(Math.max(0, Math.min(outputPad, width - 1)));
 	return lines.map((line) => {
 		if (line.length === 0) return line;
-		if (IMAGE_LINE.test(line)) return prefix + line;
+		if (IMAGE_LINE.test(line)) return imagePrefix + line;
 		const padded = prefix + line;
 		return visibleWidth(padded) > width ? truncateToWidth(padded, width, "") : padded;
 	});
