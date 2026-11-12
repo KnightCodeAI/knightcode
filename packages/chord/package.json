@@ -16,6 +16,7 @@
     "./watch": "./src/watch.ts",
     "./telemetry-sqlite": "./src/telemetry-sqlite/index.ts",
     "./telemetry-sqlite/node": "./src/telemetry-sqlite/node.ts",
+    "./telemetry-ingest": "./src/telemetry-ingest/index.ts",
     "./sqlite": "./src/sqlite/index.ts",
     "./sqlite/node": "./src/sqlite/node.ts",
     "./sqlite/cloudflare": "./src/sqlite/cloudflare.ts",
