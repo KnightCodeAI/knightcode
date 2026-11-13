@@ -72,6 +72,12 @@ function remoteModels(entry: ModelsStoreEntry | undefined, localGeneratedAt: num
 	return entry && isNewer(entry.lastModified, localGeneratedAt) ? entry.models : [];
 }
 
+/**
+ * Request one provider's catalog from knightcode.dev. The User-Agent carries the KnightCode version, and
+ * knightcode.dev serves the newest catalog whose minimum version is at or below it (`selectModelCatalog()` in
+ * `scripts/model-catalog-protocol.ts`, minimum in `scripts/publish-model-catalog.mjs`). A client receives catalogs
+ * published after its release, and those catalogs must work with this client's code.
+ */
 function requestCatalog(
 	providerId: string,
 	catalogBaseUrl: string,
