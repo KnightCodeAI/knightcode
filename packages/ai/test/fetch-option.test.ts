@@ -22,7 +22,7 @@ function createModel<TApi extends Api>(api: TApi): Model<TApi> {
 		name: "Test Model",
 		api,
 		provider: "test-provider",
-		baseUrl: "https://upstream.test/v1",
+		baseUrl: "https://gateway.test/v1",
 		reasoning: false,
 		input: ["text"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -37,7 +37,7 @@ function mockFetches() {
 	});
 	const custom = vi.fn<FetchFunction>(
 		async () =>
-			new Response(JSON.stringify({ error: { message: "upstream rejected request" } }), {
+			new Response(JSON.stringify({ error: { message: "gateway rejected request" } }), {
 				status: 401,
 				headers: { "content-type": "application/json" },
 			}),
@@ -135,11 +135,11 @@ describe("fetch stream option", () => {
 			maxRetries: 0,
 		}).result();
 
-		expect(google.errorMessage).toContain("upstream rejected request");
-		expect(vertex.errorMessage).toContain("upstream rejected request");
+		expect(google.errorMessage).toContain("gateway rejected request");
+		expect(vertex.errorMessage).toContain("gateway rejected request");
 		expect(custom).toHaveBeenCalledTimes(2);
-		expect(custom.mock.calls[0]?.[0].toString()).toContain("https://upstream.test/v1");
-		expect(custom.mock.calls[1]?.[0].toString()).toContain("https://upstream.test/v1");
+		expect(custom.mock.calls[0]?.[0].toString()).toContain("https://gateway.test/v1");
+		expect(custom.mock.calls[1]?.[0].toString()).toContain("https://gateway.test/v1");
 		expect(fallback).not.toHaveBeenCalled();
 		expect(globalThis.fetch).toBe(fallback);
 	});
@@ -149,7 +149,7 @@ describe("fetch stream option", () => {
 	it("keeps the global dispatcher for Google adapters when no fetch is given", async () => {
 		const ambient = vi.fn<FetchFunction>(
 			async () =>
-				new Response(JSON.stringify({ error: { message: "upstream rejected request" } }), {
+				new Response(JSON.stringify({ error: { message: "gateway rejected request" } }), {
 					status: 401,
 					headers: { "content-type": "application/json" },
 				}),

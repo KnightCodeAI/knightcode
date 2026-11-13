@@ -16,7 +16,7 @@ function createModel<TApi extends Api>(api: TApi): Model<TApi> {
 		name: "Test Model",
 		api,
 		provider: "test-provider",
-		baseUrl: "https://upstream.test/v1",
+		baseUrl: "https://gateway.test/v1",
 		reasoning: false,
 		input: ["text"],
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
