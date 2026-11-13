@@ -13,7 +13,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.129.0",
     "@aws-sdk/client-bedrock-runtime": "3.1127.0",
-    "@google/genai": "2.21.0",
+    "@google/genai": "2.32.0",
     "@knightcode/schema": "workspace:*",
     "@knightcode/telemetry": "workspace:*",
     "@smithy/node-http-handler": "4.12.1",
