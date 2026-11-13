@@ -58,6 +58,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 					version: result.version,
 				});
 			if (scope === "global") await ctx.settings.reload();
+			if (key === "packages") ctx.broadcast("desktopExtension/changed", {});
 			return { version: result.version };
 		},
 		"project/trust/read": async ({ cwd }) => {
@@ -75,6 +76,7 @@ export function modelHandlers(ctx: AppServerContext): Handlers {
 			const stats = await stat(resolved).catch(() => undefined);
 			if (!stats?.isDirectory()) throw new AppServerError("invalidParams", `cwd is not a directory: ${cwd}`);
 			new ProjectTrustStore(ctx.agentDir).set(trustKey(ctx.agentDir, resolved), trusted);
+			ctx.broadcast("desktopExtension/changed", {});
 			return {};
 		},
 	};

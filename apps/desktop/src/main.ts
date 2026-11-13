@@ -27,6 +27,10 @@ import type { OpenIn } from "./main/open-in.ts";
 import { MCP_APP_SCHEME, McpApps } from "./main/mcp-apps.ts";
 import { clearPreview, guardWebviews } from "./main/preview.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
+import { ExtensionArtifacts } from "./main/extension-artifacts.ts";
+import { handleDesktopExtensions } from "./main/desktop-extensions.ts";
+import { DesktopExtensionHostMethods } from "./shared/desktop-extensions.ts";
+import { ExtensionProviderPreferences } from "./main/extension-preferences.ts";
 import { Router } from "./main/router.ts";
 import { resolveServerCommand, ServerConnection, type ServerState } from "./main/server.ts";
 import { loginShellEnv } from "./main/shell-env.ts";
@@ -41,11 +45,11 @@ const DEV_URL = MAIN_WINDOW_VITE_DEV_SERVER_URL;
 const ORIGIN = DEV_URL ? new URL(DEV_URL).origin : "app://desktop";
 const RENDERER_DIR = join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const CSP =
-	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; " +
-	"font-src 'self'; connect-src 'self'; frame-src kc-mcp-app:; worker-src 'self' blob:";
+	"default-src 'none'; script-src 'self' app://ext 'wasm-unsafe-eval'; style-src 'self' app://ext 'unsafe-inline'; img-src 'self' app://ext data: blob: https://avatars.githubusercontent.com; " +
+	"font-src 'self' app://ext; connect-src 'self' app://ext; frame-src kc-mcp-app:; worker-src 'self' blob:";
 
 protocol.registerSchemesAsPrivileged([
-	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 	// MCP Apps' documents, one origin per app instance (main/mcp-apps.ts).
 	{ scheme: MCP_APP_SCHEME, privileges: { standard: true, secure: true } },
 ]);
@@ -66,6 +70,9 @@ const windows = new Map<number, OpenWindow>();
 let nextWindowId = 1;
 let serverState: { state: ServerState; message?: string } = { state: "starting" };
 let quitting = false;
+const safeMode = process.argv.includes("--safe-mode");
+let restartSafe = false;
+const extensionArtifacts = new ExtensionArtifacts(ORIGIN);
 
 /** host/window/role: the focused window, else the one focused last, acts for all; and what the others hold. */
 function roleOf(id: number): { primary: boolean; heldElsewhere: string[] } {
@@ -104,6 +111,7 @@ const router = new Router({
 });
 
 const state = new StateFile(app.getPath("userData"));
+const extensionProviders = new ExtensionProviderPreferences(state);
 // An app's frame may sit only in this app's own windows.
 const mcpApps = new McpApps(ORIGIN);
 let server: ServerConnection;
@@ -114,6 +122,7 @@ let updates: Updates;
 /** Serves only the built renderer directory; `..` never escapes it (section 6.3). */
 function serveRenderer(request: Request): Promise<Response> | Response {
 	const url = new URL(request.url);
+	if (url.host === "ext") return extensionArtifacts.serve(request);
 	if (url.host !== "desktop") return new Response(null, { status: 404 });
 	const path = rendererPath(RENDERER_DIR, url.pathname);
 	if (typeof path === "number") return new Response(null, { status: path });
@@ -126,6 +135,7 @@ function serveRenderer(request: Request): Promise<Response> | Response {
 
 function connectPort(id: number, open: OpenWindow): void {
 	open.port?.close();
+	extensionArtifacts.releaseWindow(id);
 	router.detach(id);
 	// The reloaded page attaches to the terminals it shows again, getting their output so far first.
 	terminals.detachWindow(id);
@@ -144,6 +154,20 @@ function connectPort(id: number, open: OpenWindow): void {
 		if (typeof data !== "object" || data === null) return;
 		smokeStep("page");
 		if ("host" in data) {
+			if (Object.hasOwn(DesktopExtensionHostMethods, data.host)) {
+				void handleDesktopExtensions(data, open.window, id, {
+					server,
+					artifacts: extensionArtifacts,
+					safeMode,
+					providers: extensionProviders,
+					isCurrent: () => open.port === port1 && !open.window.isDestroyed(),
+					providersChanged: () => {
+						for (const [windowId, target] of windows)
+							sendEvent(target, { event: "desktopExtension/providers", providers: extensionProviders.read(windowId) });
+					},
+				}).then((response) => port1.postMessage(response));
+				return;
+			}
 			void handleHost(data, open.window, {
 				state,
 				server,
@@ -254,6 +278,8 @@ function createWindow(route?: string): BrowserWindow {
 		router.detach(id);
 		terminals.detachWindow(id);
 		mcpApps.releaseWindow(id);
+		extensionArtifacts.releaseWindow(id);
+		extensionProviders.releaseWindow(id);
 		windows.delete(id);
 	});
 	void (DEV_URL ? window.loadURL(DEV_URL) : window.loadURL("app://desktop/index.html"));
@@ -340,6 +366,13 @@ function buildMenu(): void {
 			label: "View",
 			submenu: [
 				{ role: "reload" },
+				{
+					label: "Restart without extensions",
+					click: () => {
+						restartSafe = true;
+						app.quit();
+					},
+				},
 				...(app.isPackaged ? [] : [{ role: "toggleDevTools" as const }]),
 				{ type: "separator" },
 				// The roles' accelerators, through zoom() so the steps and the banner match the renderer's.
@@ -380,7 +413,7 @@ async function start(): Promise<void> {
 	});
 	server = new ServerConnection({
 		command: resolveServerCommand(app.isPackaged, app.getAppPath(), process.resourcesPath),
-		env,
+		env: { ...env, KNIGHTCODE_DESKTOP_SAFE_MODE: safeMode ? "1" : "0" },
 		logsDir: app.getPath("logs"),
 		clientVersion: app.getVersion(),
 		onMessage: (message) => {
@@ -476,12 +509,17 @@ if (squirrelEvent()) {
 			};
 			const parent = BrowserWindow.getFocusedWindow();
 			const choice = parent ? dialog.showMessageBoxSync(parent, options) : dialog.showMessageBoxSync(options);
-			if (choice !== 0) return;
+			if (choice !== 0) {
+				restartSafe = false;
+				return;
+			}
 		}
 		quitting = true;
 		markQuitting();
 		void server.stop().finally(() => {
 			terminals.killAll();
+			if (restartSafe)
+				app.relaunch({ args: [...process.argv.slice(1).filter((arg) => arg !== "--safe-mode"), "--safe-mode"] });
 			app.quit();
 		});
 	});

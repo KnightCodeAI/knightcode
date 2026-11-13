@@ -16,6 +16,7 @@ import { accountHandlers } from "./accounts.ts";
 import { configureHandlers } from "./configure.ts";
 import { type AppServerContext, createAppServerContext } from "./context.ts";
 import { modelHandlers } from "./models.ts";
+import { desktopExtensionHandlers } from "./desktop-extensions/handlers.ts";
 import { pluginHandlers } from "./plugins.ts";
 import { AppServer, type Handlers } from "./server.ts";
 import { createStdioTransport } from "./stdio.ts";
@@ -31,6 +32,7 @@ export function appServerHandlers(ctx: AppServerContext, threads: ThreadManager)
 		...modelHandlers(ctx),
 		...configureHandlers(ctx),
 		...pluginHandlers(ctx),
+		...desktopExtensionHandlers(ctx),
 	};
 }
 

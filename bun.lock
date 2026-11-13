@@ -206,8 +206,11 @@
         "knightcode": "./dist/bundle/cli.js",
       },
       "dependencies": {
+        "@babel/parser": "7.29.8",
+        "@babel/types": "7.29.8",
         "@silvia-odwyer/photon-node": "0.3.4",
         "jiti": "2.7.0",
+        "postcss": "8.5.26",
         "quickjs-wasi": "3.6.2",
       },
       "devDependencies": {

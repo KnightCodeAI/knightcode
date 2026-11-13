@@ -117,6 +117,7 @@ import { SidebarFrame } from "./sidebar.tsx";
 import { DeleteThreadDialog } from "./thread-actions.tsx";
 import { Switch } from "./switch.tsx";
 import { Tooltip } from "./tooltip.tsx";
+import { NativeExtensionsSettings } from "../extensions/settings.tsx";
 
 declare global {
 	interface Window {
@@ -2648,6 +2649,7 @@ function Extensions() {
 				onTrust={setTrusted}
 				detail="Threads load these when they start or resume. A trusted project adds its own"
 			/>
+			<NativeExtensionsSettings cwd={cwd} />
 			{RESOURCE_GROUPS.map(([type, title]) => {
 				const rows = list?.resources.filter((r) => r.type === type) ?? [];
 				return rows.length ? (

@@ -1,6 +1,6 @@
 /** Install the public renderer bindings, then synchronously register built-ins before first paint. */
 import type { experimental_CommandContext, experimental_DesktopHost } from "@knightcodeai/cli/desktop";
-import { createElement } from "react";
+import { createElement, useSyncExternalStore } from "react";
 import commands from "../builtins/commands/index.ts";
 import feedback from "../builtins/feedback/index.tsx";
 import { Button, Kbd } from "../components/button.tsx";
@@ -18,7 +18,9 @@ import {
 	useStore,
 } from "../store.ts";
 import { desktopExtensions } from "./runtime.ts";
-import { SurfaceHost } from "./surface.tsx";
+import { OwnedPortal, SurfaceHost } from "./surface.tsx";
+import { externalState, startExternalExtensions } from "./external.ts";
+import { NativeExtensionRecovery } from "./settings.tsx";
 
 export function initializeDesktopExtensions(): () => void {
 	const host: experimental_DesktopHost = {
@@ -36,13 +38,16 @@ export function initializeDesktopExtensions(): () => void {
 		experimental_Icon: ({ name, ...props }) => createElement(icons[name], props),
 		experimental_Button: (props) => createElement(Button, props),
 		experimental_KeybindingKeys: ({ binding }) => createElement(Kbd, { children: bindingLabel(binding) }),
+		experimental_Portal: (props) => createElement(OwnedPortal, props),
 	};
 	globalThis.__knightcodeDesktop = host;
 	const handles = [
 		desktopExtensions.register("builtin.commands", commands),
 		desktopExtensions.register("builtin.feedback", feedback),
 	];
+	const disposeExternal = startExternalExtensions(desktopExtensions);
 	const dispose = () => {
+		disposeExternal();
 		for (const handle of handles) handle.dispose();
 		if (globalThis.__knightcodeDesktop === host) globalThis.__knightcodeDesktop = undefined;
 		window.removeEventListener("pagehide", dispose);
@@ -65,7 +70,18 @@ export function useCommandContext(): experimental_CommandContext {
 
 export function FeedbackSurface() {
 	const context = useCommandContext();
+	const providers = useSyncExternalStore(externalState.subscribe, externalState.getProviders);
+	const preferred = providers.window.feedback ?? providers.app.feedback;
 	return (
-		<SurfaceHost registry={desktopExtensions} surface="feedback" builtin="builtin.feedback/toasts" context={context} />
+		<>
+			<SurfaceHost
+				registry={desktopExtensions}
+				surface="feedback"
+				builtin="builtin.feedback/toasts"
+				preferred={preferred}
+				context={context}
+			/>
+			<NativeExtensionRecovery context={context} />
+		</>
 	);
 }

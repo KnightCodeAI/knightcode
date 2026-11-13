@@ -33,6 +33,9 @@ cannot contain `/`; published ids are `<owner>/<local>`.
 The host validates the whole set before notifying subscribers. Duplicate ids
 across registration kinds, invalid ids/orders, unsupported versions and setup
 failure publish nothing. Failed setup releases its cleanup callbacks.
+Returning a promise or thenable also rejects setup before publication, even if
+it registered entries before returning. Its eventual rejection is reported;
+its closed registration context refuses entries after an `await`.
 Reusing a live owner is rejected rather than replacing that owner's set.
 
 Order is ascending `order` (default zero), owner id (ordinal comparison),
@@ -41,10 +44,11 @@ resolver accepts an explicit preference and a built-in id. Missing or
 unavailable choices fall back without rewriting that preference. A rendering
 failure also falls back; a failed additive slot does not remove other slots.
 
-Each registration returns an idempotent disposable. Disposing one registration
-aborts its signal and removes that entry. Disposing the set aborts its setup
-signal and every registration signal, removes all entries, then runs cleanup
-in reverse order. A throwing cleanup is reported and does not stop the rest.
+Each registration returns an idempotent disposable. Individual disposal removes
+the entry before aborting its signal. Set disposal removes all entries, aborts
+the setup and registration signals, then runs cleanup in reverse order.
+Removing entries first prevents abort listeners from invoking commands during
+teardown. A throwing cleanup is reported and does not stop the rest.
 Late registrations and calls through disposed command entries are refused.
 
 Commands receive a captured context (thread id/cwd, new-thread cwd and sidebar

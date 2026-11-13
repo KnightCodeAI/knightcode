@@ -6,6 +6,55 @@ import {
 import { expect, test, vi } from "vitest";
 import { ExtensionRegistry } from "../../src/renderer/extensions/registry.ts";
 
+test("a prepared revision stays inert until commit and a stale disposer cannot remove its replacement", () => {
+	const registry = new ExtensionRegistry();
+	const snapshots: string[][] = [];
+	const old = registry.register(
+		"owner",
+		defineDesktopExtension((app) => app.experimental_registerCommand(command("old"))),
+	);
+	registry.subscribe(() => snapshots.push(registry.commands({ sidebarOpen: true }).map((entry) => entry.id)));
+	const candidate = registry.prepare(
+		"owner",
+		defineDesktopExtension((app) => app.experimental_registerCommand(command("new"))),
+		"new-revision",
+	);
+	expect(snapshots).toEqual([]);
+	expect(registry.commands({ sidebarOpen: true })[0]!.id).toBe("owner/old");
+	const next = candidate.commit();
+	expect(snapshots).toEqual([["owner/new"]]);
+	expect(registry.getSnapshot()[0]!.revision).toBe("new-revision");
+	old.dispose();
+	expect(registry.commands({ sidebarOpen: true })[0]!.id).toBe("owner/new");
+	next.dispose();
+	expect(registry.getSnapshot()).toEqual([]);
+});
+
+test("a failed or abandoned candidate preserves the old working revision", () => {
+	const registry = new ExtensionRegistry();
+	registry.register(
+		"owner",
+		defineDesktopExtension((app) => app.experimental_registerCommand(command("old"))),
+	);
+	expect(() =>
+		registry.prepare(
+			"owner",
+			defineDesktopExtension(() => {
+				throw new Error("bad candidate");
+			}),
+			"bad",
+		),
+	).toThrow("bad candidate");
+	const candidate = registry.prepare(
+		"owner",
+		defineDesktopExtension((app) => app.experimental_registerCommand(command("new"))),
+		"new",
+	);
+	candidate.dispose();
+	expect(() => candidate.commit()).toThrow(/closed/);
+	expect(registry.commands({ sidebarOpen: true }).map((entry) => entry.id)).toEqual(["owner/old"]);
+});
+
 const context: experimental_CommandContext = { sidebarOpen: true };
 const command = (id: string, order = 0) => ({ id, order, label: () => id, experimental_run: () => {} });
 
@@ -49,6 +98,101 @@ test("duplicate ids across kinds reject the whole set without publishing and cle
 	expect(registry.getSnapshot()).toEqual([]);
 	expect(changed).not.toHaveBeenCalled();
 	expect(cleanup).toHaveBeenCalledOnce();
+});
+
+test("promise-returning setup rejects the whole set, cleans up and reports its eventual rejection", async () => {
+	const report = vi.fn();
+	const registry = new ExtensionRegistry(report);
+	const cleanup = vi.fn();
+	const changed = vi.fn();
+	registry.subscribe(changed);
+	const failure = new Error("async setup failed");
+	let result!: Promise<void>;
+	let signal!: AbortSignal;
+	let rejection: unknown;
+	try {
+		registry.register(
+			"async",
+			defineDesktopExtension((app) => {
+				signal = app.experimental_signal;
+				result = (async () => {
+					app.experimental_onDispose(cleanup);
+					app.experimental_registerCommand(command("partial"));
+					throw failure;
+				})();
+				return result;
+			}),
+		);
+	} catch (error) {
+		rejection = error;
+	}
+	await expect(result).rejects.toBe(failure);
+	expect(rejection).toEqual(expect.objectContaining({ message: expect.stringMatching(/setup.*synchronous/i) }));
+	expect(registry.getSnapshot()).toEqual([]);
+	expect(changed).not.toHaveBeenCalled();
+	expect(cleanup).toHaveBeenCalledOnce();
+	expect(signal.aborted).toBe(true);
+	expect(report).toHaveBeenCalledWith("async", failure);
+	registry.register(
+		"async",
+		defineDesktopExtension((app) => {
+			app.experimental_registerCommand(command("replacement"));
+		}),
+	);
+	expect(registry.commands(context).map((entry) => entry.id)).toEqual(["async/replacement"]);
+});
+
+test("resolved promises and thenables also reject synchronous setup without publication", async () => {
+	for (const result of [
+		Promise.resolve(),
+		{
+			then(resolve: () => void) {
+				resolve();
+			},
+		},
+	]) {
+		const registry = new ExtensionRegistry();
+		const cleanup = vi.fn();
+		expect(() =>
+			registry.register(
+				"async",
+				defineDesktopExtension((app) => {
+					app.experimental_onDispose(cleanup);
+					app.experimental_registerCommand(command("partial"));
+					return result;
+				}),
+			),
+		).toThrow(/setup.*synchronous/i);
+		expect(registry.getSnapshot()).toEqual([]);
+		expect(cleanup).toHaveBeenCalledOnce();
+		await Promise.resolve(result);
+	}
+});
+
+test("async setup cannot register entries after its first await", async () => {
+	const report = vi.fn();
+	const registry = new ExtensionRegistry(report);
+	let result!: Promise<void>;
+	let rejection: unknown;
+	try {
+		registry.register(
+			"async",
+			defineDesktopExtension((app) => {
+				result = (async () => {
+					app.experimental_registerCommand(command("partial"));
+					await Promise.resolve();
+					app.experimental_registerCommand(command("late"));
+				})();
+				return result;
+			}),
+		);
+	} catch (error) {
+		rejection = error;
+	}
+	await expect(result).rejects.toThrow(/closed/i);
+	expect(rejection).toEqual(expect.objectContaining({ message: expect.stringMatching(/setup.*synchronous/i) }));
+	expect(registry.getSnapshot()).toEqual([]);
+	expect(report).toHaveBeenCalledWith("async", expect.objectContaining({ message: expect.stringMatching(/closed/i) }));
 });
 
 test("duplicate owners cannot replace a published set", () => {
@@ -99,6 +243,59 @@ test("disposal is idempotent, aborts async work, removes entries and continues a
 	);
 	handle.dispose();
 	expect(registry.commands(context).map((entry) => entry.id)).toEqual(["owner/two"]);
+});
+
+test("set disposal revokes every command before setup or registration abort listeners run", () => {
+	const registry = new ExtensionRegistry();
+	const run = vi.fn();
+	let setupSignal!: AbortSignal;
+	const handle = registry.register(
+		"owner",
+		defineDesktopExtension((app) => {
+			setupSignal = app.experimental_signal;
+			app.experimental_registerCommand({ ...command("first"), experimental_run: run });
+			app.experimental_registerCommand({ ...command("second"), experimental_run: run });
+		}),
+	);
+	const entries = registry.commands(context);
+	const snapshots: string[][] = [];
+	for (const signal of [setupSignal, ...entries.map((entry) => entry.signal)]) {
+		signal.addEventListener("abort", () => {
+			snapshots.push(registry.commands(context).map((entry) => entry.id));
+			for (const entry of entries) registry.runCommand(entry, context);
+		});
+	}
+	handle.dispose();
+	handle.dispose();
+	expect(snapshots).toEqual([[], [], []]);
+	expect(run).not.toHaveBeenCalled();
+});
+
+test("individual disposal revokes its command before abort listeners while other commands remain usable", () => {
+	const registry = new ExtensionRegistry();
+	const run = vi.fn();
+	const other = vi.fn();
+	let remove!: () => void;
+	registry.register(
+		"owner",
+		defineDesktopExtension((app) => {
+			const first = app.experimental_registerCommand({ ...command("first"), experimental_run: run });
+			remove = () => first.dispose();
+			app.experimental_registerCommand({ ...command("second"), experimental_run: other });
+		}),
+	);
+	const [first, second] = registry.commands(context);
+	const snapshots: string[][] = [];
+	first!.signal.addEventListener("abort", () => {
+		snapshots.push(registry.commands(context).map((entry) => entry.id));
+		registry.runCommand(first!, context);
+		registry.runCommand(second!, context);
+	});
+	remove();
+	remove();
+	expect(snapshots).toEqual([["owner/second"]]);
+	expect(run).not.toHaveBeenCalled();
+	expect(other).toHaveBeenCalledOnce();
 });
 
 test("registration handles dispose individual entries before or after publication", () => {
@@ -178,6 +375,36 @@ test("commands receive the supplied context, availability and signal; disposed c
 	handle.dispose();
 	registry.runCommand(entry, { ...context, thread: { id: "B", cwd: "/B" } });
 	expect(run).toHaveBeenCalledOnce();
+});
+
+test("a command rejection after disposal cannot report against a newer activation", async () => {
+	const report = vi.fn();
+	const registry = new ExtensionRegistry(report);
+	let reject!: (error: Error) => void;
+	const old = registry.register(
+		"owner",
+		defineDesktopExtension((app) => {
+			app.experimental_registerCommand({
+				...command("async"),
+				experimental_run: () =>
+					new Promise<void>((_resolve, rejectRun) => {
+						reject = rejectRun;
+					}),
+			});
+		}),
+	);
+	registry.runCommand(registry.commands(context)[0]!, context);
+	old.dispose();
+	registry.register(
+		"owner",
+		defineDesktopExtension((app) => {
+			app.experimental_registerCommand(command("new"));
+		}),
+	);
+	reject(new Error("Old asynchronous work failed"));
+	await Promise.resolve();
+	expect(report).not.toHaveBeenCalled();
+	expect(registry.commands(context).map((entry) => entry.id)).toEqual(["owner/new"]);
 });
 
 test("a throwing command label is contained instead of crashing the palette", () => {

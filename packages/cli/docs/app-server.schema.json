@@ -191,6 +191,297 @@
 		]
 	},
 	"clientRequests": {
+		"desktopExtension/list": {
+			"params": {
+				"type": "object",
+				"properties": {
+					"cwd": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"safeMode",
+					"extensions"
+				],
+				"properties": {
+					"safeMode": {
+						"type": "boolean"
+					},
+					"extensions": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"owner",
+								"name",
+								"source",
+								"scope",
+								"approved",
+								"enabled",
+								"dev",
+								"diagnostics"
+							],
+							"properties": {
+								"owner": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"name": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"source": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"scope": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "user"
+										},
+										{
+											"type": "string",
+											"const": "project"
+										}
+									]
+								},
+								"approved": {
+									"type": "boolean"
+								},
+								"enabled": {
+									"type": "boolean"
+								},
+								"dev": {
+									"type": "boolean"
+								},
+								"revision": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"error": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"artifact": {
+									"type": "object",
+									"required": [
+										"owner",
+										"revision",
+										"root",
+										"frontend",
+										"styles",
+										"files"
+									],
+									"properties": {
+										"owner": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"revision": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"root": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"frontend": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"styles": {
+											"type": "array",
+											"items": {
+												"type": "string",
+												"maxLength": 4096
+											}
+										},
+										"files": {
+											"type": "array",
+											"items": {
+												"type": "string",
+												"maxLength": 4096
+											}
+										}
+									},
+									"additionalProperties": false
+								},
+								"diagnostics": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"windowId",
+											"revision",
+											"phase",
+											"message"
+										],
+										"properties": {
+											"windowId": {
+												"type": "integer"
+											},
+											"revision": {
+												"type": "string",
+												"maxLength": 4096
+											},
+											"phase": {
+												"anyOf": [
+													{
+														"type": "string",
+														"const": "active"
+													},
+													{
+														"type": "string",
+														"const": "load"
+													},
+													{
+														"type": "string",
+														"const": "render"
+													},
+													{
+														"type": "string",
+														"const": "dispose"
+													}
+												]
+											},
+											"message": {
+												"type": "string",
+												"maxLength": 4096
+											}
+										},
+										"additionalProperties": false
+									}
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/set": {
+			"params": {
+				"type": "object",
+				"required": [
+					"owner"
+				],
+				"properties": {
+					"owner": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"cwd": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"approve": {
+						"type": "boolean"
+					},
+					"revoke": {
+						"type": "boolean"
+					},
+					"dev": {
+						"type": "boolean"
+					},
+					"source": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/reload": {
+			"params": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/diagnostic": {
+			"params": {
+				"type": "object",
+				"required": [
+					"owner",
+					"diagnostic"
+				],
+				"properties": {
+					"owner": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"diagnostic": {
+						"type": "object",
+						"required": [
+							"windowId",
+							"revision",
+							"phase",
+							"message"
+						],
+						"properties": {
+							"windowId": {
+								"type": "integer"
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"phase": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "active"
+									},
+									{
+										"type": "string",
+										"const": "load"
+									},
+									{
+										"type": "string",
+										"const": "render"
+									},
+									{
+										"type": "string",
+										"const": "dispose"
+									}
+								]
+							},
+							"message": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
 		"initialize": {
 			"params": {
 				"type": "object",
@@ -13363,6 +13654,15 @@
 		}
 	},
 	"serverNotifications": {
+		"desktopExtension/changed": {
+			"type": "object",
+			"properties": {
+				"reload": {
+					"type": "boolean"
+				}
+			},
+			"additionalProperties": false
+		},
 		"thread/started": {
 			"type": "object",
 			"required": [

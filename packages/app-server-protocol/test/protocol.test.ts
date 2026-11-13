@@ -97,6 +97,19 @@ const ui = {
 const backgroundShell = { id: "ab12cd34", command: "npm run dev", cwd: "/p", status: "running", startedAt: 1 };
 
 const requestParams: Record<string, unknown> = {
+	"desktopExtension/list": { cwd: "/p" },
+	"desktopExtension/set": {
+		owner: "external-example",
+		source: "/extensions/example",
+		approve: true,
+		enabled: true,
+		dev: false,
+	},
+	"desktopExtension/reload": {},
+	"desktopExtension/diagnostic": {
+		owner: "external-example",
+		diagnostic: { windowId: 1, revision: "a".repeat(64), phase: "render", message: "Provider failed" },
+	},
 	initialize: {
 		clientInfo: { name: "test", version: "1" },
 		capabilities: { optOutNotifications: ["item/reasoning/delta"] },
@@ -231,6 +244,33 @@ const marketplaceInfo = {
 	diagnostics: [],
 };
 const requestResults: Record<string, unknown> = {
+	"desktopExtension/list": {
+		safeMode: false,
+		extensions: [
+			{
+				owner: "external-example",
+				name: "example",
+				source: "/extensions/example",
+				scope: "user",
+				approved: true,
+				enabled: true,
+				dev: false,
+				revision: "a".repeat(64),
+				artifact: {
+					owner: "external-example",
+					revision: "a".repeat(64),
+					root: "/cache/example",
+					frontend: "__entry.js",
+					styles: ["__styles/0.css"],
+					files: ["__entry.js", "app.js", "__styles/0.css"],
+				},
+				diagnostics: [],
+			},
+		],
+	},
+	"desktopExtension/set": {},
+	"desktopExtension/reload": {},
+	"desktopExtension/diagnostic": {},
 	initialize: {
 		serverInfo: { name: "knightcode", version: "0.0.0" },
 		platform: { os: "linux", arch: "x64", homeDir: "/home/u" },
@@ -464,6 +504,7 @@ const requestResults: Record<string, unknown> = {
 	"ui/event": {},
 };
 const notificationParams: Record<string, unknown> = {
+	"desktopExtension/changed": { reload: true },
 	initialized: {},
 	"thread/started": { thread },
 	"thread/replaced": { oldThreadId: "t0", thread },

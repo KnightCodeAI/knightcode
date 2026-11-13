@@ -1,0 +1,74 @@
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, expect, test } from "vitest";
+import { ExtensionArtifacts } from "../../src/main/extension-artifacts.ts";
+const roots: string[] = [];
+afterEach(() => {
+	for (const path of roots.splice(0)) rmSync(path, { recursive: true, force: true });
+});
+test("only registered owner/revision files and supported MIME types are served", async () => {
+	const root = mkdtempSync(join(tmpdir(), "kc-ext-serving-"));
+	roots.push(root);
+	writeFileSync(join(root, "app.js"), "export default {};");
+	writeFileSync(join(root, "secret.txt"), "private");
+	const server = new ExtensionArtifacts("app://desktop");
+	server.register(
+		{
+			owner: "example",
+			revision: "a".repeat(64),
+			root,
+			frontend: "app.js",
+			styles: [],
+			files: ["app.js"],
+		},
+		0,
+		"initial",
+	);
+	const base = `app://ext/example/${"a".repeat(64)}`;
+	const response = await server.serve(new Request(`${base}/app.js`));
+	expect(await response.text()).toBe("export default {};");
+	expect(response.headers.get("Content-Type")).toContain("javascript");
+	expect(response.headers.get("Access-Control-Allow-Origin")).toBe("app://desktop");
+	for (const url of [
+		`${base}/secret.txt`,
+		`${base}/%2e%2e%2fsecret.txt`,
+		`app://ext/other/${"a".repeat(64)}/app.js`,
+		`${base.replace(/a{64}/, "b".repeat(64))}/app.js`,
+	])
+		expect((await server.serve(new Request(url))).status).not.toBe(200);
+	server.clear();
+	expect((await server.serve(new Request(`${base}/app.js`))).status).toBe(404);
+});
+test("runtime shims name only validated host modules and exports", async () => {
+	const server = new ExtensionArtifacts("app://desktop");
+	server.runtime({ react: ["useState", "default"] });
+	const shim = await server.serve(new Request("app://ext/runtime/react.js"));
+	expect(await shim.text()).toContain("__knightcodeDesktopRuntime");
+	expect((await server.serve(new Request("app://ext/runtime/node%3Afs.js"))).status).toBe(404);
+	expect(() => server.runtime({ react: ["x;evil()"] })).toThrow();
+});
+test("an old lease cannot release a later acquisition of the same window and revision", async () => {
+	const root = mkdtempSync(join(tmpdir(), "kc-ext-leases-"));
+	roots.push(root);
+	writeFileSync(join(root, "app.js"), "export default {};");
+	const artifact = {
+		owner: "example",
+		revision: "a".repeat(64),
+		root,
+		frontend: "app.js",
+		styles: [],
+		files: ["app.js"],
+	};
+	const server = new ExtensionArtifacts("app://desktop");
+	const request = new Request(`app://ext/example/${artifact.revision}/app.js`);
+	server.register(artifact, 1, "old");
+	server.register(artifact, 1, "new");
+	server.release(1, artifact.owner, artifact.revision, "old");
+	expect((await server.serve(request)).status).toBe(200);
+	server.register(artifact, 2, "other");
+	server.releaseWindow(1);
+	expect((await server.serve(request)).status).toBe(200);
+	server.release(2, artifact.owner, artifact.revision, "other");
+	expect((await server.serve(request)).status).toBe(404);
+});

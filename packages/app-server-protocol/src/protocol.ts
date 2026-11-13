@@ -9,6 +9,7 @@
 
 import { type Static, type TSchema, Type } from "typebox";
 import { View } from "./view.ts";
+import { DesktopExtensionNotifications, DesktopExtensionRequests } from "./desktop-extensions.ts";
 
 function Obj<P extends Record<string, TSchema>>(properties: P) {
 	return Type.Object(properties, { additionalProperties: false });
@@ -706,6 +707,7 @@ export const UiSnapshot = Obj({ ...UiStateFields, widgets: Type.Array(Widget) })
 export type UiSnapshot = Static<typeof UiSnapshot>;
 
 export const ClientRequests = {
+	...DesktopExtensionRequests,
 	initialize: {
 		params: Obj({
 			clientInfo: Obj({ name: Str, version: Str }),
@@ -1271,6 +1273,7 @@ const ItemEvent = Obj({ threadId: Str, turnId: Str, item: WireItem, index: Type.
 const Delta = Obj({ threadId: Str, turnId: Str, itemId: Str, delta: Str });
 
 export const ServerNotifications = {
+	...DesktopExtensionNotifications,
 	"thread/started": Obj({ thread: Thread }),
 	"thread/replaced": Obj({ oldThreadId: Str, thread: Thread }),
 	"thread/status/changed": Obj({ threadId: Str, status: ThreadStatus }),

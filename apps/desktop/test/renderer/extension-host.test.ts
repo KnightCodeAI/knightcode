@@ -5,7 +5,7 @@ vi.hoisted(() => {
 	Object.assign(globalThis, { window: { addEventListener: () => {}, removeEventListener: () => {} } });
 });
 vi.mock("../../src/renderer/client.ts", () => ({
-	client: { onNotification: () => {}, onServerRequest: () => {}, onHostEvent: () => {} },
+	client: { onNotification: () => () => {}, onServerRequest: () => () => {}, onHostEvent: () => () => {} },
 	RequestError: class extends Error {},
 }));
 

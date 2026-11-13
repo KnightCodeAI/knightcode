@@ -225,3 +225,25 @@ Windows verification after merging `main` (`ca48eaf14`) as `c69294b70`:
   Provider preference persistence/settings, consent and authored CSS remain
   later-slice gates. See [registry.md](registry.md) for the S1 contracts.
 - Review was a self-review; no independent reviewer tool was available.
+
+#### Registry review follow-up
+
+- Fixed two review findings: promise-returning setup could publish partial
+  registrations, and abort listeners could invoke commands during disposal.
+- Added five regression tests. The three async-setup tests failed before the
+  setup guard; the two disposal tests failed before revocation was reordered.
+  The registry suite then passed all 16 tests.
+- Full desktop unit suite: **190 passed, 7 skipped**. Root and desktop type
+  checks, import lint, changeset validation and whitespace checks passed.
+- Windows server staging and desktop packaging passed. Electron E2E passed
+  **14/14** (1.2 min), using the same isolated fixture launcher.
+- The first comparison passed 86/88 (8.8 min). Light-narrow `palette.png`
+  selected Keyboard shortcuts instead of New thread (30,522 pixels changed).
+  Dark-narrow `git-commit-message.png` showed +1/-1 counts absent from its
+  baseline (36 pixels changed). Neither was an empty-root startup failure.
+  Failure artifacts were retained; the same build was rerun with no code,
+  fixture or baseline changes.
+- The unchanged rerun passed **87/88** (8.4 min). Both previous failures passed,
+  but light-narrow `git-pull-request-form.png` omitted +0/-0 totals present in
+  its baseline (41 pixels changed). No baseline was updated. The full zero-diff
+  gate remains **not passed**; Git total readiness is inconsistent at capture.

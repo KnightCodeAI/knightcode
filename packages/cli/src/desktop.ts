@@ -1,6 +1,31 @@
 /** Experimental desktop contributions. This entry is inert outside a desktop renderer and has no runtime imports. */
 import type { ComponentProps, ReactElement, ReactNode, SVGProps } from "react";
 
+/** Shared host singletons available to external ESM; all other bare runtime imports are refused. */
+export const experimental_RUNTIME_IMPORTS = [
+	"@knightcodeai/cli/desktop",
+	"react",
+	"react-dom",
+	"react/jsx-runtime",
+	"radix-ui",
+	"@pierre/diffs",
+	"@pierre/trees",
+	"typebox",
+] as const;
+
+/** Published, read-only CSS variables. Extension styles cannot redefine --kc-* names. */
+export const experimental_THEME_TOKENS = [
+	"--kc-text",
+	"--kc-text-secondary",
+	"--kc-text-tertiary",
+	"--kc-font-ui",
+	"--kc-font-code",
+	"--kc-font-content",
+	"--kc-focus",
+	"--kc-selection",
+	"--kc-size-ui",
+] as const;
+
 export interface experimental_Disposable {
 	dispose(): void;
 }
@@ -119,6 +144,7 @@ export interface experimental_DesktopHost {
 	experimental_Icon(props: experimental_IconProps): ReactElement;
 	experimental_Button(props: experimental_ButtonProps): ReactElement;
 	experimental_KeybindingKeys(props: { binding: experimental_KeybindingId }): ReactElement;
+	experimental_Portal(props: { children: ReactNode }): ReactNode;
 }
 
 declare global {
@@ -151,7 +177,12 @@ export function experimental_Button(props: experimental_ButtonProps): ReactEleme
 	return host().experimental_Button(props);
 }
 
-/** Draw the user's configured keys for a command. */
+/** Render an owned portal with the contribution\'s revision, theme and disposal lifetime. */
+export function experimental_Portal(props: { children: ReactNode }): ReactNode {
+	return host().experimental_Portal(props);
+}
+
+/** Draw the user\'s configured keys for a command. */
 export function experimental_KeybindingKeys(props: { binding: experimental_KeybindingId }): ReactElement {
 	return host().experimental_KeybindingKeys(props);
 }

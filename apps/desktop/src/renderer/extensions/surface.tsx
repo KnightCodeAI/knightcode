@@ -1,10 +1,21 @@
 /** Contribution roots isolate render failures and retain original ownership without adding layout boxes. */
 import type { experimental_CommandContext, experimental_Surface } from "@knightcodeai/cli/desktop";
-import { Component, type ReactNode, useSyncExternalStore } from "react";
+import {
+	Component,
+	createContext,
+	type CSSProperties,
+	type ReactNode,
+	useContext,
+	useLayoutEffect,
+	useState,
+	useSyncExternalStore,
+} from "react";
+import { createPortal } from "react-dom";
+import { retainRevisionStyles } from "./styles.ts";
 import { type ExtensionRegistry, type Registration, type SurfaceRegistration } from "./registry.ts";
 
 export class ContributionBoundary extends Component<
-	{ owner: string; children: ReactNode; fallback?: ReactNode },
+	{ owner: string; children: ReactNode; fallback?: ReactNode; onError?(error: Error): void },
 	{ failed: boolean }
 > {
 	state = { failed: false };
@@ -15,11 +26,43 @@ export class ContributionBoundary extends Component<
 
 	componentDidCatch(error: Error): void {
 		console.error(`Desktop contribution ${this.props.owner}`, error);
+		this.props.onError?.(error);
 	}
 
 	render() {
 		return this.state.failed ? (this.props.fallback ?? null) : this.props.children;
 	}
+}
+
+const Ownership = createContext<Registration | undefined>(undefined);
+const OWNED_BASE: CSSProperties = {
+	all: "initial",
+	display: "contents",
+	color: "var(--kc-text)",
+	font: "400 var(--kc-size-ui)/1.5 var(--kc-font-ui)",
+	colorScheme: "inherit",
+};
+
+/** An out-of-tree portal keeps the contribution's original ownership, theme and mount lifetime. */
+export function OwnedPortal({ children }: { children: ReactNode }) {
+	const entry = useContext(Ownership);
+	const [container, setContainer] = useState<HTMLDivElement | null>(null);
+	useLayoutEffect(() => {
+		if (!entry) return;
+		const root = document.createElement("div");
+		root.dataset.kcOwner = entry.owner;
+		if (entry.revision) root.dataset.kcRevision = entry.revision;
+		Object.assign(root.style, OWNED_BASE);
+		document.body.append(root);
+		const release = retainRevisionStyles(entry.owner, entry.revision);
+		setContainer(root);
+		return () => {
+			root.remove();
+			release();
+		};
+	}, [entry]);
+	if (!entry) throw new Error("experimental_Portal must be rendered inside a desktop contribution.");
+	return container ? createPortal(children, container) : null;
 }
 
 /** Use for each individual command/slot/provider, not for its surrounding replacement's owner. */
@@ -32,12 +75,20 @@ export function ContributionRoot({
 	children: ReactNode;
 	fallback?: ReactNode;
 }) {
+	const parent = useContext(Ownership);
+	useLayoutEffect(() => retainRevisionStyles(entry.owner, entry.revision), [entry]);
 	return (
-		<ContributionBoundary key={entry.sequence} owner={entry.owner} fallback={fallback}>
-			<div data-kc-owner={entry.owner} style={{ display: "contents" }}>
-				{children}
-			</div>
-		</ContributionBoundary>
+		<Ownership.Provider value={entry}>
+			<ContributionBoundary key={entry.sequence} owner={entry.owner} fallback={fallback} onError={entry.reportError}>
+				<div
+					data-kc-owner={entry.owner}
+					data-kc-revision={entry.revision}
+					style={entry.revision || (parent && parent.owner !== entry.owner) ? OWNED_BASE : { display: "contents" }}
+				>
+					{children}
+				</div>
+			</ContributionBoundary>
+		</Ownership.Provider>
 	);
 }
 

@@ -13,7 +13,7 @@ export interface RunningDesktop extends DesktopFixture {
 	app: ElectronApplication;
 	page: Page;
 	/** Quit and start again on the same profile, agent dir and project, as a user reopening the app would. */
-	relaunch(): Promise<void>;
+	relaunch(options?: { safeMode?: boolean }): Promise<void>;
 }
 
 type Extras = Pick<DesktopFixtureOptions, "counter" | "dialogs">;
@@ -32,12 +32,13 @@ export const test = base.extend<{ desktop: RunningDesktop; untrustedProject: boo
 		let launches = 0;
 		let app: ElectronApplication | undefined;
 
-		const start = async (): Promise<Page> => {
+		const start = async (options?: { safeMode?: boolean }): Promise<Page> => {
 			app = await electron.launch({
 				args: [
 					DESKTOP,
 					`--user-data-dir=${fixture.userData}`,
 					"--lang=en-US",
+					...(options?.safeMode ? ["--safe-mode"] : []),
 					"--force-device-scale-factor=1",
 					`knightcode://new?cwd=${encodeURIComponent(fixture.project)}`,
 					...(process.platform === "linux" ? ["--no-sandbox"] : []),
@@ -98,9 +99,9 @@ export const test = base.extend<{ desktop: RunningDesktop; untrustedProject: boo
 				...fixture,
 				app: app as ElectronApplication,
 				page,
-				relaunch: async () => {
+				relaunch: async (options) => {
 					await stop();
-					desktop.page = await start();
+					desktop.page = await start(options);
 					desktop.app = app as ElectronApplication;
 				},
 			};
@@ -134,6 +135,8 @@ export async function settle(
 	await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 	await expect.poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight }))).toEqual(size);
 	await page.evaluate(() => document.fonts.ready);
+	// Keep a previous window's pointer from selecting an option as the next question opens.
+	await page.mouse.move(0, 0);
 }
 
 export async function capture(desktop: RunningDesktop, name: string, page = desktop.page): Promise<void> {

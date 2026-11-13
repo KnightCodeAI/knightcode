@@ -4,6 +4,7 @@
  */
 
 import { type Static, type TSchema, Type } from "typebox";
+import { DesktopExtensionHostMethods } from "./desktop-extensions.ts";
 
 function Obj<P extends Record<string, TSchema>>(properties: P) {
 	return Type.Object(properties, { additionalProperties: false });
@@ -94,6 +95,8 @@ export const DesktopState = Obj({
 	}),
 	// Optional so a file written before preferences existed still loads.
 	preferences: Type.Optional(Preferences),
+	/** Main-owned app provider choices. Ordinary renderer state writes cannot overwrite them. */
+	desktopProviders: Type.Optional(Type.Record(Type.String(), Type.String())),
 });
 export type DesktopState = Static<typeof DesktopState>;
 
@@ -199,6 +202,7 @@ export const UpdateState = Type.Union([
 export type UpdateState = Static<typeof UpdateState>;
 
 export const HostMethods = {
+	...DesktopExtensionHostMethods,
 	/** Show a native context menu at the pointer; resolves with the chosen item's id once it closes. */
 	"host/menu/popup": {
 		params: Obj({ items: Type.Array(NativeMenuItem) }),
@@ -391,6 +395,7 @@ export type HostResponse = { id: number; result: unknown } | { id: number; error
 
 /** Main-originated events that are not protocol notifications. */
 export type HostEvent =
+	| { event: "desktopExtension/providers"; providers: { app: Record<string, string>; window: Record<string, string> } }
 	| { event: "server/state"; state: "starting" | "ready" | "restarting" | "failed"; message?: string }
 	/** A `knightcode://` link to show (section 6.1). */
 	| { event: "navigate"; route: string }

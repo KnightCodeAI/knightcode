@@ -192,9 +192,13 @@ experimental members can change. It shares the renderer's existing state,
 icons, buttons and configured key hints. Server and recovery banners remain
 host-owned.
 
-This is the built-in registration path only. Loading installed desktop
-extensions, provider settings, native-code consent and authoring commands
-are not available yet. Session extensions described above are unchanged.
+[Native frontend extensions](desktop-extensions-preview.md) can load explicit
+local or installed package entries after separate native consent. Settings →
+Extensions & skills manages trust, reload, disable and app/window feedback
+providers. Use the native View menu's Restart without extensions, or launch
+with `--safe-mode`, to recover without external frontend code. Session
+extensions described above are unchanged. Backend entries, other surfaces,
+authoring commands and automatic file watching are not available yet.
 
 ## Keyboard shortcuts
 
