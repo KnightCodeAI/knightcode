@@ -1,5 +1,37 @@
 # @knightcodeai/cli
 
+## 0.24.1
+
+### Changed
+
+- Changed Qwen Token Plan so Team and Individual plans use their own API keys and the current regional gateways. The older shared key variables still work.
+
+### Fixed
+
+- Fixed Gemini requests losing their idle timeout, and a continuation finish asking for more output, by always using the shared fetch and stopping that finish as a length limit.
+
+- Fixed a provider error that says the connection closed, which is now retried like other dropped connections.
+
+- Fixed Anthropic tool schemas that are not strict, which again say whether extra arguments are allowed.
+
+- Fixed tool calls whose strict schema has a node without a type, by dropping strict mode for that call instead of failing the request.
+
+- Fixed model-scope warnings printing again on /new, /resume, and /fork while the terminal UI is on screen.
+
+- Fixed find and grep path patterns matching files above the directory you searched.
+
+- Fixed /resume moving the highlight off the session you selected while the session list was still loading.
+
+- Fixed bash output when the retained tail is one over-long line, which now shows the end of that line.
+
+- Fixed standalone binaries so an extension dependency resolves through the package.json entry point.
+
+- Fixed extension commands terminated by a signal, which now report 128 plus the signal number instead of success.
+
+- Fixed images in tool results being drawn at the left edge of the terminal: they now line up with the result text under the tool call.
+
+- Fixed terminal images staying visible on top of overlays.
+
 ## 0.24.0
 
 ### Added
