@@ -16,6 +16,7 @@
     "./images": "./src/images/index.ts",
     "./images/node": "./src/images/node.ts",
     "./images/cloudflare": "./src/images/cloudflare.ts",
+    "./images/fit": "./src/images/fit.ts",
     "./storage/memory": "./src/storage/memory.ts",
     "./storage/indexeddb": "./src/storage/indexeddb.ts",
     "./storage/jsonl": "./src/storage/jsonl/index.ts",

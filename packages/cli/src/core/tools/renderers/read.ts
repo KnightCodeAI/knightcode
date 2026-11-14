@@ -110,16 +110,19 @@ function formatReadResult(
 ): string {
 	const rawPath = str(args?.file_path ?? args?.path);
 	const output = getTextOutput(result, showImages);
-
+	const unsupportedBy = result.details?.imageUnsupportedByModel;
+	const imageWarning = unsupportedBy
+		? `\n${theme.fg("warning", `[${unsupportedBy} does not support images; it saw a placeholder instead]`)}`
+		: "";
 	if (!options.expanded && !isError) {
 		if (result.content.some((c) => c.type === "image")) {
-			return formatToolSummary(theme, "Read image", false);
+			return formatToolSummary(theme, "Read image", false) + imageWarning;
 		}
 		// Prefer the recorded count: `output` carries the tool's `[Showing lines ...]` notices as rows.
 		const lineCount = result.details?.lineCount ?? trimTrailingEmptyLines(output.split("\n")).length;
 		const truncated = result.details?.truncation?.truncated ? " (truncated)" : "";
 		const verb = getCompactReadClassification(args, cwd)?.kind === "skill" ? "Loaded ·" : "Read";
-		return formatToolSummary(theme, `${verb} ${plural(lineCount, "line")}${truncated}`, lineCount > 0);
+		return formatToolSummary(theme, `${verb} ${plural(lineCount, "line")}${truncated}`, lineCount > 0) + imageWarning;
 	}
 
 	const lang = !isError && rawPath ? getLanguageFromPath(rawPath) : undefined;
@@ -145,7 +148,7 @@ function formatReadResult(
 			text += `\n${theme.fg("warning", `[Truncated: ${truncation.outputLines} lines shown (${formatSize(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit)]`)}`;
 		}
 	}
-	return text;
+	return text + imageWarning;
 }
 
 export const readRenderers: Pick<ToolDefinition<any, ReadToolDetails | undefined>, "renderCall" | "renderResult"> = {
