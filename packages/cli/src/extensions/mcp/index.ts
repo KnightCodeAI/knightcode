@@ -27,7 +27,7 @@
  */
 
 import { join, resolve } from "node:path";
-import { createMcpToolName, mcpNamespace } from "@knightcode/mcp";
+import { createMcpToolName, mcpNamespace, mcpServerSummary } from "@knightcode/mcp";
 import type { SelectItem } from "@knightcode/tui";
 import type { TSchema } from "typebox";
 import { CONFIG_DIR_NAME, getAgentDir } from "../../config.ts";
@@ -197,12 +197,6 @@ export interface McpServerListing {
 	connection?: { instructions?: string };
 }
 
-/** First line of the configured description, or of the server instructions once connected. */
-function serverSummary(server: McpServerListing): string {
-	const text = server.entry.config.description?.trim() || server.connection?.instructions || "";
-	return (text.split("\n", 1)[0] ?? "").trim();
-}
-
 /**
  * The `mcp_servers` section: every enabled server with codemode or deferred tools, with how its
  * tools are reached and a one-line summary. The model learns of the servers from it, since neither
@@ -239,7 +233,10 @@ export function renderServersSection(servers: readonly McpServerListing[]): stri
 			? 0
 			: Math.min(MAX_SERVER_DESCRIPTION_CHARS, Math.floor((MAX_SERVERS_SECTION_CHARS - size(kept)) / kept) - 2);
 	const lines = listed.slice(0, kept).map((server, index) => {
-		const summary = perServer > 0 ? truncate(serverSummary(server), perServer) : "";
+		const summary =
+			perServer > 0
+				? truncate(mcpServerSummary(server.entry.config.description, server.connection?.instructions), perServer)
+				: "";
 		return summary ? `${heads[index]}: ${summary}` : heads[index];
 	});
 	return [intro, ...lines, ...omitted(kept)].join("\n");
