@@ -3,6 +3,7 @@
 
 export type { ArchiveManifest, ArchivePart } from "./archive.ts";
 export { type Backend, sqliteBackend } from "./backend.ts";
+export { type ColumnSet, type ColumnSetOptions, defineColumns } from "./column-set.ts";
 export type { Columns, PutRowOf, RowOf } from "./columns.ts";
 export {
 	add,
@@ -10,15 +11,19 @@ export {
 	type ColumnRef,
 	type Condition,
 	coalesce,
+	compile,
 	concat,
 	type Expression,
 	eq,
+	exists,
+	existsNode,
 	gt,
 	gte,
 	inArray,
 	isNull,
 	lt,
 	lte,
+	type Match,
 	max,
 	min,
 	ne,
@@ -28,6 +33,7 @@ export {
 	replacePrefix,
 	type SetOf,
 	sub,
+	type WhereNode,
 	when,
 } from "./expression.ts";
 export { type HostColumnSchema, host } from "./host-column.ts";
@@ -45,7 +51,14 @@ export type { Outbox, OutboxCommit } from "./outbox.ts";
 export { type ColumnRefs, type Query, query } from "./query.ts";
 export { openStore, type Store, type StoreOptions } from "./store.ts";
 export { defineTable, type KeyOf, type TableDefinition, type TableOptions } from "./table.ts";
-export { type AddedColumn, evolveTable, type PatchOf, type TableEditor, type TableTailEditor } from "./table-evolve.ts";
+export {
+	type AddedColumn,
+	type EvolveOptions,
+	evolveTable,
+	type PatchOf,
+	type TableEditor,
+	type TableTailEditor,
+} from "./table-evolve.ts";
 export type { Page, PageOptions, Table, TableOf } from "./table-handle.ts";
 export { compareText } from "./text.ts";
 export type { StoreWrite } from "./writes.ts";
