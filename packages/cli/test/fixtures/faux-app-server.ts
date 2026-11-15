@@ -124,7 +124,9 @@ const ctx = await createAppServerContext({
 });
 ctx.models.registerNativeProvider(faux.provider);
 await ctx.models.refresh({ allowNetwork: false });
-const threads = new ThreadManager(ctx, {});
+// Keep S0 screenshot usage deterministic: the faux model derives token counts from the prompt.
+// Desktop skill discovery is verified separately against the real packaged server in extension-authoring.e2e.ts.
+const threads = new ThreadManager(ctx, { disabledBuiltinExtensions: ["desktop-customization"] });
 const transport = createStdioTransport(process.stdin, writeRawStdoutReporting);
 const exit = async () => {
 	setTimeout(() => process.exit(0), 5_000);

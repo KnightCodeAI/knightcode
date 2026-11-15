@@ -9,6 +9,9 @@ import { isBuiltin } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { build, type BuildOptions, type Metafile, type Plugin } from "esbuild";
 import pkg from "../packages/cli/package.json";
+import { checkDesktopExtensionAssets } from "../packages/cli/scripts/generate-desktop-api.ts";
+
+await checkDesktopExtensionAssets();
 
 // npm installs the package on an older Node with only a warning, so the launcher enforces this.
 const minimumNodeMatch = /^>=(\d+)\.(\d+)\.(\d+)$/.exec(pkg.engines.node);

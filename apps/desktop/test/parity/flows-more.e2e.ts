@@ -170,6 +170,9 @@ test("diff hunk expansion and a terminal that exits", async ({ desktop }) => {
 	const terminal = page.locator(".xterm");
 	await expect(terminal).toBeVisible();
 	await terminal.click();
+	// cmd's startup banner prints the Windows build, which changes with OS updates; clear it before exiting.
+	await page.keyboard.type("cls");
+	await page.keyboard.press("Enter");
 	await page.keyboard.type("exit");
 	await page.keyboard.press("Enter");
 	await expect(page.getByText("Shell exited")).toBeVisible();

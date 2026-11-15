@@ -194,6 +194,14 @@ export async function stageDesktopExtension(
 	return { owner, revision, root, frontend, styles, files: [...files.keys()] };
 }
 
+const retiredMembers: Readonly<Record<string, string>> = {
+	experimental_notify: "experimental_controllers().experimental_notify",
+	registerCommand: "experimental_registerCommand",
+	registerSlot: "experimental_registerSlot",
+	registerProvider: "experimental_registerProvider",
+	onDispose: "experimental_onDispose",
+};
+
 function validateLoading(code: string, filename: string, root: string): void {
 	const ast = parse(code, {
 		sourceType: "module",
@@ -201,7 +209,33 @@ function validateLoading(code: string, filename: string, root: string): void {
 		plugins: ["typescript", "jsx"],
 		createImportExpressions: true,
 	});
+	const sdkNamespaces = new Set<string>();
+	for (const statement of ast.program.body) {
+		if (statement.type !== "ImportDeclaration" || statement.source.value !== "@knightcodeai/cli/desktop") continue;
+		for (const specifier of statement.specifiers) {
+			if (specifier.type === "ImportNamespaceSpecifier") sdkNamespaces.add(specifier.local.name);
+			if (specifier.type === "ImportSpecifier") {
+				const name = specifier.imported.type === "Identifier" ? specifier.imported.name : specifier.imported.value;
+				if (retiredMembers[name])
+					throw new Error(
+						`${filename}: retired or unsupported SDK member ${name}; use ${retiredMembers[name]} (desktop-extensions §API).`,
+					);
+			}
+		}
+	}
 	traverseFast(ast, (node) => {
+		if (node.type === "MemberExpression" && node.object.type === "Identifier" && sdkNamespaces.has(node.object.name)) {
+			const name =
+				!node.computed && node.property.type === "Identifier"
+					? node.property.name
+					: node.property.type === "StringLiteral"
+						? node.property.value
+						: undefined;
+			if (name && retiredMembers[name])
+				throw new Error(
+					`${filename}: retired or unsupported SDK member ${name}; use ${retiredMembers[name]} (desktop-extensions §API).`,
+				);
+		}
 		if (
 			node.type === "ImportExpression" ||
 			node.type === "TSImportType" ||

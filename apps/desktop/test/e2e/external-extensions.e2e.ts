@@ -109,14 +109,17 @@ test("external artifacts need native consent and retain the live revision on fai
 	writeFileSync(source, good.replace("Owned CSS example", "Reloaded CSS example"));
 	await management.getByRole("button", { name: "Reload extensions", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Reloaded CSS example", exact: true })).toHaveCount(1);
-	writeFileSync(source, good.replace("Owned CSS example", "CSS must not publish"));
+	// Prepare outside the watched source so automatic reload cannot publish before the CSS failure is in place.
+	const candidate = join(desktop.root, "candidate");
+	cpSync(join(directory, "styles"), candidate, { recursive: true });
+	writeFileSync(join(candidate, "app.tsx"), good.replace("Owned CSS example", "CSS must not publish"));
 	// Electron custom protocols bypass page.route; remove a real staged stylesheet to exercise readiness failure.
 	const staged = JSON.parse(
 		execFileSync(
 			"bun",
 			[
 				resolve(__dirname, "../../../../packages/cli/test/fixtures/desktop-stage.ts"),
-				join(directory, "styles"),
+				candidate,
 				join(agentDir, "desktop-artifacts"),
 				owner!,
 			],
@@ -124,6 +127,7 @@ test("external artifacts need native consent and retain the live revision on fai
 		),
 	) as { root: string; styles: string[] };
 	rmSync(join(staged.root, staged.styles[0]!));
+	writeFileSync(source, good.replace("Owned CSS example", "CSS must not publish"));
 	await management.getByRole("button", { name: "Reload extensions", exact: true }).click();
 	await expect(styles.getByRole("alert")).toContainText("Failed to load extension CSS");
 	await expect(page.getByRole("button", { name: "Reloaded CSS example", exact: true })).toHaveCount(1);

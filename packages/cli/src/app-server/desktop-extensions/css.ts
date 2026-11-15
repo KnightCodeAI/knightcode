@@ -71,7 +71,9 @@ export function scopeDesktopCss(source: string, options: CssOptions): string {
 				/(?:^|[\s>])(?:html|body)(?:$|[\s>.:#\[])/i.test(selector) ||
 				/:root|data-kc-|::?slotted|::?part/i.test(selector)
 			)
-				throw new Error(`Unsafe CSS selector ${selector}; style :scope or owned descendants.`);
+				throw new Error(
+					`Unsafe CSS selector ${selector}; style :scope or owned descendants (desktop-extensions §Styles).`,
+				);
 			if (selector.includes("*") && !selector.startsWith(":scope "))
 				throw new Error("Universal CSS selectors must start with ':scope '.");
 			if (!/^[a-zA-Z0-9_.#:\[\]="'\-\s>*|]+$/.test(selector) || selector.startsWith(">") || selector.startsWith("|"))

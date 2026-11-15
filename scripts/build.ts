@@ -7,6 +7,9 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import pkg from "../packages/cli/package.json";
 import process from "node:process";
+import { checkDesktopExtensionAssets } from "../packages/cli/scripts/generate-desktop-api.ts";
+
+await checkDesktopExtensionAssets();
 
 const ROOT = join(import.meta.dir, "..");
 // src/bun/cli.ts statically registers the bedrock provider and the Bun OAuth

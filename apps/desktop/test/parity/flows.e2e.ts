@@ -227,6 +227,8 @@ test("Git writes, failures and recovery", async ({ desktop }) => {
 		await page.getByRole("menuitem", { name, exact: true }).click();
 		const opened = page.getByRole("dialog", { name: dialog, exact: true });
 		await expect(opened).toBeVisible();
+		// The commit and pull request cards load their change totals after opening; capture them settled.
+		if (dialog !== "Work here") await expect(opened.locator(".text-git-added")).toBeVisible();
 		return opened;
 	};
 	await holdToasts(page);

@@ -227,7 +227,7 @@ export function NativeExtensionRecovery({ context }: { context: experimental_Com
 		<aside
 			role="alert"
 			aria-label="Desktop extension recovery"
-			className="fixed right-4 bottom-4 z-50 flex max-w-sm flex-col gap-2 rounded-xl border border-line bg-surface p-4 text-sm shadow-lg"
+			className="fixed top-14 right-4 z-50 flex max-w-sm flex-col gap-2 rounded-xl border border-line bg-surface p-4 text-sm shadow-lg"
 		>
 			<p>
 				{unavailable

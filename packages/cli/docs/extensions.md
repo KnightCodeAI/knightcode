@@ -2,6 +2,10 @@
 
 # Extensions
 
+For native Desktop UI contributions, use the separate
+[Desktop extensions API](desktop-extensions.md). Session extensions below keep
+their existing lifecycle and trust rules.
+
 Extensions are TypeScript modules that extend KnightCode's behavior. They can subscribe to lifecycle events, register custom tools callable by the LLM, add commands, and more.
 
 An extension runs inside the KnightCode process with the same operating-system permissions. It can inspect prompts, tool calls, files, credentials, and session history, so load extensions only from sources you trust.

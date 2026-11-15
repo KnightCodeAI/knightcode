@@ -31,6 +31,7 @@ import { runAuthLogin } from "./cli/auth-login.ts";
 import { runAuthLogout } from "./cli/auth-logout.ts";
 import { createProcessLoginTerminal } from "./cli/auth-terminal.ts";
 import { resolveCredentialForPrint } from "./cli/credential-print.ts";
+import { runDesktopExtCommand } from "./cli/desktop-ext.ts";
 import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
@@ -703,6 +704,15 @@ export async function main(args: string[], options?: MainOptions) {
 
 	if (args[0] === "plugin") {
 		process.exitCode = await runPluginCommand(args.slice(1), { cwd, agentDir });
+		return;
+	}
+
+	if (args[0] === "desktop-ext") {
+		process.exitCode = await runDesktopExtCommand(args.slice(1), {
+			cwd,
+			agentDir,
+			output: (line) => console.log(line),
+		});
 		return;
 	}
 

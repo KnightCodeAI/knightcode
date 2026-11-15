@@ -3,6 +3,7 @@ import toolsExtension from "@knightcode/tools";
 import type { InlineExtension } from "../core/extensions/types.ts";
 import codemodeExtension from "./codemode/index.ts";
 import llamaExtension from "./llama/index.ts";
+import desktopCustomization from "./desktop-customization.ts";
 import mcpExtension from "./mcp/index.ts";
 import planMode from "./plan-mode/index.ts";
 import pluginsExtension from "./plugins/index.ts";
@@ -16,6 +17,7 @@ import usageExtension from "./usage/index.ts";
 export const builtInExtensions: InlineExtension[] = [
 	// First so live and persisted turns share the marker entry's id.
 	turnMarkerExtension,
+	{ name: "desktop-customization", factory: desktopCustomization, builtin: true },
 	{ name: "llama.cpp", factory: llamaExtension, builtin: true },
 	// Replaceable: an extension that registers `codemode`, `tool_search`, or `/mcp` (such as a third-party
 	// MCP extension) takes over instead of running alongside the built-in one.

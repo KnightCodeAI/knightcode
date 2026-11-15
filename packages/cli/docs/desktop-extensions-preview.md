@@ -1,5 +1,8 @@
 # Native desktop extensions (preview)
 
+The authoritative, version-matched guide is now [Desktop extensions](desktop-extensions.md),
+including authoring commands, generated declarations, diagnostics and watching.
+
 Native frontend extensions add palette commands and feedback contributions.
 A user can explicitly select a feedback provider. Other application surfaces
 and backend entries are not exposed yet. The API is experimental.
@@ -42,8 +45,8 @@ Consent is stored in the agent directory's `desktop-extension-consent.json`,
 not in project settings. **Reload extensions** rereads configured sources and
 updates every open window independently. A failed preparation keeps that
 window's previous working registration and stylesheet set. Disable and revoke
-trust take effect without ending threads or terminals. Reload does not watch
-files yet; authoring commands and directory watching follow in a later slice.
+trust take effect without ending threads or terminals. Development-approved
+sources now reload on save; see the authoritative guide for the authoring CLI.
 
 Installing or reloading a provider never selects it. **Feedback provider**
 sets the app default, stored in `desktop-state.json`. A separate window choice
@@ -141,5 +144,5 @@ load/render diagnostics. The app-server methods `desktopExtension/list`,
 `desktopExtension/set`, `desktopExtension/reload` and
 `desktopExtension/diagnostic` expose the same frontend-only inventory and
 bounded diagnostics. `desktopExtension/changed` tells connected windows to
-reread it. Backend RPC, the authoring CLI and automatic watching are not yet
-available.
+reread it. Backend RPC remains unavailable. Use `knightcode desktop-ext --help`
+for the authoring CLI and the current guide for automatic watching.

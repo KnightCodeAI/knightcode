@@ -21,6 +21,9 @@ If KnightCode is already installed, choose what you want to do:
 KnightCode can reuse prompts, load specialized instructions, add executable integrations, change its terminal interface, connect model services, and distribute these resources as packages.
 Use the [Quickstart customization chooser](quickstart.md#choose-how-to-customize-knightcode) to select the smallest mechanism that meets your need.
 
+For native Desktop UI contributions and the `desktop-ext` authoring loop, see
+[Desktop extensions](desktop-extensions.md).
+
 ## Automate or embed KnightCode
 
 - Use [print mode](cli.md#invocation-and-output) for one-off and scripted tasks.

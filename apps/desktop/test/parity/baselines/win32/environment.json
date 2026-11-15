@@ -31,6 +31,7 @@
 		"Desktop commit hashes in notices normalized to 0000000; version numbers to 0.0.0",
 		"Text kept normalized by a mutation observer for the duration of each screenshot",
 		"Ephemeral preview address masked",
+		"Terminal screen cleared before exit so cmd's Windows build banner is not captured",
 		"Animations disabled; text caret hidden; terminal unfocused; incidental button focus outside dialogs dropped",
 		"Toasts held open by the test where a screenshot shows one"
 	]

@@ -192,13 +192,15 @@ experimental members can change. It shares the renderer's existing state,
 icons, buttons and configured key hints. Server and recovery banners remain
 host-owned.
 
-[Native frontend extensions](desktop-extensions-preview.md) can load explicit
+[Native frontend extensions](desktop-extensions.md) can load explicit
 local or installed package entries after separate native consent. Settings →
 Extensions & skills manages trust, reload, disable and app/window feedback
 providers. Use the native View menu's Restart without extensions, or launch
 with `--safe-mode`, to recover without external frontend code. Session
-extensions described above are unchanged. Backend entries, other surfaces,
-authoring commands and automatic file watching are not available yet.
+extensions described above are unchanged. `knightcode desktop-ext new | validate |
+reload | status [--json]` provides the authoring loop; explicitly development-approved
+sources reload on save. Desktop sessions discover the on-demand
+`desktop-customization` skill. Backend entries and other surfaces are not available yet.
 
 ## Keyboard shortcuts
 
