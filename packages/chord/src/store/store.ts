@@ -18,6 +18,7 @@ import { readCatalog, type TableRecord, writeCatalog } from "./catalog.ts";
 import { Claims } from "./claims.ts";
 import { StoreExport } from "./export.ts";
 import { OUTBOX_FORMAT, Outbox } from "./outbox.ts";
+import { Reads } from "./reads.ts";
 import { applyStoreSchema, type MetaRow, TABLES } from "./schema.ts";
 import { type StagedWrite, Step, type WriteOrder } from "./step.ts";
 import type { StoreWrite } from "./writes.ts";
@@ -187,6 +188,8 @@ export class ChordStore implements Store {
 	readonly #ids: IdAllocator;
 	/** The claims of its tables and documents (slice 6b). */
 	readonly claims = new Claims();
+	/** Its reads by table and its column-set bindings (slice 14). */
+	readonly reads = new Reads();
 	#outbox: Outbox | undefined;
 	#state: StoreState = { kind: "open" };
 	/**
