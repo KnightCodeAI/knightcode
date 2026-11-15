@@ -81,6 +81,25 @@ describe("provider retry classification", () => {
 		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
 	});
 
+	it.each([
+		// Regression: bare Node socket error codes.
+		"read ECONNRESET",
+		"connect ETIMEDOUT 140.82.113.3:443",
+		"write EPIPE",
+		"connect ECONNREFUSED 127.0.0.1:443",
+		"ECONNABORTED",
+		"Connection reset by peer",
+	])("matches Node socket error codes: %s", (errorMessage) => {
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
+	});
+
+	it.each(["Invalid value EXECONNRESET", "Unknown field ETIMEDOUTX", "Invalid key ERR_EPIPE_ID"])(
+		"does not match socket error codes inside longer identifiers: %s",
+		(errorMessage) => {
+			expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(false);
+		},
+	);
+
 	it.each(["The pending stream has been canceled", "The pending stream has been canceled (caused by: socket closed)"])(
 		"matches HTTP/2 pending stream cancellation: %s",
 		(errorMessage) => {
@@ -119,6 +138,12 @@ describe("provider retry classification", () => {
 	it("matches gateway wording for a stream cut short mid-reply", () => {
 		// A gateway can report that the provider stream ended after the reply had started.
 		const errorMessage = "The provider stream was cut short after the reply had begun";
+		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
+	});
+
+	it("matches gateway wording for a closed connection", () => {
+		// A gateway can end a stream with an api_error whose message is "Connection closed."
+		const errorMessage = '{"type":"error","error":{"type":"api_error","message":"Connection closed."}}';
 		expect(isRetryableAssistantError(fauxAssistantMessage("", { stopReason: "error", errorMessage }))).toBe(true);
 	});
 

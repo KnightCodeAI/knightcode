@@ -4,5 +4,5 @@ export { bindProvider, binds, type CheckedArgs, checkArgs, type Provider, type V
 export { asChordError, CHORD_ERROR_REASONS, chordErrorFromJson, invalid, PROTOCOL_VERSION } from "./errors.ts";
 export { openFailure, sameCause, waitingFor } from "./failure.ts";
 export { checkAddress, checkParams, identityKey } from "./params.ts";
-export { canonicalJson, principalKey, samePrincipal } from "./principal.ts";
+export { canonicalJson, principalJson, principalKey, samePrincipal } from "./principal.ts";
 export { check, validatorFor } from "./validator.ts";

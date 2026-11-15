@@ -1,4 +1,4 @@
-// Schema helpers: Chord's short constructors over @knightcode/schema builders (plain JSON Schema, typed with the values they
+// Schema helpers: Chord's short constructors over @knightcode/schema's builders (plain JSON Schema, typed with the values they
 // accept), and method, keyed member and event member declarations. The helpers keep the shapes contracts were
 // fingerprinted with: literals carry their `type`, `oneOf` is a union of literals, `map` a pattern-property record.
 
