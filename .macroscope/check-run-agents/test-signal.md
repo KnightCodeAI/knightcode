@@ -1,5 +1,6 @@
 ---
 title: Test Signal
+model: gpt-6-1-terra
 reasoning: low
 input: incremental
 tools:
@@ -10,9 +11,13 @@ include:
   - "**/*.test.*"
 exclude:
   - "**/fixtures/**"
+# Wait for the type check to pass before spending a run on a broken PR.
+requires:
+  - build-check
 maxBudgetPerRun: 1
 maxBudgetPerPR: 5
 conclusion: neutral
+showToolCalls: true
 ---
 
 # Test signal review
