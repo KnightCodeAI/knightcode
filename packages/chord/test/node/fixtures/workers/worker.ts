@@ -140,8 +140,13 @@ workerMain(
 			writeFileSync(behaviour.lazyOnClose, imported);
 		});
 		if (behaviour.connect === false) await sleep(1e9, undefined, { signal: ctx.abortSignal });
-		// fd 3 is the IPC channel of a forked child (`stdio: [.., "ipc"]`).
-		if (behaviour.holdsChannel === true) spawn("sleep", ["60"], { stdio: ["ignore", "ignore", "ignore", 3] });
+		// fd 3 is the IPC channel of a forked child (`stdio: [.., "ipc"]`). The grandchild is this runtime: Windows
+		// has no `sleep`, and the channel has to stay open after this process exits.
+		if (behaviour.holdsChannel === true) {
+			spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], {
+				stdio: ["ignore", "ignore", "ignore", 3],
+			});
+		}
 		worker.connect(parent, { principal: { kind: "server" }, trusted: true }, ctx);
 		if (behaviour.loadMs !== undefined) await sleep(behaviour.loadMs, undefined, { signal: ctx.abortSignal });
 		if (behaviour.hang === true) await sleep(1e9, undefined, { signal: ctx.abortSignal });
