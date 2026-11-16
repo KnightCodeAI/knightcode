@@ -25,7 +25,7 @@ The design, the rule book for all of this, is [docs/design.md](docs/design.md).
 | `@knightcode/chord/app` | The app kit: `startServer`, `startWorker`, the start-data objects, sessions and the owner's sign-in, device pairing, files, export and import per address, optional plugins (users, invites, ephemeral login). | Node |
 | `@knightcode/chord/surfaces` | The client surfaces' server side: `webSurface` (base bundle, plugin scripts, the page) and `tuiSurface` (the terminal surface). | Node |
 | `@knightcode/chord/web` | The web surface's browser side: `startPage` in the app's web entry, `followThemes`, `followLanguage`. | Browsers |
-| `@knightcode/chord/react` | Optional React bindings: `HostProvider`, `useHold`, `useWatch`, `useRefState`, `useRegistry`, `usePageState`, `useMessages`, `watchStore`. | Browsers |
+| `@knightcode/chord/react` | Optional React bindings: `HostProvider`, `useHold`, `useWatch`, `useRefState`, `useVariant`, `useRegistry`, `usePageState`, `useMessages`, `watchStore`. | Browsers |
 | `@knightcode/chord/tui` | The terminal surface's sandbox side: `startTerminalRuntime` in the app's terminal entry, `BridgeTerminal`, `TerminalTheme`, `TuiScope`. | Node (sandboxed) |
 | `@knightcode/chord/tui/launcher` | The terminal launcher, the trusted side of a terminal client: `startTerminal`, `requireSandboxNode`. | Node |
 | `@knightcode/chord/context` | Explicit cancellation, telemetry, and invocation values: `BACKGROUND_CONTEXT`, `withCancel`, `withAbortSignal`, `withoutAbortSignal`, `withTelemetry`, `traceIn`, `withContextValue`, `awaitWithContext`. | Node and browsers |
