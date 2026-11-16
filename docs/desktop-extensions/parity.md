@@ -226,6 +226,18 @@ Windows verification after merging `main` (`ca48eaf14`) as `c69294b70`:
   later-slice gates. See [registry.md](registry.md) for the S1 contracts.
 - Review was a self-review; no independent reviewer tool was available.
 
+### S4 — layout, navigation, thread list, home and title bar
+
+Windows verification after S3 (`206be8558`) merged with main (`156fcb434`):
+
+- The five structural built-ins now register synchronously through the public
+  SDK; `store.ts` remains the implementation. The import audit passes with no
+  exceptions.
+- Focused unchanged-baseline screens passed before the full run: light-wide
+  `home, retained draft, command palette and sidebar` reported 1/1.
+- S4 verification counts are recorded in
+  [layout.md](layout.md#verification).
+
 #### Registry review follow-up
 
 - Fixed two review findings: promise-returning setup could publish partial

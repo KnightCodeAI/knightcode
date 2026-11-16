@@ -7,6 +7,7 @@
  */
 
 import { HoverCard as HoverCardPrimitive, Popover as PopoverPrimitive } from "radix-ui";
+import { usePortalOwnership } from "../extensions/surface.tsx";
 import { type ReactElement, type ReactNode, type RefObject, useState } from "react";
 import { Check } from "./icons.tsx";
 import { keepMovedFocus, RowContent, rowProps } from "./menu.tsx";
@@ -41,6 +42,7 @@ export function Popover({
 	alignOffset?: number;
 	className?: string;
 }) {
+	const ownership = usePortalOwnership();
 	const [own, setOpen] = useState(false);
 	const open = shown ?? own;
 	const change = (next: boolean) => {
@@ -54,6 +56,7 @@ export function Popover({
 			{anchor ? <PopoverPrimitive.Anchor virtualRef={anchor as RefObject<HTMLElement>} /> : null}
 			<PopoverPrimitive.Portal>
 				<PopoverPrimitive.Content
+					{...ownership}
 					side={side}
 					align={align}
 					sideOffset={sideOffset}
@@ -82,11 +85,13 @@ export function Popover({
  * sidebar rows show a thread's or project's card: beside it, aligned with its top, 2px off. Radix's delays apply.
  */
 export function HoverCard({ content, children }: { content: ReactNode; children: ReactElement }) {
+	const ownership = usePortalOwnership();
 	return (
 		<HoverCardPrimitive.Root>
 			<HoverCardPrimitive.Trigger asChild>{children}</HoverCardPrimitive.Trigger>
 			<HoverCardPrimitive.Portal>
 				<HoverCardPrimitive.Content
+					{...ownership}
 					side="right"
 					align="start"
 					sideOffset={2}

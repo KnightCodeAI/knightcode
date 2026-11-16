@@ -200,7 +200,9 @@ with `--safe-mode`, to recover without external frontend code. Session
 extensions described above are unchanged. `knightcode desktop-ext new | validate |
 reload | status [--json]` provides the authoring loop; explicitly development-approved
 sources reload on save. Desktop sessions discover the on-demand
-`desktop-customization` skill. Backend entries and other surfaces are not available yet.
+`desktop-customization` skill. Layout, navigation, thread-list, home and title-bar
+providers now use the same public path, with shared rows, hidden pages, ordered
+sections and mediated window intents. Backend entries remain unavailable.
 
 ## Keyboard shortcuts
 

@@ -1,0 +1,5 @@
+{
+  "name": "workspace-layout-example",
+  "type": "module",
+  "knightcode": { "desktop": { "frontend": "./app.tsx", "styles": ["./app.css"] } }
+}

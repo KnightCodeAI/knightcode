@@ -1,4 +1,5 @@
 import { Tooltip as TooltipPrimitive } from "radix-ui";
+import { usePortalOwnership } from "../extensions/surface.tsx";
 import { type ReactElement, type ReactNode, useRef, useState } from "react";
 
 /**
@@ -22,6 +23,7 @@ export function Tooltip({
 	overflow?: boolean;
 	children: ReactElement;
 }) {
+	const ownership = usePortalOwnership();
 	const [open, setOpen] = useState(false);
 	// Radix types the trigger as a button; with asChild it is whatever element `children` renders.
 	const trigger = useRef<HTMLButtonElement>(null);
@@ -39,6 +41,7 @@ export function Tooltip({
 				</TooltipPrimitive.Trigger>
 				<TooltipPrimitive.Portal>
 					<TooltipPrimitive.Content
+						{...ownership}
 						side={side}
 						align={align}
 						sideOffset={5}

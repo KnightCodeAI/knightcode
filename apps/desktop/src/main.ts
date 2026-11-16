@@ -246,7 +246,7 @@ function createWindow(route?: string): BrowserWindow {
 			// Preview tabs (section 9.8); main/preview.ts decides what each one may attach and do.
 			webviewTag: true,
 			preload: join(__dirname, "preload.cjs"),
-			additionalArguments: [`--kc-origin=${ORIGIN}`, `--kc-window-id=${id}`],
+			additionalArguments: [`--kc-origin=${ORIGIN}`, `--kc-window-id=${id}`, `--kc-safe-mode=${safeMode ? "1" : "0"}`],
 		},
 	});
 	const open: OpenWindow = { window, port: undefined, lastFocusedAt: Date.now(), route };

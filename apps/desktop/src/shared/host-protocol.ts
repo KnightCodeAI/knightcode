@@ -409,6 +409,8 @@ export type HostEvent =
 	| { event: "update"; update: UpdateState };
 
 export interface WindowGlobals {
+	/** Native launch mode, available synchronously before any extension cache is read. */
+	safeMode: boolean;
 	platform: NodeJS.Platform;
 	windowId: number;
 	/** A dropped file's path on disk; empty for one that has none (dragged out of another app's memory). */

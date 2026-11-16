@@ -31,6 +31,8 @@ import { basename, mentionPath, tokens } from "../format.ts";
 import { matches, useBinding } from "../keys.ts";
 import {
 	interrupt,
+	composerDraftOf,
+	setComposerDraft,
 	listCommands,
 	removeQueued,
 	searchFiles,
@@ -182,9 +184,19 @@ export function Composer({
 	const models = useStore((s) => s.models);
 	const defaultModel = useStore((s) => s.defaultModel);
 	const prefs = useStore(selectPreferences);
-	const [text, setText] = useState("");
-	const [images, setImages] = useState<string[]>([]);
 	const cwd = project?.cwd;
+	const draftKey = threadId ? `thread:${threadId}` : `new:${cwd ?? ""}`;
+	const { text, images } = useStore((s) => composerDraftOf(s, draftKey));
+	const setText = (value: string | ((current: string) => string)) =>
+		setComposerDraft(draftKey, (draft) => ({
+			...draft,
+			text: typeof value === "function" ? value(draft.text) : value,
+		}));
+	const setImages = (value: string[] | ((current: string[]) => string[])) =>
+		setComposerDraft(draftKey, (draft) => ({
+			...draft,
+			images: typeof value === "function" ? value(draft.images) : value,
+		}));
 	const [draftModel, setDraftModel] = useState<{ provider: string; id: string } | undefined>();
 	const [draftThinking, setDraftThinking] = useState<ThinkingLevel | undefined>();
 	const [draftMode, setDraftMode] = useState<ApprovalMode>("ask");

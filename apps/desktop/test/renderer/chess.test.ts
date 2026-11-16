@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { GAMES, replay, START } from "../../src/renderer/chess.ts";
+import { GAMES, replay, START } from "../../src/renderer/builtins/home/chess.ts";
 
 // The games' legality and mates were checked against chess.js when they went in. This only keeps an edit from moving
 // a piece that is not there, out of turn or onto its own side, or marking any move but the last as the mate; it does

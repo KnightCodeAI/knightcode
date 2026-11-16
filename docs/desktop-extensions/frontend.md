@@ -70,8 +70,8 @@ animation or font names is outside this grammar.
 Main owns the app's provider defaults. Per-window overrides survive renderer
 reload and end when that window closes. Ordinary renderer state writes cannot
 erase app defaults. A failed or absent selected provider falls back without
-rewriting the saved choice. Broader structural surfaces, their loading grace
-period and boot cache remain S4 work.
+rewriting the saved choice. Structural surfaces use the S4 300 ms loading grace and versioned startup
+presentation cache. See [layout.md](layout.md).
 
 ## Recovery
 

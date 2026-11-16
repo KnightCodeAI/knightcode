@@ -1,0 +1,7 @@
+.workspace-layout { display: flex; flex: 1; min-height: 0; padding: 8px 4px 4px 0; }
+.workspace-sidebar { width: 276px; overflow: auto; padding: 8px; }
+.workspace-sidebar h2 { overflow: hidden; text-overflow: ellipsis; margin: 12px 8px 6px; font-size: 13px; color: var(--kc-text-secondary); }
+.workspace-content { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.workspace-breadcrumb { padding: 12px 16px; color: var(--kc-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.workspace-breadcrumb strong { color: var(--kc-text); font-weight: 500; }
+.workspace-view { display: flex; flex: 1; min-height: 0; min-width: 0; }

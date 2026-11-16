@@ -1,37 +1,27 @@
-/**
- * The title bar (desktop-shell.md section 9.1), as Codex's (measured 2026-10-19): a 36px bar with Back, Forward and
- * the sidebar toggle (28px, 6px apart, 6px in), then File, Edit, View and Help; the rest of the bar drags the window.
- * Windows draws its caption buttons over the right end (titleBarOverlay); macOS keeps its traffic lights at the left.
- * The menus follow Codex's names and order; the items only KnightCode has (palette, reload, developer tools,
- * archived threads) sit where they fit.
- */
-
-import { ArrowLeft, ArrowRight, Download, PanelLeft } from "./icons.tsx";
-import { client } from "../client.ts";
-import { bindingLabel, isMac } from "../keys.ts";
-import { type AppCommandName, WINDOW_CHROME } from "../../shared/host-protocol.ts";
+/** Built-in title bar, using only public mediated commands and shared controls. */
 import {
-	addProject,
-	checkForUpdates,
-	goBack,
-	installUpdate,
-	openUpdatePage,
-	navigate,
-	setFinding,
-	setPaletteOpen,
-	setSidebarOpen,
-	showNew,
-	useStore,
-} from "../store.ts";
-import { IconButton } from "./button.tsx";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./menu.tsx";
-
-export const runAppCommand = (command: AppCommandName) => void client.host("host/app/command", { command });
+	defineDesktopExtension,
+	experimental_controllers,
+	experimental_controls,
+	experimental_icons,
+	experimental_shellServices,
+	experimental_useNavigation,
+	experimental_useUpdate,
+} from "@knightcodeai/cli/desktop";
+const runAppCommand = (
+	command: Parameters<ReturnType<typeof experimental_controllers>["experimental_windowCommand"]>[0],
+) => void experimental_controllers().experimental_windowCommand(command);
 
 type AppMenuItem = { label: string; hint?: string; disabled?: boolean; run: () => void } | "-";
 
-/** One of the title bar's application menus, drawn as Codex draws its own (styles.css, .kc-app-menu). */
 function AppMenu({ label, items }: { label: string; items: AppMenuItem[] }) {
+	const {
+		experimental_Menu: Menu,
+		experimental_MenuTrigger: MenuTrigger,
+		experimental_MenuContent: MenuContent,
+		experimental_MenuItem: MenuItem,
+		experimental_MenuSeparator: MenuSeparator,
+	} = experimental_controls();
 	return (
 		<Menu>
 			<MenuTrigger>
@@ -57,8 +47,20 @@ function AppMenu({ label, items }: { label: string; items: AppMenuItem[] }) {
 	);
 }
 
-/** The menus' items. Editing commands are the system's, not desktop bindings, so their hints are spelled out. */
 function appMenus(sidebarOpen: boolean, inThread: boolean): { label: string; items: AppMenuItem[] }[] {
+	const { experimental_isMac: isMac, experimental_bindingLabel: bindingLabel } = experimental_shellServices();
+	const {
+		experimental_showNew: showNew,
+		experimental_addProject: addProject,
+		experimental_showSettings: showSettings,
+		experimental_setSidebarOpen: setSidebarOpen,
+		experimental_goBack: goBack,
+	} = experimental_controllers();
+	const {
+		experimental_setFinding: setFinding,
+		experimental_setPaletteOpen: setPaletteOpen,
+		experimental_checkForUpdates: checkForUpdates,
+	} = experimental_shellServices();
 	const mod = isMac() ? "⌘" : "Ctrl+";
 	return [
 		{
@@ -67,7 +69,7 @@ function appMenus(sidebarOpen: boolean, inThread: boolean): { label: string; ite
 				{ label: "New Thread", hint: bindingLabel("desktop.thread.new"), run: () => showNew() },
 				"-",
 				{ label: "Open Folder…", hint: bindingLabel("desktop.project.open"), run: () => void addProject() },
-				{ label: "Archived Threads", run: () => navigate({ kind: "settings", page: "archived" }) },
+				{ label: "Archived Threads", run: () => showSettings("archived") },
 				"-",
 				{ label: "Close Window", hint: bindingLabel("desktop.window.close"), run: () => runAppCommand("close") },
 				{ label: "Quit KnightCode", hint: bindingLabel("desktop.app.quit"), run: () => runAppCommand("quit") },
@@ -89,7 +91,7 @@ function appMenus(sidebarOpen: boolean, inThread: boolean): { label: string; ite
 				{
 					label: "Settings…",
 					hint: bindingLabel("desktop.settings"),
-					run: () => navigate({ kind: "settings", page: "general" }),
+					run: () => showSettings("general"),
 				},
 			],
 		},
@@ -132,39 +134,37 @@ function appMenus(sidebarOpen: boolean, inThread: boolean): { label: string; ite
 			items: [
 				{
 					label: "Documentation",
-					run: () => void client.host("host/shell/openExternal", { url: "https://knightcode.dev/docs" }),
+					run: () => void experimental_shellServices().experimental_openDocumentation(),
 				},
 				{
 					label: "Keyboard Shortcuts",
 					hint: bindingLabel("desktop.shortcuts"),
-					run: () => navigate({ kind: "settings", page: "shortcuts" }),
+					run: () => showSettings("shortcuts"),
 				},
 				"-",
-				// Last but About, and not on Linux, whose package manager updates the app.
-				...(window.knightcode.platform === "linux"
+
+				...(experimental_shellServices().experimental_platform === "linux"
 					? []
 					: [
 							{
 								label: "Check for Updates…",
 								run: () => {
-									navigate({ kind: "settings", page: "about" });
+									showSettings("about");
 									checkForUpdates();
 								},
 							},
 						]),
-				{ label: "About KnightCode", run: () => navigate({ kind: "settings", page: "about" }) },
+				{ label: "About KnightCode", run: () => showSettings("about") },
 			],
 		},
 	];
 }
 
-/**
- * The update pill at the bar's end: 20px high, 10px semibold white on the accent blue,
- * shown only while there is something to do. Windows: "Downloading", then "Update", which quits and installs.
- * macOS: "Update" opens the newer release's page.
- */
 function UpdatePill() {
-	const update = useStore((s) => s.update);
+	const update = experimental_useUpdate();
+	const { Download } = experimental_icons();
+	const { experimental_installUpdate: installUpdate, experimental_openUpdatePage: openUpdatePage } =
+		experimental_shellServices();
 	if (update.state !== "downloading" && update.state !== "ready" && update.state !== "available") return null;
 	const tooltip =
 		update.state === "downloading"
@@ -188,24 +188,21 @@ function UpdatePill() {
 }
 
 export function TitleBar() {
-	const history = useStore((s) => s.history);
-	const sidebarOpen = useStore((s) => s.sidebarOpen);
-	const inThread = useStore((s) => s.view.kind === "thread");
+	const { view, sidebarOpen, canGoBack, canGoForward } = experimental_useNavigation();
+	const inThread = view.kind === "thread";
+	const { experimental_isMac: isMac, experimental_titleBarHeight: titleBarHeight } = experimental_shellServices();
+	const { experimental_goBack: goBack, experimental_setSidebarOpen: setSidebarOpen } = experimental_controllers();
+	const { experimental_IconButton: IconButton } = experimental_controls();
+	const { ArrowLeft, ArrowRight, PanelLeft } = experimental_icons();
 	return (
 		<div
-			style={{ height: WINDOW_CHROME.titleBarHeight }}
+			style={{ height: titleBarHeight }}
 			className={`drag flex shrink-0 items-center gap-1.5 bg-shell ${isMac() ? "ps-20 pe-2" : "ps-1.5 pe-36"}`}
 		>
-			<IconButton label="Back" strong className="no-drag" onClick={() => goBack(-1)} disabled={history.index === 0}>
+			<IconButton label="Back" strong className="no-drag" onClick={() => goBack(-1)} disabled={!canGoBack}>
 				<ArrowLeft size={16} />
 			</IconButton>
-			<IconButton
-				label="Forward"
-				strong
-				className="no-drag"
-				onClick={() => goBack(1)}
-				disabled={history.index >= history.stack.length - 1}
-			>
+			<IconButton label="Forward" strong className="no-drag" onClick={() => goBack(1)} disabled={!canGoForward}>
 				<ArrowRight size={16} />
 			</IconButton>
 			<IconButton
@@ -228,3 +225,7 @@ export function TitleBar() {
 		</div>
 	);
 }
+
+export default defineDesktopExtension((app) => {
+	app.experimental_registerProvider({ id: "default", surface: "titleBar", experimental_render: TitleBar });
+});

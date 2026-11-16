@@ -1,5 +1,5 @@
 /**
- * The games the home mark plays when clicked (components/knight-game.tsx): short real games that end in mate, in
+ * The games the home mark plays when clicked (knight-game.tsx): short real games that end in mate, in
  * from-to squares ("e2e4"), with "+" after a check and "#" after the mate. None castles, takes en passant or promotes,
  * so a move is only ever one piece going somewhere, maybe onto another.
  */

@@ -11,7 +11,7 @@ import { GO_TO_THREAD, type KeybindingId } from "../../shared/keybindings.ts";
 import { basename, samePath } from "../format.ts";
 import { bindingLabel, matches } from "../keys.ts";
 import { getState, navigate, openThread, selectProjects, setPaletteOpen, threadSlotsOf, useStore } from "../store.ts";
-import { useCommandContext } from "../extensions/host.tsx";
+import { useCommandContext } from "../extensions/command-context.ts";
 import type { CommandRegistration } from "../extensions/registry.ts";
 import { desktopExtensions } from "../extensions/runtime.ts";
 import { ContributionRoot } from "../extensions/surface.tsx";

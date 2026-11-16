@@ -37,6 +37,20 @@ test("SDK notification posting, dismissal and expiry use the existing store and 
 	}
 });
 
+test("all structural built-ins register synchronously before external work", () => {
+	const dispose = initializeDesktopExtensions();
+	try {
+		const surfaces = desktopExtensions
+			.getSnapshot()
+			.flatMap((entry) => (entry.kind === "provider" ? [entry.contribution.surface] : []));
+		expect(surfaces.toSorted()).toEqual(
+			["feedback", "home", "layout", "navigation", "threadList", "titleBar"].toSorted(),
+		);
+	} finally {
+		dispose();
+	}
+});
+
 test("SDK navigation controllers share the host navigation state", () => {
 	const dispose = initializeDesktopExtensions();
 	try {

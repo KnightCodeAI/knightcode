@@ -55,6 +55,32 @@ test("a failed or abandoned candidate preserves the old working revision", () =>
 	expect(registry.commands({ sidebarOpen: true }).map((entry) => entry.id)).toEqual(["owner/old"]);
 });
 
+test("pages and hidden rail entries publish atomically, retain hidden pages, and disappear on disposal", () => {
+	const registry = new ExtensionRegistry();
+	const candidate = registry.prepare(
+		"pages",
+		defineDesktopExtension((app) => {
+			app.experimental_registerPage({
+				id: "workspace",
+				label: "Workspace",
+				hidden: true,
+				experimental_render: () => "workspace",
+			});
+			app.experimental_hideNavigation({ id: "hide-home", target: "home" });
+		}),
+		"rev",
+	);
+	expect(registry.pages(context)).toEqual([]);
+	expect(registry.hiddenNavigation()).toEqual([]);
+	const handle = candidate.commit();
+	expect(registry.pages(context).map((entry) => entry.id)).toEqual(["pages/workspace"]);
+	expect(registry.pages(context)[0]!.contribution.hidden).toBe(true);
+	expect(registry.hiddenNavigation()).toEqual([{ owner: "pages", revision: "rev", target: "home" }]);
+	handle.dispose();
+	expect(registry.pages(context)).toEqual([]);
+	expect(registry.hiddenNavigation()).toEqual([]);
+});
+
 const context: experimental_CommandContext = { sidebarOpen: true };
 const command = (id: string, order = 0) => ({ id, order, label: () => id, experimental_run: () => {} });
 
@@ -203,6 +229,24 @@ test("duplicate owners cannot replace a published set", () => {
 	registry.register("owner", extension);
 	expect(() => registry.register("owner", extension)).toThrow(/owner/i);
 	expect(registry.commands(context).map((entry) => entry.id)).toEqual(["owner/one"]);
+});
+
+test("untyped declarations cannot offer a slot-only surface as a selectable provider", () => {
+	const registry = new ExtensionRegistry();
+	expect(() =>
+		registry.register(
+			"bad-surface",
+			defineDesktopExtension((app) => {
+				// External JavaScript can ignore the SDK's provider-surface vocabulary.
+				app.experimental_registerProvider({
+					id: "wrong",
+					surface: "homeSection",
+					experimental_render: () => null,
+				} as unknown as Parameters<typeof app.experimental_registerProvider>[0]);
+			}),
+		),
+	).toThrow(/provider surface/);
+	expect(registry.getSnapshot()).toEqual([]);
 });
 
 test("unsupported apiVersion rejects before setup or publication", () => {

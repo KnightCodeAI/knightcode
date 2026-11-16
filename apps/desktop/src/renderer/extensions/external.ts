@@ -9,8 +9,10 @@ import * as Diffs from "@pierre/diffs";
 import * as Trees from "@pierre/trees";
 import * as Typebox from "typebox";
 import type { Static } from "typebox";
+import { Compile } from "typebox/compile";
 import { client } from "../client.ts";
-import type { DesktopProviderPreferences } from "../../shared/desktop-extensions.ts";
+import { DesktopProviderPreferences } from "../../shared/desktop-extensions.ts";
+import { startupLayout } from "./startup.ts";
 import { FrontendExtensions } from "./loader.ts";
 import type { ExtensionRegistry } from "./registry.ts";
 import { artifactUrl, loadRevisionStyles } from "./styles.ts";
@@ -29,7 +31,28 @@ const runtime: Record<string, object> = {
 const callbacks = new Map<string, (extension: unknown) => void>();
 const listeners = new Set<() => void>();
 let failures: ReadonlyMap<string, string> = new Map();
-let providers: DesktopProviderPreferences = { app: {}, window: {} };
+const windowKey = `knightcode.desktop.providers.window.${window.knightcode?.windowId ?? 0}`;
+const providerCheck = Compile(DesktopProviderPreferences);
+let providers: DesktopProviderPreferences = { app: startupLayout.getSnapshot().providers, window: {} };
+try {
+	const raw = window.sessionStorage?.getItem(windowKey);
+	if (raw && !window.knightcode?.safeMode) {
+		const value: unknown = raw.length <= 65536 ? JSON.parse(raw) : null;
+		if (providerCheck.Check(value)) providers = { app: providers.app, window: value.window };
+	}
+} catch {
+	/* The main-owned choices will arrive with the server connection. */
+}
+
+function rememberProviders(): void {
+	if (window.knightcode?.safeMode) return;
+	try {
+		window.sessionStorage?.setItem(windowKey, JSON.stringify(providers));
+	} catch {
+		/* Optional startup hint. */
+	}
+	startupLayout.update(providers.app, startupLayout.getSnapshot().hidden);
+}
 
 export const externalState = {
 	subscribe: (listener: () => void) => {
@@ -50,7 +73,10 @@ export function reportExternal(
 ): void {
 	const next = new Map(failures);
 	if (phase === "active") next.delete(owner);
-	else next.set(owner, message);
+	else {
+		next.set(owner, message);
+		startupLayout.invalidateOwner(owner);
+	}
 	failures = next;
 	for (const listener of listeners) listener();
 	void client
@@ -73,6 +99,20 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 		if (activation) callbacks.get(activation)?.(extension);
 	};
 	const loader = new FrontendExtensions(registry, prepareArtifact, reportExternal, ReactDOM.flushSync);
+	const offRegistry = registry.subscribe(() => {
+		if (window.knightcode?.safeMode) return;
+		const hidden = registry
+			.hiddenNavigation()
+			.flatMap((entry) => (entry.revision ? [{ ...entry, revision: entry.revision }] : []));
+		const liveOwners = new Set(
+			registry
+				.getSnapshot()
+				.filter((entry) => entry.revision)
+				.map((entry) => entry.owner),
+		);
+		const pending = startupLayout.getSnapshot().hidden.filter((entry) => !liveOwners.has(entry.owner));
+		startupLayout.update(providers.app, [...pending, ...hidden]);
+	});
 	let closed = false;
 	let refreshId = 0;
 	const refresh = async (reason: "changed" | "reload" = "changed") => {
@@ -83,6 +123,8 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 			});
 			if (closed || id !== refreshId) return;
 			providers = next.providers;
+			startupLayout.reconcile(next.providers.app, next.extensions);
+			rememberProviders();
 			failures = new Map(
 				[...failures].filter(([owner]) => next.extensions.some((entry) => entry.owner === owner && entry.enabled)),
 			);
@@ -96,6 +138,7 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 	const offEvent = client.onHostEvent((event) => {
 		if (event.event === "desktopExtension/providers") {
 			providers = event.providers;
+			rememberProviders();
 			for (const listener of listeners) listener();
 			return;
 		}
@@ -111,6 +154,7 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 	});
 	return () => {
 		closed = true;
+		offRegistry();
 		refreshId++;
 		offEvent();
 		offNotification();
@@ -164,7 +208,7 @@ async function prepareArtifact(
 					reject(new Error(`Extension module evaluation failed: ${event.message}`));
 			};
 			window.addEventListener("error", moduleError);
-			script.onload = () => reject(new Error("Extension module finished without a valid desktop declaration."));
+			// Module load can finish before a top-level await resolves; the callback or readiness deadline settles it.
 			script.onerror = () =>
 				reject(
 					new Error(

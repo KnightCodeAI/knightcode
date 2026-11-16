@@ -7,8 +7,8 @@
  */
 
 import { type CSSProperties, useEffect, useState } from "react";
-import { GAMES, type PieceKind, replay, START } from "../chess.ts";
-import { KNIGHT_BASE, KNIGHT_BODY, KnightMark } from "./icons.tsx";
+import { GAMES, type PieceKind, replay, START } from "./chess.ts";
+import { KNIGHT_BASE, KNIGHT_BODY, KnightMark } from "./mark-icon.tsx";
 
 /** A square in px. The board is 128px wide, sharing the home mark's centreline and bottom edge. */
 const SQUARE = 16;

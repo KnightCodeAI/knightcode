@@ -53,9 +53,10 @@ checking that instance has stopped, remove only its discovery file.
 
 <!-- surface: feedback -->
 
-Native frontend extensions add palette commands and feedback contributions.
-A user can explicitly select a feedback provider. Other application surfaces
-and backend entries are not exposed yet. The API is experimental.
+Native frontend extensions add palette commands, ordered contributions, pages
+and named feedback or structural providers. Installing a provider never selects
+it. All new members retain the `experimental_` prefix. Backend entries remain
+unavailable.
 
 These extensions share the app renderer, React, and the DOM. They can inspect
 conversations and change application UI. Error boundaries are not a security
@@ -172,9 +173,77 @@ use `experimental_controllers().experimental_notify`.
 The host owns thread state, toasts and provider preferences. Frontend component
 state belongs to that window/mount and resets on reload; it is not transcript
 storage. Cleanup cannot undo arbitrary side effects. There is no extension
-storage/settings or backend RPC API yet. Layout/sidebar/home controllers,
-composer replacement, file/message renderers, Git/workspace controllers, custom
-settings and appearance providers are later slices, not available APIs.
+storage/settings or backend RPC API yet. Composer replacement, file/message
+renderers, workspace mutation controllers, custom settings and appearance
+providers remain later-slice APIs.
+
+## Structural providers and navigation
+
+<!-- surface: layout -->
+<!-- surface: navigation -->
+<!-- surface: threadList -->
+<!-- surface: home -->
+<!-- surface: titleBar -->
+
+Register a provider with a local ID and one of these surfaces. Settings offers
+an app default and a per-window override for each. Use
+`experimental_SurfaceHost` to compose navigation, threadList, home or titleBar,
+and `experimental_Content` for the current view. The title bar is outside the
+layout by default; do not mount it twice. Recursive surface replacement falls
+back. Recovery settings always use the built-in layout, and fallback notices
+and native recovery controls stay outside replaceable surfaces.
+
+Built-ins register before first paint. A selected external surface gets a
+neutral skeleton for at most 300 ms, then the built-in if still unavailable.
+A late ready provider may mount afterward. The preference is retained.
+Presentation-only startup hints cache app choices and owner/revision-qualified
+hidden rail entries; window overrides use window-local session storage.
+Invalid data, changed revisions, disabled sources and safe mode invalidate
+visibility hints. A cache never grants trust or execution.
+
+`experimental_registerPage({ id, label, hidden, experimental_render })`
+declares a page. Hidden pages have no rail entry but remain reachable through
+`experimental_controllers().experimental_openPage("owner/id")`. Pages share
+the host's back/forward history. Disposing a page shows an unavailable notice
+without redirecting a captured action to another page.
+`experimental_hideNavigation({ id, target: "home" | "profile" })` hides only
+those ordinary rail entries. Recovery cannot be hidden this way.
+
+`experimental_useNavigation` reads the view, sidebar visibility and history
+availability. `experimental_useThreadList` reads projects, threads, pins,
+unread markers and sidebar options. They subscribe to the existing host store,
+not an extension-owned copy. Controllers accept explicit thread IDs for
+open/pin/rename/archive and project paths for removal. New boolean-returning
+intents return false when declined; window command failures report a notice.
+No controller replaces the renderer store or bypasses server approvals.
+
+`experimental_windowCommand` accepts only the declared finite command union.
+Main validates each request and retains native quit/update confirmations.
+Use `experimental_useUpdate` and the finite `experimental_shellServices`
+for update/profile/help, sidebar presentation, formatting and configured key
+matching. Neither exposes arbitrary protocol calls or the raw host bridge.
+`experimental_controls` and `experimental_icons` provide shared accessible
+controls. Native caption buttons remain native-owned.
+
+<!-- surface: homeSection -->
+<!-- surface: threadRowMetadata -->
+<!-- surface: threadRowStatus -->
+<!-- surface: threadRowActions -->
+
+Register additive slots for ordered home sections, thread row metadata,
+statuses and actions. `experimental_Slots` mounts them with their
+original owner and revision; row callbacks receive `context.row` and its
+explicit thread/cwd. Ordering remains order, owner, then registration order.
+Home setup/trust prompts are host-owned, not replaceable sections.
+`experimental_ThreadRow({ threadId })` keeps the standard native context menu,
+rename/delete dialogs, pin/archive controls, unread/status marks, keyboard
+activation and all row contribution slots. Use it in alternate lists rather
+than duplicating those behaviors.
+
+Copy `04-thread-list/` to try the shared rows. Copy `workspace-layout/` and
+explicitly select both its layout and thread-list providers to group existing
+threads by cwd and show a breadcrumb. It deliberately does not create
+workspaces, perform Git mutations, or introduce a second tab/draft model.
 
 ## Styles
 

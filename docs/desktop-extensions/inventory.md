@@ -14,11 +14,11 @@ without exposing its behavior does not complete a surface.
 
 | Surface | Current implementation | Public boundary to implement | Slice |
 | --- | --- | --- | --- |
-| Application layout | `renderer/app.tsx`: App, ViewBoundary | Named layout provider; owned surface hosts and error boundaries | S4 |
-| Window chrome | `renderer/components/titlebar.tsx`; `main.ts`; `main/host.ts` | Title-bar provider, mediated menu/window/update/zoom commands | S4 |
-| Navigation | `renderer/components/rail.tsx`; `renderer/routes.ts`; store history | Destinations, hidden pages, navigation provider/controller | S4 |
-| Sidebar | `renderer/components/sidebar.tsx`; `renderer/sidebar-model.ts` | Thread-list provider, row metadata/status/actions, project/thread controllers | S4 |
-| Home | `renderer/components/home.tsx`: Home, SetupCard, TrustCard | Home provider and ordered sections; trust/setup remain host-mediated | S4 |
+| Application layout | `renderer/builtins/layout/`; `renderer/extensions/structural.tsx` | Named layout provider; public surface composition, host-owned current-view boundary and recovery layout | S4 |
+| Window chrome | `renderer/builtins/title-bar/`; `main.ts`; `main/host.ts` | Title-bar provider; finite mediated menu/window/update/zoom intents | S4 |
+| Navigation | `renderer/builtins/navigation/`; `renderer/extensions/controllers.ts`; store history | Navigation provider/controller, pages including hidden destinations, revision-qualified startup visibility hints | S4 |
+| Sidebar | `renderer/builtins/thread-list/`; `renderer/sidebar-model.ts` | Thread-list provider, shared accessible rows, metadata/status/action slots, project/thread facades | S4 |
+| Home | `renderer/builtins/home/`; `renderer/extensions/home-support.tsx` | Home provider and ordered sections; setup/trust remain host-owned | S4 |
 | Thread header | `renderer/components/thread-view.tsx`: ThreadView, ThreadMenu; `thread-actions.tsx` | Header provider, header row/title slots, identity/title/actions/status | S5 |
 | Conversation | `renderer/components/thread-view.tsx`; `items.tsx`; `activity.tsx`; `markdown.tsx`; `renderer/turns.ts` | Transcript/item renderers, message actions, history/find/scroll controller | S5 |
 | Composer | `renderer/components/composer.tsx`; `composer-pickers.tsx`; store draft/submit services | Revisioned canonical draft; ComposerRoot/editor adapters; all contribution hosts | S5 |

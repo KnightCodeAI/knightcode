@@ -23,7 +23,14 @@ export const DesktopExtensionHostMethods = {
 	"host/desktopExtension/provider/set": {
 		params: Type.Object(
 			{
-				surface: Type.Literal("feedback"),
+				surface: Type.Union([
+					Type.Literal("feedback"),
+					Type.Literal("layout"),
+					Type.Literal("navigation"),
+					Type.Literal("threadList"),
+					Type.Literal("home"),
+					Type.Literal("titleBar"),
+				]),
 				scope: Type.Union([Type.Literal("app"), Type.Literal("window")]),
 				provider: Type.String({ maxLength: 256 }),
 			},

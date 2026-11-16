@@ -5,9 +5,12 @@ import type {
 	experimental_DesktopApp,
 	experimental_DesktopExtension,
 	experimental_Disposable,
+	experimental_Page,
+	experimental_NavigationVisibility,
 	experimental_Surface,
 	experimental_SurfaceContribution,
 } from "@knightcodeai/cli/desktop";
+import { STRUCTURAL_BUILTINS } from "./providers.ts";
 
 export type Registration = {
 	id: string;
@@ -19,10 +22,12 @@ export type Registration = {
 } & (
 	| { kind: "command"; contribution: experimental_Command }
 	| { kind: "slot" | "provider"; contribution: experimental_SurfaceContribution }
+	| { kind: "page"; contribution: experimental_Page }
+	| { kind: "navigationVisibility"; contribution: experimental_NavigationVisibility }
 );
 
 export type CommandRegistration = Extract<Registration, { kind: "command" }>;
-export type SurfaceRegistration = Extract<Registration, { kind: "slot" | "provider" }>;
+export type SurfaceRegistration = Extract<Registration, { kind: "slot" | "provider" | "page" }>;
 
 export class ExtensionRegistry {
 	private entries: readonly Registration[] = [];
@@ -123,6 +128,9 @@ export class ExtensionRegistry {
 		};
 		const app: experimental_DesktopApp = {
 			experimental_signal: lifetime.signal,
+			experimental_registerPage: (contribution) => add({ ...metadata(contribution.id), kind: "page", contribution }),
+			experimental_hideNavigation: (contribution) =>
+				add({ ...metadata(contribution.id), kind: "navigationVisibility", contribution }),
 			experimental_registerCommand: (contribution) =>
 				add({ ...metadata(contribution.id), kind: "command", contribution }),
 			experimental_registerSlot: (contribution) => add({ ...metadata(contribution.id), kind: "slot", contribution }),
@@ -151,6 +159,9 @@ export class ExtensionRegistry {
 				// Declaration-policy boundary: local ids cannot contain another owner's namespace; order must be sortable.
 				if (!/^[a-zA-Z0-9._-]+$/.test(entry.contribution.id)) throw new Error(`Invalid local id: ${entry.id}`);
 				if (!Number.isFinite(entry.contribution.order ?? 0)) throw new Error(`Invalid order: ${entry.id}`);
+				// Declaration-policy boundary: slot-only locations cannot be selected as replacement surfaces.
+				if (entry.kind === "provider" && !Object.hasOwn(STRUCTURAL_BUILTINS, entry.contribution.surface))
+					throw new Error(`Unsupported provider surface: ${entry.contribution.surface}`);
 				if (ids.has(entry.id)) throw new Error(`Duplicate registration: ${entry.id}`);
 				ids.add(entry.id);
 			}
@@ -176,6 +187,21 @@ export class ExtensionRegistry {
 		} finally {
 			this.preparing.delete(owner);
 		}
+	}
+
+	pages(context: experimental_CommandContext): Extract<Registration, { kind: "page" }>[] {
+		return this.entries.filter(
+			(entry): entry is Extract<Registration, { kind: "page" }> =>
+				entry.kind === "page" && this.available(entry, context),
+		);
+	}
+
+	hiddenNavigation(): { owner: string; revision?: string; target: "home" | "profile" }[] {
+		return this.entries.flatMap((entry) =>
+			entry.kind === "navigationVisibility"
+				? [{ owner: entry.owner, revision: entry.revision, target: entry.contribution.target }]
+				: [],
+		);
 	}
 
 	commands(context: experimental_CommandContext): CommandRegistration[] {

@@ -16,6 +16,7 @@
  */
 
 import { DropdownMenu } from "radix-ui";
+import { usePortalOwnership } from "../extensions/surface.tsx";
 import type { ComponentProps, ReactNode } from "react";
 import { Button } from "./button.tsx";
 import { Check, ChevronDown, ChevronRight } from "./icons.tsx";
@@ -75,9 +76,11 @@ export function MenuContent({
 	onCloseAutoFocus,
 	...props
 }: ComponentProps<typeof DropdownMenu.Content> & { minWidth?: number; variant?: "app" }) {
+	const ownership = usePortalOwnership();
 	return (
 		<DropdownMenu.Portal>
 			<DropdownMenu.Content
+				{...ownership}
 				align="start"
 				sideOffset={1}
 				collisionPadding={8}
@@ -195,6 +198,7 @@ export function MenuSub({
 	onOpenChange?: (open: boolean) => void;
 	children: ReactNode;
 }) {
+	const ownership = usePortalOwnership();
 	return (
 		<DropdownMenu.Sub onOpenChange={onOpenChange}>
 			<DropdownMenu.SubTrigger {...rowProps(false)}>
@@ -204,6 +208,7 @@ export function MenuSub({
 			</DropdownMenu.SubTrigger>
 			<DropdownMenu.Portal>
 				<DropdownMenu.SubContent
+					{...ownership}
 					sideOffset={8}
 					alignOffset={-5}
 					collisionPadding={8}

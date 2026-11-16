@@ -1,15 +1,11 @@
 import { CircleAlert, Minus, Plus } from "./components/icons.tsx";
 import { Button, IconButton } from "./components/button.tsx";
-import { Component, type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { customTokens, fontFaces } from "./appearance.ts";
 import { client } from "./client.ts";
-import { Home } from "./components/home.tsx";
 import { Palette } from "./components/palette.tsx";
-import { Rail } from "./components/rail.tsx";
-import { Settings, SettingsNav } from "./components/settings.tsx";
-import { Sidebar } from "./components/sidebar.tsx";
-import { ThreadView } from "./components/thread-view.tsx";
-import { runAppCommand, TitleBar } from "./components/titlebar.tsx";
+import { controllers } from "./extensions/controllers.ts";
+import { LayoutSurface, StructuralSurface } from "./extensions/structural.tsx";
 import { GO_TO_RECENT, GO_TO_THREAD } from "../shared/keybindings.ts";
 import { isEditable, isMac, runBinding, setBindingOverrides, useBinding, useBindings } from "./keys.ts";
 import { FeedbackSurface } from "./extensions/host.tsx";
@@ -53,29 +49,8 @@ function ServerBanner() {
 	);
 }
 
-/** A view that throws while rendering shows the error instead of blanking the window; another view starts afresh. */
-class ViewBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
-	state: { error?: Error } = {};
-
-	static getDerivedStateFromError(error: Error) {
-		return { error };
-	}
-
-	render() {
-		const { error } = this.state;
-		if (!error) return this.props.children;
-		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-				<CircleAlert size={20} className="text-danger" />
-				<p className="text-base text-ink">This view hit an error.</p>
-				<p className="max-w-xl text-sm break-words text-secondary">{error.message}</p>
-				<Button variant="surface" size="md" onClick={() => this.setState({ error: undefined })}>
-					Try again
-				</Button>
-			</div>
-		);
-	}
-}
+const runAppCommand = (command: Parameters<typeof controllers.experimental_windowCommand>[0]) =>
+	void controllers.experimental_windowCommand(command);
 
 /**
  * Codex's zoom banner: the level after a zoom, top right beside the caption buttons (8px down, 16px in), with
@@ -272,33 +247,9 @@ export function App() {
 	]);
 	return (
 		<div className="kc-app flex h-full flex-col bg-shell">
-			<TitleBar />
+			<StructuralSurface surface="titleBar" />
 			<ServerBanner />
-			{/* Codex leaves 8px under the title bar and 4px at the window's right and bottom edges. */}
-			<div className="kc-app-body flex min-h-0 flex-1 pt-2 pe-1 pb-1">
-				<Rail />
-				{/* Sidebar and content sit in one card beside the rail: 12px corners at the left and top right, 4px at
-				    the bottom right, the sidebar's own panel and a hairline between it and the content (Codex's). */}
-				<div className="kc-app-card flex min-w-0 flex-1 overflow-hidden rounded-tl-[12px] rounded-tr-[12px] rounded-br-[4px] rounded-bl-[12px]">
-					{/* Stays mounted so it can slide shut (styles.css, .kc-sidebar-slot); inert while closed. */}
-					<div className="kc-sidebar-slot flex shrink-0" data-open={sidebarOpen || undefined} inert={!sidebarOpen}>
-						{view.kind === "settings" ? <SettingsNav page={view.page} /> : <Sidebar />}
-					</div>
-					<main className={`flex min-w-0 flex-1 bg-surface ${sidebarOpen ? "border-l border-line" : ""}`}>
-						<ViewBoundary
-							key={view.kind === "thread" ? view.id : view.kind === "settings" ? `settings:${view.page}` : view.kind}
-						>
-							{view.kind === "thread" ? (
-								<ThreadView key={view.id} id={view.id} />
-							) : view.kind === "settings" ? (
-								<Settings page={view.page} />
-							) : (
-								<Home key={view.cwd ?? ""} cwd={view.cwd} />
-							)}
-						</ViewBoundary>
-					</main>
-				</div>
-			</div>
+			<LayoutSurface />
 			{paletteOpen ? <Palette /> : null}
 			<FeedbackSurface />
 			<ZoomBanner />

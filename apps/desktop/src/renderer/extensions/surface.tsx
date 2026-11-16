@@ -65,6 +65,12 @@ export function OwnedPortal({ children }: { children: ReactNode }) {
 	return container ? createPortal(children, container) : null;
 }
 
+/** Mark each actual overlay root; the overlay library still owns presence, focus and portal mounting. */
+export function usePortalOwnership(): { "data-kc-owner"?: string; "data-kc-revision"?: string } {
+	const entry = useContext(Ownership);
+	return { "data-kc-owner": entry?.owner, "data-kc-revision": entry?.revision };
+}
+
 /** Use for each individual command/slot/provider, not for its surrounding replacement's owner. */
 export function ContributionRoot({
 	entry,
@@ -92,7 +98,7 @@ export function ContributionRoot({
 	);
 }
 
-function SurfaceEntry({
+export function SurfaceEntry({
 	entry,
 	context,
 	fallback,
@@ -116,14 +122,32 @@ export function SurfaceHost({
 	builtin,
 	preferred,
 	context,
+	pending,
 }: {
 	registry: ExtensionRegistry;
 	surface: experimental_Surface;
 	builtin: string;
 	preferred?: string;
 	context: experimental_CommandContext;
+	pending?: boolean;
 }) {
 	useSyncExternalStore(registry.subscribe, registry.getSnapshot, registry.getSnapshot);
+	if (pending)
+		return (
+			<div
+				role="status"
+				aria-label={`Loading ${surface}`}
+				data-kc-skeleton={surface}
+				className="min-h-0 flex-1 bg-shell"
+				style={
+					surface === "titleBar"
+						? { height: 36, flex: "none" }
+						: surface === "navigation"
+							? { width: 52, flex: "none" }
+							: undefined
+				}
+			/>
+		);
 	const fallback = registry.resolveProvider(surface, builtin, undefined, context);
 	const selected = registry.resolveProvider(surface, builtin, preferred, context);
 	const unavailable = <div role="status">The built-in {surface} view is unavailable.</div>;

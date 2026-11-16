@@ -14,6 +14,7 @@ const origin = arg("origin");
 const windowId = Number(arg("window-id"));
 
 const globals: WindowGlobals = {
+	safeMode: arg("safe-mode") === "1",
 	platform: process.platform,
 	windowId,
 	pathForFile: (file) => webUtils.getPathForFile(file),

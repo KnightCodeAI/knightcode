@@ -154,10 +154,21 @@ export const NO_TERMINALS: ThreadTerminals = { tabs: [], active: 0, open: false 
 
 export type { SettingsPage };
 export type View =
-	{ kind: "thread"; id: string } | { kind: "new"; cwd?: string } | { kind: "settings"; page: SettingsPage };
+	| { kind: "thread"; id: string }
+	| { kind: "new"; cwd?: string }
+	| { kind: "settings"; page: SettingsPage }
+	| { kind: "page"; id: string };
 export type Accounts = ResultOf<"account/list">;
 
+export interface ComposerDraft {
+	text: string;
+	images: string[];
+}
+const EMPTY_COMPOSER_DRAFT: ComposerDraft = { text: "", images: [] };
+
 export interface State {
+	/** Drafts outlive layout/provider mounts; editor transactions are introduced separately. */
+	composerDrafts: Record<string, ComposerDraft>;
 	server: { state: "starting" | "ready" | "restarting" | "failed"; message?: string };
 	/** Turns whose edits were undone (by turn id), so their card offers Reapply after it remounts. */
 	undoneTurns: Record<string, true>;
@@ -212,6 +223,7 @@ export interface State {
 }
 
 let state: State = {
+	composerDrafts: {},
 	server: { state: "starting" },
 	undoneTurns: {},
 	desktop: undefined,
@@ -258,6 +270,14 @@ export function useStore<T>(select: (s: State) => T): T {
 }
 
 export const getState = (): State => state;
+
+/** Read one composer draft without allocating an empty snapshot on each subscription read. */
+export const composerDraftOf = (s: State, key: string): ComposerDraft => s.composerDrafts[key] ?? EMPTY_COMPOSER_DRAFT;
+
+/** Update the host-owned draft; surface disposal never clears it. */
+export function setComposerDraft(key: string, update: (draft: ComposerDraft) => ComposerDraft): void {
+	set((s) => ({ ...s, composerDrafts: { ...s.composerDrafts, [key]: update(composerDraftOf(s, key)) } }));
+}
 
 const NO_PROJECTS: DesktopState["projects"] = [];
 /** Selectors must return stable values: a fresh `[]` per read re-renders forever. */
@@ -1116,15 +1136,16 @@ export async function updateSettings(
 	}
 }
 
-export async function archive(threadId: string): Promise<void> {
+export async function archive(threadId: string): Promise<boolean> {
 	try {
 		await stopAndArchive(threadId);
 	} catch (e) {
 		// Refused: the thread stays open where the user is.
 		toast(errorText(e), "error");
-		return;
+		return false;
 	}
 	if (state.view.kind === "thread" && state.view.id === threadId) showNew();
+	return true;
 }
 
 /** Archive a thread, stopping it first if it runs (the server archives only idle threads). */
@@ -1181,8 +1202,14 @@ export function copyLastCodeBlock(threadId: string): void {
 	void copyText(code).then((ok) => ok && toast("Copied the code block", "success"));
 }
 
-export async function rename(threadId: string, name: string): Promise<void> {
-	await client.request("thread/name/set", { threadId, name }).catch((e: unknown) => toast(errorText(e), "error"));
+export async function rename(threadId: string, name: string): Promise<boolean> {
+	try {
+		await client.request("thread/name/set", { threadId, name });
+		return true;
+	} catch (error) {
+		toast(errorText(error), "error");
+		return false;
+	}
 }
 
 export async function compact(threadId: string): Promise<void> {

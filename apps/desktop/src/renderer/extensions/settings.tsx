@@ -7,6 +7,7 @@ import { Button } from "../components/button.tsx";
 import { errorText, navigate, toast } from "../store.ts";
 import { externalState } from "./external.ts";
 import { desktopExtensions } from "./runtime.ts";
+import { STRUCTURAL_BUILTINS, type ProviderSurface } from "./providers.ts";
 
 export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 	const [list, setList] = useState<ResultOf<"desktopExtension/list">>();
@@ -46,13 +47,13 @@ export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 	};
 	if (
 		!list ||
-		(!list.safeMode && list.extensions.length === 0 && !preferences.app.feedback && !preferences.window.feedback)
+		(!list.safeMode &&
+			list.extensions.length === 0 &&
+			Object.keys(preferences.app).length === 0 &&
+			Object.keys(preferences.window).length === 0)
 	)
 		return null;
-	const providers = desktopExtensions
-		.getSnapshot()
-		.filter((entry) => entry.kind === "provider" && entry.contribution.surface === "feedback");
-	const preferred = preferences.app.feedback ?? "builtin.feedback/toasts";
+
 	return (
 		<section aria-label="Native desktop extensions" className="flex flex-col gap-4">
 			<div className="flex items-center justify-between gap-4">
@@ -156,59 +157,78 @@ export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 						))}
 				</div>
 			))}
-			<label className="flex flex-wrap items-center justify-between gap-3 text-sm">
-				Feedback provider
-				<select
-					aria-label="Feedback provider"
-					className="kc-input max-w-80 border-line-strong"
-					value={preferred}
-					onChange={(event) =>
-						run(
-							client.host("host/desktopExtension/provider/set", {
-								surface: "feedback",
-								scope: "app",
-								provider: event.target.value,
-							}),
-						)
-					}
-				>
-					{providers.map((entry) => (
-						<option key={entry.id} value={entry.id}>
-							{entry.id}
-						</option>
-					))}
-					{!providers.some((entry) => entry.id === preferred) ? (
-						<option value={preferred}>{preferred} (unavailable; using built-in)</option>
-					) : null}
-				</select>
-			</label>
-			<label className="flex flex-wrap items-center justify-between gap-3 text-sm">
-				Feedback provider for this window
-				<select
-					aria-label="Feedback provider for this window"
-					className="kc-input max-w-80 border-line-strong"
-					value={preferences.window.feedback ?? ""}
-					onChange={(event) =>
-						run(
-							client.host("host/desktopExtension/provider/set", {
-								surface: "feedback",
-								scope: "window",
-								provider: event.target.value,
-							}),
-						)
-					}
-				>
-					<option value="">Use app default</option>
-					{providers.map((entry) => (
-						<option key={entry.id} value={entry.id}>
-							{entry.id}
-						</option>
-					))}
-					{preferences.window.feedback && !providers.some((entry) => entry.id === preferences.window.feedback) ? (
-						<option value={preferences.window.feedback}>{preferences.window.feedback} (unavailable)</option>
-					) : null}
-				</select>
-			</label>
+			{Object.entries(STRUCTURAL_BUILTINS).map(([surface, builtin]) => {
+				const available = desktopExtensions
+					.getSnapshot()
+					.filter((entry) => entry.kind === "provider" && entry.contribution.surface === surface);
+				const preferred = preferences.app[surface] ?? builtin;
+				const windowChoice = preferences.window[surface] ?? "";
+				const label =
+					surface === "feedback"
+						? "Feedback"
+						: surface === "threadList"
+							? "Thread list"
+							: surface === "titleBar"
+								? "Title bar"
+								: surface[0]!.toUpperCase() + surface.slice(1);
+				return (
+					<div key={surface} className="flex flex-col gap-3">
+						<label className="flex flex-wrap items-center justify-between gap-3 text-sm">
+							{label} provider
+							<select
+								aria-label={`${label} provider`}
+								className="kc-input max-w-80 border-line-strong"
+								value={preferred}
+								onChange={(event) =>
+									run(
+										client.host("host/desktopExtension/provider/set", {
+											surface: surface as ProviderSurface,
+											scope: "app",
+											provider: event.target.value,
+										}),
+									)
+								}
+							>
+								{available.map((entry) => (
+									<option key={entry.id} value={entry.id}>
+										{entry.id}
+									</option>
+								))}
+								{!available.some((entry) => entry.id === preferred) ? (
+									<option value={preferred}>{preferred} (unavailable; using built-in)</option>
+								) : null}
+							</select>
+						</label>
+						<label className="flex flex-wrap items-center justify-between gap-3 text-sm">
+							{label} provider for this window
+							<select
+								aria-label={`${label} provider for this window`}
+								className="kc-input max-w-80 border-line-strong"
+								value={windowChoice}
+								onChange={(event) =>
+									run(
+										client.host("host/desktopExtension/provider/set", {
+											surface: surface as ProviderSurface,
+											scope: "window",
+											provider: event.target.value,
+										}),
+									)
+								}
+							>
+								<option value="">Use app default</option>
+								{available.map((entry) => (
+									<option key={entry.id} value={entry.id}>
+										{entry.id}
+									</option>
+								))}
+								{windowChoice && !available.some((entry) => entry.id === windowChoice) ? (
+									<option value={windowChoice}>{windowChoice} (unavailable)</option>
+								) : null}
+							</select>
+						</label>
+					</div>
+				);
+			})}
 		</section>
 	);
 }
@@ -217,12 +237,19 @@ export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 export function NativeExtensionRecovery({ context }: { context: experimental_CommandContext }) {
 	const failures = useSyncExternalStore(externalState.subscribe, externalState.getFailures);
 	const preferences = useSyncExternalStore(externalState.subscribe, externalState.getProviders);
-	const preferred = preferences.window.feedback ?? preferences.app.feedback;
 	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot);
-	const unavailable =
-		preferred &&
-		desktopExtensions.resolveProvider("feedback", "builtin.feedback/toasts", preferred, context)?.id !== preferred;
-	if (failures.size === 0 && !unavailable) return null;
+	const chosen = Object.entries(STRUCTURAL_BUILTINS).flatMap(([surface, builtin]) => {
+		const preferred = preferences.window[surface] ?? preferences.app[surface];
+		return preferred &&
+			preferred !== builtin &&
+			(desktopExtensions.resolveProvider(surface as ProviderSurface, builtin, preferred, context)?.id !== preferred ||
+				failures.has(preferred.split("/")[0]!))
+			? [{ surface: surface as ProviderSurface, builtin, preferred }]
+			: [];
+	})[0];
+	const preferred = chosen?.preferred;
+	const unavailable = !!chosen;
+	if (failures.size === 0 && !chosen) return null;
 	return (
 		<aside
 			role="alert"
@@ -231,7 +258,7 @@ export function NativeExtensionRecovery({ context }: { context: experimental_Com
 		>
 			<p>
 				{unavailable
-					? "The selected feedback provider is unavailable. Using the built-in."
+					? `The selected ${chosen!.surface} provider is unavailable. Using the built-in.`
 					: "A desktop extension failed. Working UI is retained where possible; failed views use the built-in."}
 			</p>
 			<div className="flex flex-wrap gap-2">
@@ -244,9 +271,9 @@ export function NativeExtensionRecovery({ context }: { context: experimental_Com
 					onClick={() => {
 						void client
 							.host("host/desktopExtension/provider/set", {
-								surface: "feedback",
-								scope: preferences.window.feedback ? "window" : "app",
-								provider: "builtin.feedback/toasts",
+								surface: chosen?.surface ?? "feedback",
+								scope: chosen && preferences.window[chosen.surface] ? "window" : "app",
+								provider: chosen?.builtin ?? "builtin.feedback/toasts",
 							})
 							.catch((error: unknown) => toast(errorText(error), "error"));
 					}}
