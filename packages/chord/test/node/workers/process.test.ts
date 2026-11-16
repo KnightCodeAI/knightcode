@@ -65,11 +65,16 @@ describe("a worker process", () => {
 		// Only the leader ends: its grandchild holds the channel, which closes by itself only once the tree was killed,
 		// at the exit.
 		process.kill(child.pid, "SIGTERM");
-		// Windows reports that termination as exit code 1 and no signal name.
+		// Windows reports that termination as exit code 1 and no signal name. The channel is not fd 3 there, so its
+		// own close can arrive before the exit and is told as `link closed`.
 		const exited = await child.exited;
 		if (process.platform === "win32") expect(exited).toEqual({ code: 1, signal: null });
 		else expect(exited).toEqual({ code: null, signal: "SIGTERM" });
 		await new Promise((resolve) => setTimeout(resolve, 100));
-		expect(events).toEqual(["started", "closed", "exited"]);
+		expect(events).toContain("started");
+		expect(events).toContain("closed");
+		expect(events.indexOf("closed")).toBeLessThan(events.indexOf("exited"));
+		expect(events).not.toContain("link lost");
+		if (process.platform !== "win32") expect(events).toEqual(["started", "closed", "exited"]);
 	});
 });
