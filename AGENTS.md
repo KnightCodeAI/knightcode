@@ -48,6 +48,7 @@ change flags, settings, keybindings, providers, or the session format.
 ## Code Quality
 
 - Read files in full before wide-ranging changes, before editing files you have not fully inspected, and when asked to investigate or audit. Do not rely on search snippets for broad changes.
+- Before recommending a fix design, check how sibling implementations (other adapters, providers, commands) handle the same concern, and follow that pattern. If you deviate, say why.
 - Formatting is Prettier, configured in `.prettierrc`: tabs, 120 columns, LF. `bun run format` formats `.ts`/`.tsx`; check without writing via `bun x prettier --check "**/*.ts"`. Prose is not formatted — Markdown is hand-wrapped, keep it that way.
 - `.prettierignore` covers what must not be touched: generated model catalogs, test fixtures (several are deliberately malformed), Changesets-owned changelogs, and `apps/` (own config and toolchain). Don't format those by hand either.
 - No `any` unless absolutely necessary.
