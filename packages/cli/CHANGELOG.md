@@ -1,5 +1,43 @@
 # @knightcodeai/cli
 
+## 0.24.2
+
+### Added
+
+- Added GPT-6.2 Astra and GPT-6.2 Sol. On Codex, Astra has a 272K context window and Sol has a 500K context window.
+
+### Changed
+
+- Changed the default OpenAI, Azure, and Codex model to GPT-6.2 Sol.
+
+### Fixed
+
+- Fixed session replacement so startup diagnostics are written to the error stream instead of over the interactive screen.
+
+- Fixed RPC session replacement so the session start event is emitted once.
+
+- Fixed JSON print mode so session start events are streamed as they happen.
+
+- Fixed a session reload so the session start event runs after extensions are bound again.
+
+- Fixed model fallback after resuming a session so the diagnostic is reported in every mode.
+
+- Fixed an extension event handler that throws so the error is reported instead of printed over the screen.
+
+- Fixed package installs from git so their output is captured while the interactive screen is up, and a credential prompt tells you to use a helper or an ssh agent.
+
+- Fixed a changelog that cannot be parsed so the error stays off the screen and no notes are shown.
+
+- Fixed a Codex turn that stops when the websocket reaches its 60-minute connection limit so the turn is retried on a new connection.
+
+- Fixed Mistral tool calls that could stay silent for minutes when a tool asked for strict JSON. Strict sampling is sent only when the model sets `compat.supportsStrictMode`.
+
+- Fixed fullscreen scrolling so the work stays proportional to the rows on screen.
+
+### Security
+
+- Security Updated the HTTP client from 8.12.3 to 8.12.4. A redirect chain is no longer cached under the wrong address, credentials no longer follow a cross-origin redirect when headers are sent as name/value pairs, and a failure while replaying a cached response is reported as a request error instead of crashing the process.
+
 ## 0.24.1
 
 ### Added
