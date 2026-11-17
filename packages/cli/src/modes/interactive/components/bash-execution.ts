@@ -92,7 +92,7 @@ export class BashExecutionComponent extends Container {
 		this.outputPad = outputPad;
 	}
 
-	override render(width: number): string[] {
+	override render(width: number): readonly string[] {
 		const pad = Math.max(0, this.outputPad);
 		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
 	}
@@ -175,7 +175,7 @@ export class BashExecutionComponent extends Container {
 				// Use shared visual truncation utility with width-aware caching
 				const styledOutput = previewLogicalLines.map((line) => theme.fg("muted", line)).join("\n");
 				let cachedWidth: number | undefined;
-				let cachedLines: string[] | undefined;
+				let cachedLines: readonly string[] | undefined;
 				this.contentContainer.addChild({
 					render: (width: number) => {
 						if (cachedLines === undefined || cachedWidth !== width) {

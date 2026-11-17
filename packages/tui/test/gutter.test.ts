@@ -6,7 +6,7 @@ import { encodeKitty } from "../src/terminal-image.ts";
 import type { Component } from "../src/tui.ts";
 import { visibleWidth } from "../src/utils.ts";
 
-function trimmed(lines: string[]): string[] {
+function trimmed(lines: readonly string[]): string[] {
 	return lines.map((line) => line.trimEnd());
 }
 
