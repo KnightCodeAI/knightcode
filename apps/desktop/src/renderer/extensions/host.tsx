@@ -8,12 +8,21 @@ import navigation from "../builtins/navigation/index.tsx";
 import threadList, { SharedThreadRow } from "../builtins/thread-list/index.tsx";
 import home from "../builtins/home/index.tsx";
 import titleBar from "../builtins/title-bar/index.tsx";
-import { controls, shellServices, useNavigation, useThreadList } from "./shell-bindings.tsx";
+import conversation from "../builtins/conversation/index.tsx";
+import threadHeader from "../builtins/thread-header/index.tsx";
+import requests from "../builtins/requests/index.tsx";
+import { conversationServices, ItemRenderer, MessageActions } from "./conversation.tsx";
+import composer, { ComposerFrame } from "../builtins/composer/index.tsx";
+import { TextareaEditor } from "../builtins/composer/editor.tsx";
+import { ComposerRoot, ComposerContributions, useComposer, useComposerEditor } from "./composer-root.tsx";
+import { client } from "../client.ts";
+import { controls, shellServices, useNavigation, useThreadList, pickerServices } from "./shell-bindings.tsx";
 import { HostContent, Slots, StructuralSurface } from "./structural.tsx";
 import { Button, Kbd } from "../components/button.tsx";
 import * as icons from "../components/icons.tsx";
 import { bindingLabel } from "../keys.ts";
-import { useStore } from "../store.ts";
+import { composerDraftOf, useStore } from "../store.ts";
+import { composerController, composerKey, mountEditor } from "./composer-controller.ts";
 import { controllers } from "./controllers.ts";
 import { desktopExtensions } from "./runtime.ts";
 import { OwnedPortal } from "./surface.tsx";
@@ -22,7 +31,22 @@ import { useCommandContext } from "./command-context.ts";
 import { NativeExtensionRecovery } from "./settings.tsx";
 
 export function initializeDesktopExtensions(): () => void {
+	const lifetime = new AbortController();
 	const host: experimental_DesktopHost = {
+		experimental_conversationServices: conversationServices,
+		experimental_pickerServices: pickerServices,
+		experimental_ItemRenderer: (props) => createElement(ItemRenderer, props),
+		experimental_MessageActions: (props) => createElement(MessageActions, props),
+		experimental_ComposerRoot: (props) => createElement(ComposerRoot, props),
+		experimental_ComposerFrame: (props) => createElement(ComposerFrame, props),
+		experimental_TextareaEditor: () => createElement(TextareaEditor),
+		experimental_useComposer: useComposer,
+		experimental_useComposerEditor: useComposerEditor,
+		experimental_ComposerContributions: (props) => createElement(ComposerContributions, props),
+		experimental_imageThumbnail: async (path) => (await client.host("host/image/thumbnail", { path })).dataUrl,
+		experimental_composer: (target) => composerController(target, lifetime.signal),
+		experimental_attachComposerEditor: (target, adapter) => mountEditor(target, adapter, lifetime.signal),
+		experimental_useComposerDraft: (target) => useStore((s) => composerDraftOf(s, composerKey(target))),
 		experimental_controllers: controllers,
 		experimental_useNavigation: useNavigation,
 		experimental_useThreadList: useThreadList,
@@ -49,9 +73,14 @@ export function initializeDesktopExtensions(): () => void {
 		desktopExtensions.register("builtin.thread-list", threadList),
 		desktopExtensions.register("builtin.home", home),
 		desktopExtensions.register("builtin.title-bar", titleBar),
+		desktopExtensions.register("builtin.composer", composer),
+		desktopExtensions.register("builtin.thread-header", threadHeader),
+		desktopExtensions.register("builtin.requests", requests),
+		desktopExtensions.register("builtin.conversation", conversation),
 	];
 	const disposeExternal = startExternalExtensions(desktopExtensions);
 	const dispose = () => {
+		lifetime.abort();
 		disposeExternal();
 		for (const handle of handles) handle.dispose();
 		if (globalThis.__knightcodeDesktop === host) globalThis.__knightcodeDesktop = undefined;

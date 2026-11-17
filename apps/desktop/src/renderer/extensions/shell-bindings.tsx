@@ -4,24 +4,25 @@ import type {
 	experimental_ShellServices,
 	experimental_NavigationState,
 	experimental_ThreadListState,
+	experimental_PickerServices,
 } from "@knightcodeai/cli/desktop";
 import { useSyncExternalStore } from "react";
 import { client } from "../client.ts";
 import { SIDEBAR_WIDTH, WINDOW_CHROME } from "../../shared/host-protocol.ts";
 import { DESKTOP_KEYBINDINGS, type KeybindingId } from "../../shared/keybindings.ts";
-import { IconButton } from "../components/button.tsx";
+import { IconButton, Kbd } from "../components/button.tsx";
 import { showContextMenu } from "../components/context-menu.ts";
 import { ConfirmDialog } from "../components/dialog.tsx";
 import { Composer } from "../components/composer.tsx";
 import { ProjectPicker } from "../components/composer-pickers.tsx";
 import * as menu from "../components/menu.tsx";
 import { NavRow } from "../components/nav-row.tsx";
-import { HoverCard } from "../components/popover.tsx";
+import { HoverCard, Popover, ListRow, ListSeparator } from "../components/popover.tsx";
 import { RenameThreadDialog, DeleteThreadDialog, threadActions } from "../components/thread-actions.tsx";
 import { Tooltip } from "../components/tooltip.tsx";
 import { followDrag } from "../drag.ts";
-import { basename, samePath, messageTime } from "../format.ts";
-import { bindingLabel, isMac, matches } from "../keys.ts";
+import { basename, samePath, messageTime, tokens, clockTime, duration } from "../format.ts";
+import { bindingLabel, isMac, matches, isControl, isEditable, useBinding, useBindings } from "../keys.ts";
 import { sidebarModel, threadSlots, selectRows } from "../sidebar-model.ts";
 import {
 	archiveThreads,
@@ -30,6 +31,7 @@ import {
 	installUpdate,
 	openUpdatePage,
 	selectProjects,
+	selectPreferences,
 	selectUnread,
 	setFinding,
 	setPaletteOpen,
@@ -68,6 +70,12 @@ export function useThreadList(): experimental_ThreadListState {
 	return { threads, projects, pins, unread, folded, organize, sort, width };
 }
 
+export const pickerServices: experimental_PickerServices = {
+	experimental_useModels: () => useStore((s) => s.models),
+	experimental_useAllowFullAccess: () => useStore((s) => selectPreferences(s).allowFullAccess),
+	experimental_useProjects: () => useStore(selectProjects),
+};
+
 export const controls: experimental_Controls = {
 	experimental_IconButton: IconButton,
 	experimental_Menu: menu.Menu,
@@ -76,6 +84,11 @@ export const controls: experimental_Controls = {
 	experimental_MenuItem: menu.MenuItem,
 	experimental_MenuSub: menu.MenuSub,
 	experimental_MenuSeparator: menu.MenuSeparator,
+	experimental_Kbd: Kbd,
+	experimental_MenuLabel: menu.MenuLabel,
+	experimental_ListRow: ListRow,
+	experimental_ListSeparator: ListSeparator,
+	experimental_Popover: Popover,
 	experimental_MenuRadioGroup: menu.MenuRadioGroup,
 	experimental_MenuRadioItem: menu.MenuRadioItem,
 	experimental_HoverCard: HoverCard,
@@ -93,9 +106,24 @@ export const shellServices: experimental_ShellServices = {
 	experimental_platform: window.knightcode?.platform ?? "unknown",
 	experimental_titleBarHeight: WINDOW_CHROME.titleBarHeight,
 	experimental_sidebarWidth: SIDEBAR_WIDTH,
+	experimental_tokens: tokens,
 	experimental_basename: basename,
 	experimental_samePath: samePath,
 	experimental_messageTime: messageTime,
+	experimental_clockTime: clockTime,
+	experimental_duration: duration,
+	experimental_isControl: isControl,
+	experimental_isEditable: isEditable,
+	experimental_useBinding: (id, handler, enabled = true) =>
+		useBinding(id as KeybindingId, handler, enabled && id in DESKTOP_KEYBINDINGS),
+	experimental_useBindings: (actions, enabled) =>
+		useBindings(
+			actions.map((action) => ({
+				...action,
+				binding: action.binding && action.binding in DESKTOP_KEYBINDINGS ? (action.binding as KeybindingId) : undefined,
+			})),
+			enabled,
+		),
 	experimental_isMac: isMac,
 	experimental_bindingLabel: (id) => (id in DESKTOP_KEYBINDINGS ? bindingLabel(id as KeybindingId) : ""),
 	experimental_matches: (event, id) => id in DESKTOP_KEYBINDINGS && matches(event, id as KeybindingId),

@@ -259,3 +259,36 @@ Windows verification after S3 (`206be8558`) merged with main (`156fcb434`):
   but light-narrow `git-pull-request-form.png` omitted +0/-0 totals present in
   its baseline (41 pixels changed). No baseline was updated. The full zero-diff
   gate remains **not passed**; Git total readiness is inconsistent at capture.
+
+### S5 — composer, conversation, requests and contextual commands
+
+Windows verification on 2026-11-17 after S4 (`4c77893e1`) and the required
+origin/main merge (`287f1e69b`):
+
+- Windows server staging and `bun run package`: passed. Shipped SDK declarations,
+  portable read models and author guide have the same SHA-256 values as source.
+- Full `cd apps/desktop && bun run test:e2e`: **25/25 passed** (2.0 min).
+  The three real-loader S5 cases cover the shipped contenteditable/action/message
+  examples, native consent, UTF-16 edits, focus/caret, popup staleness, locks,
+  plain-text/image paste, mixed image/file drop, configured keys and suggestion
+  precedence, IME/provider deferral, attachments, stale handles/callbacks,
+  queue/steer/stop, single hosts/listener, and request presenter recovery.
+- Plain `cd apps/desktop && bun run test:parity`: **88/88 passed, zero changed
+  pixels** (8.9 min), light/dark and wide/narrow. No baseline, fixture, mask,
+  threshold or retry policy changed. No outer E2E isolation wrapper was used.
+- Root and desktop type checks, zero-exception extension import audit, generated
+  API/example check, changeset self-check and whitespace check: passed.
+- Full desktop units: **245 passed, 7 skipped**, across 43 passing files and one
+  skipped file. Focused CLI docs/models/artifact/authoring tests: **29/29 passed**.
+- `bun run test:profiler`: passed in a real isolated Electron renderer. With 30
+  completed turns, one live turn and 80 deltas, S4/current each recorded **160
+  commits per turn and 160 composer commits**. Browser probes also verify plan
+  and steered-message replacement and explicit item contexts. Durations are
+  diagnostic only; no performance tolerance hides extra commits.
+- Self-review found and regression-tested unchanged selection-report renders,
+  Windows newline offsets, attachment/IME revision races, delayed thread-start
+  navigation, stale request replies and mixed-drop ordering. No independent
+  reviewer tool was available.
+- See [composer.md](composer.md) for boundaries, decisions and the runnable
+  profiler. Native macOS/Linux execution and S6 backend epochs remain outside
+  this slice.

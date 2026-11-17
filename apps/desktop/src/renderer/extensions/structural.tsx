@@ -1,5 +1,5 @@
 /** Structural mounting remains host-owned; providers cannot replace recovery controls or native authority. */
-import type { experimental_Surface, experimental_Thread } from "@knightcodeai/cli/desktop";
+import type { experimental_CommandContext, experimental_Surface, experimental_Thread } from "@knightcodeai/cli/desktop";
 import { createContext, type ReactNode, useContext, useSyncExternalStore, Component } from "react";
 import { Button } from "../components/button.tsx";
 import { CircleAlert } from "../components/icons.tsx";
@@ -79,14 +79,16 @@ export function Slots({
 	surface,
 	thread,
 	cwd,
+	context: explicitContext,
 }: {
 	surface: experimental_Surface;
 	thread?: experimental_Thread;
 	cwd?: string;
+	context?: experimental_CommandContext;
 }) {
 	const captured = useCommandContext();
 	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot);
-	const context = {
+	const context = explicitContext ?? {
 		...captured,
 		...(thread ? { row: thread, thread: { id: thread.id, cwd: thread.cwd }, cwd: thread.cwd } : {}),
 		...(cwd ? { cwd } : {}),

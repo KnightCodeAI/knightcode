@@ -1,0 +1,10 @@
+{
+  "name": "03-contenteditable",
+  "type": "module",
+  "knightcode": {
+    "desktop": {
+      "frontend": "./app.tsx",
+      "styles": ["./app.css"]
+    }
+  }
+}

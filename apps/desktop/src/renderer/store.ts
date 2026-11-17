@@ -5,7 +5,7 @@
  */
 
 import { useSyncExternalStore } from "react";
-import type { experimental_Toast } from "@knightcodeai/cli/desktop";
+import type { experimental_Toast, experimental_ComposerDraft } from "@knightcodeai/cli/desktop";
 import type {
 	ApprovalMode,
 	ApprovalResult,
@@ -160,14 +160,13 @@ export type View =
 	| { kind: "page"; id: string };
 export type Accounts = ResultOf<"account/list">;
 
-export interface ComposerDraft {
-	text: string;
-	images: string[];
+export interface ComposerDraft extends experimental_ComposerDraft {
+	restorations?: Pick<experimental_ComposerDraft, "text" | "images">[];
 }
-const EMPTY_COMPOSER_DRAFT: ComposerDraft = { text: "", images: [] };
+const EMPTY_COMPOSER_DRAFT: ComposerDraft = { text: "", images: [], revision: 0 };
 
 export interface State {
-	/** Drafts outlive layout/provider mounts; editor transactions are introduced separately. */
+	/** Canonical drafts and revisions outlive layout/provider and editor mounts. */
 	composerDrafts: Record<string, ComposerDraft>;
 	server: { state: "starting" | "ready" | "restarting" | "failed"; message?: string };
 	/** Turns whose edits were undone (by turn id), so their card offers Reapply after it remounts. */
@@ -275,8 +274,72 @@ export const getState = (): State => state;
 export const composerDraftOf = (s: State, key: string): ComposerDraft => s.composerDrafts[key] ?? EMPTY_COMPOSER_DRAFT;
 
 /** Update the host-owned draft; surface disposal never clears it. */
-export function setComposerDraft(key: string, update: (draft: ComposerDraft) => ComposerDraft): void {
-	set((s) => ({ ...s, composerDrafts: { ...s.composerDrafts, [key]: update(composerDraftOf(s, key)) } }));
+export function setComposerDraft(key: string, update: (draft: ComposerDraft) => Omit<ComposerDraft, "revision">): void {
+	set((s) => {
+		const before = composerDraftOf(s, key);
+		const next = update(before);
+		const changed =
+			next.text !== before.text ||
+			next.images.length !== before.images.length ||
+			next.images.some((path, i) => path !== before.images[i]);
+		const selection = next.text !== before.text && next.selection === before.selection ? undefined : next.selection;
+		const sameSelection =
+			selection === before.selection ||
+			(selection &&
+				before.selection &&
+				selection.start === before.selection.start &&
+				selection.end === before.selection.end &&
+				selection.direction === before.selection.direction);
+		if (
+			!changed &&
+			sameSelection &&
+			next.focused === before.focused &&
+			next.composing === before.composing &&
+			next.locked === before.locked &&
+			next.restorations === before.restorations
+		)
+			return s;
+		return {
+			...s,
+			composerDrafts: {
+				...s.composerDrafts,
+				[key]: {
+					...next,
+					...(selection !== next.selection ? { selection } : {}),
+					revision: before.revision + Number(changed),
+				},
+			},
+		};
+	});
+}
+
+/** A failed start can arrive during newer typing; keep its draft until the current composition ends. */
+export function queueComposerRestoration(
+	key: string,
+	failed: Pick<experimental_ComposerDraft, "text" | "images">,
+): void {
+	setComposerDraft(key, (d) => ({ ...d, restorations: [...(d.restorations ?? []), failed] }));
+}
+
+/** Restore rejected input before newer text without overwriting it or losing a retained selection. */
+export function applyComposerRestorations(key: string): boolean {
+	const before = composerDraftOf(state, key);
+	if (before.composing || before.locked || !before.restorations?.length) return false;
+	const failed = before.restorations;
+	setComposerDraft(key, (d) => {
+		const texts = failed.map((value) => value.text).filter((value) => value.length > 0);
+		const prefix = texts.length ? texts.join("\n\n") + (d.text ? "\n\n" : "") : "";
+		return {
+			...d,
+			text: prefix + d.text,
+			images: [...new Set([...failed.flatMap((value) => value.images), ...d.images])],
+			selection: d.selection
+				? { ...d.selection, start: d.selection.start + prefix.length, end: d.selection.end + prefix.length }
+				: undefined,
+			restorations: undefined,
+		};
+	});
+	return true;
 }
 
 const NO_PROJECTS: DesktopState["projects"] = [];
@@ -962,9 +1025,11 @@ export async function startThread(
 	},
 	images?: ImageInput[],
 ): Promise<void> {
+	const origin = state.view;
 	const { thread, warnings, ui } = await client.request("thread/start", { cwd, ...options });
 	for (const warning of warnings) toast(warning.message);
-	navigate({ kind: "thread", id: thread.id });
+	// The admitted prompt still runs, but its delayed result must not replace a newer view.
+	if (state.view === origin) navigate({ kind: "thread", id: thread.id });
 	set((s) => ({
 		...s,
 		held: {
@@ -1103,15 +1168,19 @@ export function dismissPending(threadId: string, clientMessageId: string): void 
 	updateThread(threadId, (v) => ({ ...v, pending: v.pending.filter((p) => p.clientMessageId !== clientMessageId) }));
 }
 
-export function answerApproval(threadId: string, approval: Approval, result: ApprovalResult): void {
+export function answerApproval(threadId: string, approval: Approval, result: ApprovalResult): boolean {
+	if (state.held[threadId]?.requests[0] !== approval || approval.params.threadId !== threadId) return false;
 	client.respond<"item/toolCall/requestApproval">(approval.id, result);
 	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== approval.id) }));
+	return true;
 }
 
 /** Answer a dialog: `value` for a select, input or editor, `confirmed` for a confirm, nothing to cancel. */
-export function answerDialog(threadId: string, dialog: Dialog, result: ServerRequestResult<"ui/dialog">): void {
+export function answerDialog(threadId: string, dialog: Dialog, result: ServerRequestResult<"ui/dialog">): boolean {
+	if (state.held[threadId]?.requests[0] !== dialog || dialog.params.threadId !== threadId) return false;
 	client.respond<"ui/dialog">(dialog.id, result);
 	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== dialog.id) }));
+	return true;
 }
 
 /** Answer ask_user's questions: each by its id, skipped ones left out; `{}` dismisses them and stops the turn. */
@@ -1119,9 +1188,11 @@ export function answerQuestions(
 	threadId: string,
 	request: UserInput,
 	result: ServerRequestResult<"item/toolCall/requestUserInput">,
-): void {
+): boolean {
+	if (state.held[threadId]?.requests[0] !== request || request.params.threadId !== threadId) return false;
 	client.respond<"item/toolCall/requestUserInput">(request.id, result);
 	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== request.id) }));
+	return true;
 }
 
 export async function updateSettings(

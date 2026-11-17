@@ -18,6 +18,7 @@
 		"lint:extensions": "bun scripts/check-extension-imports.ts",
 		"test": "vitest --run",
 		"test:e2e": "playwright test",
+		"test:profiler": "node test/profiler/streaming.mts",
 		"test:parity": "playwright test --config=playwright.parity.config.ts"
 	},
 	"devDependencies": {

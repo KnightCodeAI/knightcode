@@ -1,0 +1,1 @@
+.content-editor { display: block; max-height: 300px; min-height: 44px; width: 100%; overflow-y: auto; white-space: pre-wrap; background: transparent; padding: 0 12px; font-size: var(--kc-size-ui); line-height: 20px; outline: none; }

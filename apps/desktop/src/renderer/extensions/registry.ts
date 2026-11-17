@@ -134,6 +134,18 @@ export class ExtensionRegistry {
 			experimental_registerCommand: (contribution) =>
 				add({ ...metadata(contribution.id), kind: "command", contribution }),
 			experimental_registerSlot: (contribution) => add({ ...metadata(contribution.id), kind: "slot", contribution }),
+			experimental_registerItemRenderer: (contribution) =>
+				add({
+					...metadata(contribution.id),
+					kind: "slot",
+					contribution: { ...contribution, surface: "transcriptItem" },
+				}),
+			experimental_registerMessageAction: (contribution) =>
+				add({
+					...metadata(contribution.id),
+					kind: "slot",
+					contribution: { ...contribution, surface: "messageActions" },
+				}),
 			experimental_registerProvider: (contribution) =>
 				add({ ...metadata(contribution.id), kind: "provider", contribution }),
 			experimental_onDispose: (cleanup) => {

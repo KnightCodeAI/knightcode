@@ -6,5 +6,8 @@ export const STRUCTURAL_BUILTINS = {
 	threadList: "builtin.thread-list/default",
 	home: "builtin.home/default",
 	titleBar: "builtin.title-bar/default",
+	composer: "builtin.composer/default",
+	threadHeader: "builtin.thread-header/default",
+	requests: "builtin.requests/default",
 } as const;
 export type ProviderSurface = keyof typeof STRUCTURAL_BUILTINS;

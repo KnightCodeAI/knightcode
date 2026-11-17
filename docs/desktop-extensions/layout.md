@@ -5,6 +5,8 @@ Built-in layout, navigation, thread list, home and title-bar presenters live in
 through the public SDK before first paint. The import audit has no exceptions.
 `store.ts` remains the state implementation; typed read hooks and intent
 facades live in `renderer/extensions/controllers.ts` and `shell-bindings.tsx`.
+Composer, thread-header, transcript and request boundaries added by S5 are
+recorded in [composer.md](composer.md).
 
 ## Boundaries
 

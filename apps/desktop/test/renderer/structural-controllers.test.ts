@@ -1,4 +1,8 @@
-import { experimental_controllers } from "@knightcodeai/cli/desktop";
+import {
+	experimental_controllers,
+	experimental_composer,
+	experimental_attachComposerEditor,
+} from "@knightcodeai/cli/desktop";
 import { afterEach, expect, test, vi } from "vitest";
 
 const host = vi.hoisted(() => vi.fn(async () => ({})));
@@ -58,10 +62,78 @@ test("draft text and attachments belong to the store, not a replaceable surface 
 	} finally {
 		dispose();
 	}
-	expect(composerDraftOf(getState(), "thread:A")).toEqual({ text: "unsent", images: ["/image.png"] });
-	expect(composerDraftOf(getState(), "thread:B")).toEqual({ text: "", images: [] });
+	expect(composerDraftOf(getState(), "thread:A")).toEqual({ text: "unsent", images: ["/image.png"], revision: 1 });
+	expect(composerDraftOf(getState(), "thread:B")).toEqual({ text: "", images: [], revision: 0 });
 	setComposerDraft("thread:A", () => ({ text: "", images: [] }));
-	expect(composerDraftOf(getState(), "thread:A")).toEqual({ text: "", images: [] });
+	expect(composerDraftOf(getState(), "thread:A")).toEqual({ text: "", images: [], revision: 2 });
+});
+
+test("the public composer facade inserts into an explicitly mounted editor, not the current thread", () => {
+	const dispose = initializeDesktopExtensions();
+	try {
+		const target = { threadId: "public-editor-A" };
+		let text = "";
+		const attached = experimental_attachComposerEditor(target, {
+			experimental_read: () => ({
+				text,
+				selection: { start: 0, end: 0, direction: "none" },
+				focused: true,
+				composing: false,
+			}),
+			experimental_apply: (edit) => {
+				text = edit.text;
+			},
+			experimental_focus() {},
+			experimental_caretAnchor: () => undefined,
+		});
+		expect(attached.status).toBe("mounted");
+		if (attached.status !== "mounted") throw new Error("Editor refused");
+		try {
+			navigate({ kind: "thread", id: "public-editor-B" });
+			expect(experimental_composer(target).experimental_insert("A", 0)).toEqual({ status: "applied", revision: 1 });
+			expect(text).toBe("A");
+			expect(composerDraftOf(getState(), "thread:public-editor-A").text).toBe("A");
+			expect(composerDraftOf(getState(), "thread:public-editor-B").text).toBe("");
+		} finally {
+			attached.mount.dispose();
+		}
+	} finally {
+		dispose();
+	}
+});
+
+test("host disposal revokes saved editor calls and locks without letting an old disposer detach a new mount", () => {
+	const first = initializeDesktopExtensions();
+	const target = { threadId: "host-lifetime" };
+	const adapter = {
+		experimental_read: () => ({
+			text: "",
+			selection: { start: 0, end: 0, direction: "none" as const },
+			focused: true,
+			composing: false,
+		}),
+		experimental_apply() {},
+		experimental_focus() {},
+		experimental_caretAnchor: () => undefined,
+	};
+	const c = experimental_composer(target);
+	const old = experimental_attachComposerEditor(target, adapter);
+	const owner = new AbortController();
+	c.experimental_lock(owner.signal);
+	first();
+	expect(c.experimental_insert("old", 0)).toEqual({ status: "unavailable" });
+	c.experimental_lock(owner.signal);
+	const second = initializeDesktopExtensions();
+	const current = experimental_attachComposerEditor(target, adapter);
+	try {
+		if (old.status !== "mounted" || current.status !== "mounted") throw new Error("Editor refused");
+		old.mount.dispose();
+		expect(experimental_composer(target).experimental_insert("new", 0).status).toBe("applied");
+		current.mount.dispose();
+	} finally {
+		owner.abort();
+		second();
+	}
 });
 
 test("navigation facade preserves history and refuses absent pages and threads", async () => {

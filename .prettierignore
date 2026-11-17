@@ -10,6 +10,8 @@ packages/ai/src/providers/images/*.models.ts
 
 # Generated desktop SDK declarations; the API publication check owns their exact bytes.
 packages/cli/docs/desktop-sdk.d.ts
+packages/cli/docs/desktop-models.ts
+packages/cli/src/desktop-models.ts
 
 # Test fixtures are inputs, not source: several are deliberately malformed
 # (invalid YAML frontmatter, missing fields) and formatting them breaks the

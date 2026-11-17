@@ -30,6 +30,7 @@ import { basename, clockTime, dayLabel, SEPARATOR_GAP_MS } from "../format.ts";
 import { bindingLabel, matches, useBinding, useBindings } from "../keys.ts";
 import {
 	activateTab,
+	getState,
 	closeTab,
 	copyLastCodeBlock,
 	discardFileTab,
@@ -63,14 +64,14 @@ import { BottomRegion } from "./terminal.tsx";
 import { PreviewTab, previewTitle } from "./preview.tsx";
 import { type AppItem, McpAppView } from "./mcp-app.tsx";
 import { FileIcon } from "./file-icon.tsx";
-import { ApprovalCard } from "./approval.tsx";
-import { DialogCard, QuestionsCard } from "./request-card.tsx";
+import { ThreadHeaderSurface, RequestsSurface, bindTranscript } from "../extensions/conversation.tsx";
+import { controllers } from "../extensions/controllers.ts";
 import { Button, IconButton } from "./button.tsx";
 import { ChangesPane } from "./changes.tsx";
 import { FindBar } from "./find-bar.tsx";
 import { ThreadSummary } from "./git.tsx";
 import { Composer } from "./composer.tsx";
-import { TurnView, UserBubble } from "./items.tsx";
+import { TurnView, UserBubble } from "../builtins/conversation/items.tsx";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "./menu.tsx";
 import { boundActions, DeleteThreadDialog, RenameThreadDialog, threadActions } from "./thread-actions.tsx";
 import { Tooltip } from "./tooltip.tsx";
@@ -88,69 +89,6 @@ function DateSeparator({ at }: { at: number }) {
 				<span className="font-medium">{day}</span> {clockTime(at)}
 			</time>
 		</div>
-	);
-}
-
-/** Codex's "Chat actions" menu: an icon on every row, the copies gathered under one Copy submenu (thread-actions.tsx). */
-function ThreadMenu({ thread }: { thread: { id: string; cwd: string; name: string; sessionFile?: string } }) {
-	const { id } = thread;
-	const pinned = useStore((s) => (s.desktop?.pinnedThreads ?? NO_PINS).includes(id));
-	const unread = useStore((s) => selectUnread(s).includes(id));
-	const [dialog, setDialog] = useState<"rename" | "delete">();
-	const items = threadActions(thread, {
-		pinned,
-		unread,
-		open: true,
-		onRename: () => setDialog("rename"),
-		onDelete: () => setDialog("delete"),
-	});
-	// The open thread's shortcuts run the same actions as its menu, and Codex's "Copy last code block", which no menu
-	// lists.
-	useBindings([...boundActions(items), { binding: "desktop.thread.copyCode", run: () => copyLastCodeBlock(id) }]);
-	return (
-		<>
-			<Menu>
-				<MenuTrigger>
-					<IconButton label="Chat actions" className="no-drag">
-						<MoreHorizontal size={16} />
-					</IconButton>
-				</MenuTrigger>
-				<MenuContent align="end">
-					{items.map((item, i) => {
-						if (item === "-") return <MenuSeparator key={i} />;
-						const Icon = item.icon;
-						if ("items" in item)
-							return (
-								<MenuSub key={item.label} icon={Icon ? <Icon /> : undefined} label={item.label}>
-									{item.items.map((sub) => (
-										<MenuItem
-											key={sub.label}
-											hint={sub.binding ? bindingLabel(sub.binding) : undefined}
-											danger={sub.danger}
-											onSelect={sub.run}
-										>
-											{sub.label}
-										</MenuItem>
-									))}
-								</MenuSub>
-							);
-						return (
-							<MenuItem
-								key={item.label}
-								icon={Icon ? <Icon /> : undefined}
-								hint={item.binding ? bindingLabel(item.binding) : undefined}
-								danger={item.danger}
-								onSelect={item.run}
-							>
-								{item.label}
-							</MenuItem>
-						);
-					})}
-				</MenuContent>
-			</Menu>
-			{dialog === "rename" ? <RenameThreadDialog threadId={id} onClose={() => setDialog(undefined)} /> : null}
-			{dialog === "delete" ? <DeleteThreadDialog thread={thread} onClose={() => setDialog(undefined)} /> : null}
-		</>
 	);
 }
 
@@ -418,14 +356,11 @@ export function ThreadView({ id }: { id: string }) {
 	if (panelOpen && !panelShown) setPanelShown("opened");
 	const progress = useStore((s) => s.progress[id]);
 	const scroller = useRef<HTMLDivElement>(null);
-	const header = useRef<HTMLElement>(null);
 	const [pinned, setPinned] = useState(true);
-	const [renaming, setRenaming] = useState<string | undefined>();
 	const [loadingEarlier, setLoadingEarlier] = useState(false);
 
 	useEffect(() => {
 		setPinned(true);
-		setRenaming(undefined);
 	}, [id]);
 	useLayoutEffect(() => {
 		const el = scroller.current;
@@ -443,7 +378,29 @@ export function ThreadView({ id }: { id: string }) {
 		void loadTerminals(id).catch(() => {});
 	}, [id]);
 	const finding = useStore((s) => s.finding);
-	useBinding("desktop.thread.find", () => setFinding(true), !finding);
+	useBinding(
+		"desktop.thread.find",
+		() => {
+			controllers.experimental_runCommand("builtin.composer/find", {
+				sidebarOpen: getState().sidebarOpen,
+				thread: { id, cwd },
+				composer: { threadId: id },
+			});
+		},
+		!finding,
+	);
+	useLayoutEffect(
+		() =>
+			bindTranscript(id, {
+				scroll(to) {
+					const element = scroller.current;
+					if (!element) return;
+					setPinned(to === "bottom");
+					element.scrollTop = to === "bottom" ? element.scrollHeight : 0;
+				},
+			}),
+		[id],
+	);
 	// A find belongs to the thread it searched.
 	useEffect(() => () => setFinding(false), [id]);
 
@@ -452,11 +409,6 @@ export function ThreadView({ id }: { id: string }) {
 	useBinding("desktop.terminal.toggle", () => toggleTerminal(id, cwd), Boolean(view));
 	useBinding("desktop.terminal.new", () => void newTerminal(id, cwd), Boolean(view));
 	useBinding("desktop.preview.open", () => openPreview(id), Boolean(view));
-	const commitRename = () => {
-		const value = renaming?.trim();
-		setRenaming(undefined);
-		if (value && value !== name) void rename(id, value);
-	};
 
 	// An extension's title names the window while this thread is open in it; the thread's own name stays the user's.
 	const extensionTitle = view?.ui.title;
@@ -478,64 +430,7 @@ export function ThreadView({ id }: { id: string }) {
 			<div className="@container flex min-h-0 min-w-0 flex-1">
 				{/* Hidden, not unmounted, while the side panel is full screen, so the transcript and a draft stay put. */}
 				<div className={`h-full min-w-0 flex-1 flex-col ${panelFull ? "hidden" : "flex"}`}>
-					<header ref={header} className="flex h-[52px] shrink-0 items-center gap-2 ps-3.5 pe-1.5">
-						<Tooltip content={cwd} side="bottom" align="start">
-							<span
-								role="img"
-								aria-label={workspace?.mode === "worktree" ? `Worktree of ${project}` : `Project: ${project}`}
-								className="flex size-7 shrink-0 items-center justify-center text-tertiary"
-							>
-								{workspace?.mode === "worktree" ? <GitBranchPlus size={16} /> : <Folder size={16} />}
-							</span>
-						</Tooltip>
-						{renaming !== undefined ? (
-							<input
-								autoFocus
-								aria-label="Thread title"
-								value={renaming}
-								onChange={(e) => setRenaming(e.target.value)}
-								onBlur={commitRename}
-								onKeyDown={(e) => {
-									if (matches(e, "desktop.item.activate")) commitRename();
-									if (matches(e, "desktop.picker.dismiss")) {
-										e.preventDefault();
-										setRenaming(undefined);
-									}
-								}}
-								className="kc-input h-7 min-w-0 flex-1 text-base font-medium"
-							/>
-						) : (
-							<Tooltip content={name} side="bottom" align="start" overflow>
-								<button
-									type="button"
-									onDoubleClick={() => setRenaming(name)}
-									className="min-w-0 truncate px-1.5 text-start text-base leading-6 font-medium text-ink"
-								>
-									{name}
-								</button>
-							</Tooltip>
-						)}
-						<div className="flex-1" />
-						{view?.ui.statuses.map((status) => (
-							<Tooltip key={status.key} content={status.text} side="bottom">
-								<span className="max-w-[200px] shrink truncate rounded-md border border-line px-2 text-sm text-secondary">
-									{status.text}
-								</span>
-							</Tooltip>
-						))}
-						<div className="flex items-center gap-1.5">
-							<ThreadMenu thread={{ id, cwd, name, sessionFile: view?.thread.sessionFile }} />
-							{view ? <ThreadSummary thread={view.thread} anchor={header} /> : null}
-							{panelOpen ? null : (
-								<>
-									<div className="mx-px h-4 w-px bg-line" />
-									<IconButton label="Show tabs" className="no-drag" onClick={() => setPanel({ open: true })}>
-										<SquarePlus size={16} />
-									</IconButton>
-								</>
-							)}
-						</div>
-					</header>
+					<ThreadHeaderSurface threadId={id} />
 					{finding ? <FindBar root={scroller} onClose={() => setFinding(false)} /> : null}
 					<div
 						ref={scroller}
@@ -640,7 +535,13 @@ export function ThreadView({ id }: { id: string }) {
 								pill
 								aria-label="Scroll to bottom"
 								tabIndex={pinned ? -1 : 0}
-								onClick={() => setPinned(true)}
+								onClick={() =>
+									controllers.experimental_runCommand("builtin.composer/scroll-bottom", {
+										sidebarOpen: getState().sidebarOpen,
+										thread: { id, cwd },
+										composer: { threadId: id },
+									})
+								}
 								className={`absolute -top-14 left-1/2 -translate-x-1/2 bg-surface text-secondary transition-opacity duration-150 ${pinned ? "pointer-events-none opacity-0" : "opacity-100"}`}
 							>
 								<ArrowDown size={20} className="text-ink" />
@@ -657,13 +558,7 @@ export function ThreadView({ id }: { id: string }) {
 					{/* A request takes the composer's place; the composer stays mounted so a draft survives. */}
 					{/* Positioned so it paints over the transcript it overlaps. */}
 					<div className="relative">
-						{asking?.method === "item/toolCall/requestApproval" ? (
-							<ApprovalCard key={String(asking.id)} threadId={id} approval={asking} cwd={cwd} />
-						) : asking?.method === "ui/dialog" ? (
-							<DialogCard key={String(asking.id)} threadId={id} dialog={asking} />
-						) : asking?.method === "item/toolCall/requestUserInput" ? (
-							<QuestionsCard key={String(asking.id)} threadId={id} request={asking} />
-						) : null}
+						<RequestsSurface threadId={id} />
 						<div className={asking ? "hidden" : undefined}>
 							<Composer threadId={id} />
 						</div>

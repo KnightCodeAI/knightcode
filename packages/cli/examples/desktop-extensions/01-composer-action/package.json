@@ -1,0 +1,10 @@
+{
+  "name": "01-composer-action",
+  "type": "module",
+  "knightcode": {
+    "desktop": {
+      "frontend": "./app.tsx",
+      "styles": ["./app.css"]
+    }
+  }
+}

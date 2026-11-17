@@ -6,17 +6,36 @@
  * a decline with instructions. The buttons are Codex's composer pills: 28px, 8px in, 13px.
  */
 
-import { ChevronDown, FilePen, Hand, SquareTerminal } from "./icons.tsx";
 import { useEffect, useRef, useState } from "react";
-import { isControl, isEditable, matches, useBinding } from "../keys.ts";
-import { type Approval, answerApproval } from "../store.ts";
-import { Button, Kbd } from "./button.tsx";
-import { Tooltip } from "./tooltip.tsx";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./menu.tsx";
+import {
+	experimental_Button as Button,
+	experimental_controls,
+	experimental_icons,
+	experimental_shellServices,
+	experimental_conversationServices,
+	type experimental_Approval as Approval,
+} from "@knightcodeai/cli/desktop";
 
 const str = (value: unknown) => (typeof value === "string" ? value : "");
 
 export function ApprovalCard({ threadId, approval, cwd }: { threadId: string; approval: Approval; cwd: string }) {
+	const {
+		experimental_Tooltip: Tooltip,
+		experimental_Kbd: Kbd,
+		experimental_Menu: Menu,
+		experimental_MenuContent: MenuContent,
+		experimental_MenuItem: MenuItem,
+		experimental_MenuSeparator: MenuSeparator,
+		experimental_MenuTrigger: MenuTrigger,
+	} = experimental_controls();
+	const { ChevronDown, FilePen, Hand, SquareTerminal } = experimental_icons();
+	const {
+		experimental_isControl: isControl,
+		experimental_isEditable: isEditable,
+		experimental_matches: matches,
+		experimental_useBinding: useBinding,
+	} = experimental_shellServices();
+	const { experimental_answerApproval: answerApproval } = experimental_conversationServices();
 	const { params } = approval;
 	const ref = useRef<HTMLDivElement>(null);
 	const [explain, setExplain] = useState(false);
@@ -33,12 +52,13 @@ export function ApprovalCard({ threadId, approval, cwd }: { threadId: string; ap
 		if (!isEditable(active) || active?.closest("[data-composer]")) ref.current?.focus();
 	}, []);
 
-	const answer = (decision: "accept" | "acceptForSession" | "acceptPrefixForSession" | "decline", text?: string) =>
+	const answer = (decision: "accept" | "acceptForSession" | "acceptPrefixForSession" | "decline", text?: string) => {
 		answerApproval(
 			threadId,
 			approval,
 			decision === "decline" ? { decision, ...(text ? { message: text } : {}) } : { decision },
 		);
+	};
 
 	const kind = shell
 		? { icon: <SquareTerminal size={16} />, label: "Run command" }

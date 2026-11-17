@@ -8,10 +8,146 @@ import type {
 	MouseEvent,
 	ReactElement,
 	ReactNode,
+	RefObject,
 	SVGProps,
 } from "react";
 
 import type { DropdownMenu } from "radix-ui";
+
+import type * as Domain from "./desktop-models.ts";
+
+export type experimental_ViewItem = Domain.Item & { index?: number };
+
+export interface experimental_ViewTurn extends Omit<Domain.Turn, "items"> {
+	items: experimental_ViewItem[];
+}
+
+export type experimental_TurnFile = Domain.TurnFile;
+
+export type experimental_ApprovalMode = Domain.ApprovalMode;
+
+export type experimental_ThinkingLevel = Domain.ThinkingLevel;
+
+export type experimental_ModelInfo = Domain.ModelInfo;
+
+export interface experimental_PickerServices {
+	experimental_useModels(): Domain.ModelInfo[];
+	experimental_useAllowFullAccess(): boolean;
+	experimental_useProjects(): experimental_Project[];
+}
+
+export type experimental_ToolOutput = Domain.ToolOutput;
+
+export type experimental_BackgroundShell = Domain.BackgroundShell;
+
+export type experimental_BackgroundShellNotice = Domain.BackgroundShellNotice;
+
+export type experimental_DeclarativeView = Domain.View;
+
+export type experimental_AppItem = Extract<experimental_ViewItem, { type: "toolCall" }> & {
+	mcpApp: NonNullable<Extract<experimental_ViewItem, { type: "toolCall" }>["mcpApp"]>;
+};
+
+export type experimental_Approval = {
+	id: string | number;
+	method: "item/toolCall/requestApproval";
+	params: Domain.ApprovalParams;
+};
+
+export type experimental_Dialog = { id: string | number; method: "ui/dialog"; params: Domain.DialogParams };
+
+export type experimental_UserInput = {
+	id: string | number;
+	method: "item/toolCall/requestUserInput";
+	params: Domain.QuestionParams;
+};
+
+export type experimental_Request = experimental_Approval | experimental_Dialog | experimental_UserInput;
+
+export interface experimental_ThreadView {
+	thread: Domain.Thread;
+	turns: experimental_ViewTurn[];
+	queue: Domain.TurnQueue;
+	ui: Domain.UiSnapshot;
+	requests: experimental_Request[];
+	retry?: { attempt: number; maxAttempts: number; delayMs: number; error: string; at: number };
+	pending: { clientMessageId: string; text: string; images?: Domain.ImageInput[]; failed?: string }[];
+	nextCursor?: string;
+	backgroundShells?: Domain.BackgroundShell[];
+}
+
+export interface experimental_ThreadHeaderState {
+	name: string;
+	cwd: string;
+	project: string;
+	workspaceMode: "local" | "worktree";
+	statuses: { key: string; text: string }[];
+	sessionFile?: string;
+	pinned: boolean;
+	unread: boolean;
+	panelOpen: boolean;
+}
+
+export interface experimental_ConversationServices {
+	experimental_useThread(threadId: string): experimental_ThreadView | undefined;
+	experimental_useHeader(threadId: string): experimental_ThreadHeaderState;
+	experimental_useTurnStatus(threadId: string): {
+		idle: boolean;
+		cwd: string;
+		workingVisible: boolean;
+		workingMessage?: string;
+	};
+	experimental_useUndone(turnId: string): boolean;
+	experimental_useBackgroundState(
+		threadId: string | undefined,
+		id: string | undefined,
+	): Domain.BackgroundShell | Domain.BackgroundShellNotice | undefined;
+	experimental_openFile(threadId: string | undefined, path: string, line?: number): boolean;
+	experimental_ToolPatch: ComponentType<{ patch: string }>;
+	experimental_Totals: ComponentType<{ additions: number; deletions: number; className?: string }>;
+	experimental_readThread(threadId: string): experimental_ThreadView | undefined;
+	experimental_useRequest(threadId: string): experimental_Request | undefined;
+	experimental_dialogTitle(title: string): { question: string; body?: string };
+	experimental_dialogOption(option: string): { label: string; description?: string; recommended: boolean };
+	experimental_copyText(text: string): Promise<boolean>;
+	experimental_fork(threadId: string, atItemId?: string): Promise<void>;
+	experimental_resendEdited(
+		threadId: string,
+		turnId: string,
+		text: string,
+		images?: Domain.ImageInput[],
+	): Promise<void>;
+	experimental_showChanges(threadId: string, scope: "lastTurn"): void;
+	experimental_undoTurnEdits(threadId: string, turnId: string, reapply?: boolean): Promise<boolean>;
+	experimental_answerApproval(threadId: string, request: experimental_Approval, result: Domain.ApprovalResult): boolean;
+	experimental_answerDialog(threadId: string, request: experimental_Dialog, result: Domain.DialogResult): boolean;
+	experimental_answerQuestions(
+		threadId: string,
+		request: experimental_UserInput,
+		result: Domain.QuestionResult,
+	): boolean;
+	experimental_setPanelOpen(open: boolean): void;
+	experimental_copyLastCodeBlock(threadId: string): void;
+	experimental_loadEarlier(threadId: string): Promise<void>;
+	experimental_find(threadId: string, open: boolean): boolean;
+	experimental_scroll(threadId: string, to: "top" | "bottom"): boolean;
+	experimental_Markdown: ComponentType<{ text: string; tone?: "user" }>;
+	experimental_ViewNode: ComponentType<{ view: Domain.View }>;
+	experimental_McpAppCard: ComponentType<{ threadId: string; item: experimental_AppItem }>;
+	experimental_ThreadSummary: ComponentType<{ threadId: string; anchor: RefObject<HTMLElement | null> }>;
+	experimental_ActiveRow: ComponentType<{ item: Extract<experimental_ViewItem, { type: "toolCall" }>; cwd: string }>;
+	experimental_ToolRow: ComponentType<{
+		item: Extract<experimental_ViewItem, { type: "toolCall" }>;
+		cwd: string;
+		nested: Extract<experimental_ViewItem, { type: "toolCall" }>[];
+	}>;
+	experimental_ActivityGroup: ComponentType<{
+		items: Extract<experimental_ViewItem, { type: "toolCall" }>[];
+		cwd: string;
+		nestedOf(id: string): Extract<experimental_ViewItem, { type: "toolCall" }>[];
+	}>;
+	experimental_BackgroundNotices: ComponentType<{ notices: Domain.BackgroundShellNotice[] }>;
+}
 
 export declare const experimental_RUNTIME_IMPORTS: readonly ["@knightcodeai/cli/desktop", "react", "react-dom", "react/jsx-runtime", "radix-ui", "@pierre/diffs", "@pierre/trees", "typebox"];
 
@@ -26,6 +162,9 @@ export interface experimental_CommandContext {
 	cwd?: string;
 	sidebarOpen: boolean;
 	row?: experimental_Thread;
+	composer?: experimental_ComposerTarget;
+	item?: experimental_ViewItem;
+	request?: experimental_Request;
 }
 
 export type experimental_KeybindingId =
@@ -35,41 +174,109 @@ export type experimental_KeybindingId =
 	| "desktop.terminal.toggle"
 	| "desktop.terminal.new"
 	| "desktop.settings"
-	| "desktop.shortcuts";
+	| "desktop.shortcuts"
+	| "desktop.composer.send"
+	| "desktop.composer.steer"
+	| "desktop.turn.interrupt"
+	| "desktop.thread.find"
+	| "desktop.thread.copyCode";
 
 export type experimental_IconName =
-	| "SquarePen"
-	| "FolderOpen"
-	| "PanelLeft"
-	| "SquareTerminal"
-	| "Settings"
-	| "Keyboard"
-	| "CircleCheck"
-	| "CircleAlert"
-	| "Info"
-	| "X"
+	| "ChevronRight"
+	| "ChevronLeft"
+	| "ChevronDown"
+	| "ChevronUp"
+	| "ArrowUp"
+	| "ArrowDown"
+	| "Download"
 	| "ArrowLeft"
 	| "ArrowRight"
-	| "Download"
 	| "ArrowUpRight"
-	| "BookOpen"
-	| "CircleUserRound"
-	| "House"
-	| "LifeBuoy"
-	| "LogIn"
-	| "LogOut"
-	| "Archive"
-	| "ArrowDownUp"
-	| "ChevronRight"
-	| "Folder"
-	| "FolderPlus"
-	| "GitBranchPlus"
-	| "List"
+	| "ArrowLeftRight"
+	| "CornerDownLeft"
+	| "ExternalLink"
+	| "RefreshCw"
+	| "Plug"
+	| "Undo"
+	| "Spinner"
+	| "CollapseAll"
+	| "ExpandAll"
+	| "Maximize"
+	| "Minimize"
+	| "X"
+	| "Plus"
+	| "Minus"
+	| "Check"
 	| "MoreHorizontal"
+	| "Search"
+	| "Settings"
+	| "House"
+	| "File"
+	| "FileText"
+	| "FilePen"
+	| "FileDiff"
+	| "FileSearch"
+	| "Folder"
+	| "FolderOpen"
+	| "FolderPlus"
+	| "Folders"
+	| "GitBranch"
+	| "GitBranchPlus"
+	| "GitCommitHorizontal"
+	| "GitPullRequest"
+	| "GitPullRequestDraft"
+	| "Square"
+	| "SquareTerminal"
+	| "Code"
+	| "SquareSlash"
+	| "SquarePen"
+	| "Columns2"
+	| "Rows2"
+	| "PanelLeft"
+	| "PanelRight"
+	| "SquarePlus"
+	| "Pencil"
+	| "AppWindow"
+	| "Copy"
+	| "Clipboard"
+	| "Eye"
+	| "Trash2"
+	| "Archive"
+	| "ArchiveRestore"
 	| "Pin"
 	| "PinOff"
-	| "Search"
-	| "Layers";
+	| "CircleAlert"
+	| "CircleCheck"
+	| "MailDot"
+	| "List"
+	| "ArrowDownUp"
+	| "ListFilter"
+	| "Import"
+	| "Info"
+	| "CircleHelp"
+	| "Globe"
+	| "CircleUserRound"
+	| "LifeBuoy"
+	| "ShieldTerminal"
+	| "ShieldAlert"
+	| "LogIn"
+	| "LogOut"
+	| "KeyRound"
+	| "Keyboard"
+	| "Hand"
+	| "MessageSquare"
+	| "ListTodo"
+	| "Layers"
+	| "BookOpen"
+	| "Lightbulb"
+	| "Brain"
+	| "Sparkles"
+	| "Zap"
+	| "Wrench"
+	| "WrapText"
+	| "ImagePlus"
+	| "CloudUpload"
+	| "Sun";
 
 export type experimental_IconProps = SVGProps<SVGSVGElement> & {
 	name: experimental_IconName;
@@ -110,9 +317,26 @@ export type experimental_Surface =
 	| "homeSection"
 	| "threadRowMetadata"
 	| "threadRowStatus"
-	| "threadRowActions";
+	| "threadRowActions"
+	| "composer"
+	| "threadHeader"
+	| "requests"
+	| "composerActions"
+	| "composerBanners"
+	| "composerChips"
+	| "composerAddMenu"
+	| "composerSendMenu"
+	| "composerSuggestions"
+	| "composerPopups"
+	| "threadHeaderActions"
+	| "threadHeaderStatuses"
+	| "threadHeaderTitle"
+	| "threadHeaderRow"
+	| "messageActions"
+	| "transcriptItem";
 
-export type experimental_ProviderSurface = "feedback" | "layout" | "navigation" | "threadList" | "home" | "titleBar";
+export type experimental_ProviderSurface =
+	"feedback" | "layout" | "navigation" | "threadList" | "home" | "titleBar" | "composer" | "threadHeader" | "requests";
 
 export interface experimental_ProviderContribution extends Omit<experimental_SurfaceContribution, "surface"> {
 	surface: experimental_ProviderSurface;
@@ -168,6 +392,7 @@ export type experimental_WindowCommand =
 
 export interface experimental_Controllers {
 	experimental_showNew(cwd?: string): void;
+	experimental_runCommand(id: string, context: experimental_CommandContext): boolean;
 	experimental_addProject(): Promise<string | undefined>;
 	experimental_setSidebarOpen(open: boolean): void;
 	experimental_showSettings(page: experimental_SettingsPage): void;
@@ -203,6 +428,12 @@ export interface experimental_DesktopApp {
 	experimental_registerPage(page: experimental_Page): experimental_Disposable;
 	experimental_hideNavigation(entry: experimental_NavigationVisibility): experimental_Disposable;
 	experimental_registerSlot(slot: experimental_SurfaceContribution): experimental_Disposable;
+	experimental_registerItemRenderer(
+		renderer: Omit<experimental_SurfaceContribution, "surface">,
+	): experimental_Disposable;
+	experimental_registerMessageAction(
+		action: Omit<experimental_SurfaceContribution, "surface">,
+	): experimental_Disposable;
 	experimental_registerProvider(provider: experimental_ProviderContribution): experimental_Disposable;
 	experimental_onDispose(dispose: () => void): void;
 }
@@ -214,7 +445,145 @@ export interface experimental_DesktopExtension {
 
 export declare function defineDesktopExtension(setup: experimental_DesktopExtension["experimental_setup"], options?: { apiVersion: number }): experimental_DesktopExtension;
 
+export type experimental_ComposerTarget = { threadId: string } | { cwd: string | undefined };
+
+export interface experimental_EditorSelection {
+	start: number;
+	end: number;
+	direction: "forward" | "backward" | "none";
+}
+
+export interface experimental_EditorState {
+	text: string;
+	selection?: experimental_EditorSelection;
+	focused: boolean;
+	composing: boolean;
+}
+
+export interface experimental_CaretAnchor {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+export interface experimental_EditorAdapter {
+	experimental_read(): experimental_EditorState;
+	experimental_apply(edit: { text: string; selection?: experimental_EditorSelection }): void;
+	experimental_focus(): void;
+	experimental_caretAnchor(): experimental_CaretAnchor | undefined;
+}
+
+export type experimental_EditorResult =
+	{ status: "applied" | "stale"; revision: number } | { status: "unavailable" | "busy" | "locked" };
+
+export interface experimental_ComposerDraft {
+	text: string;
+	images: string[];
+	revision: number;
+	selection?: experimental_EditorSelection;
+	focused?: boolean;
+	composing?: boolean;
+	locked?: boolean;
+}
+
+export interface experimental_EditorMount extends experimental_Disposable {
+	/** Apply the latest canonical snapshot without overwriting an active composition. */
+	experimental_sync(): experimental_EditorResult;
+	/** Report editor changes against the revision last applied or synchronized by this mount. */
+	experimental_report(revision: number): experimental_EditorResult;
+}
+
+export type experimental_EditorAttachment =
+	{ status: "mounted"; mount: experimental_EditorMount } | { status: "busy" | "unavailable" };
+
+export interface experimental_ComposerSuggestion {
+	key: string;
+	label: string;
+	detail?: string;
+	insert?: string;
+	run?: () => void;
+	section?: string;
+	icon: "file" | "folder" | "command" | "skill" | "image" | "plan";
+}
+
+export type experimental_ComposerHost =
+	"actions" | "banners" | "chips" | "addMenu" | "sendMenu" | "suggestions" | "popups";
+
+export interface experimental_ComposerProps {
+	threadId?: string;
+	project?: { cwd: string | undefined; onChange(cwd: string): void };
+}
+
+export interface experimental_ComposerState {
+	target: experimental_ComposerTarget;
+	controller: experimental_ComposerController;
+	text: string;
+	images: string[];
+	threadId?: string;
+	project?: experimental_ComposerProps["project"];
+	running: boolean;
+	hasContent: boolean;
+	canSend: boolean;
+	canStop: boolean;
+	placeholder: string;
+	whileRunning: "queue" | "steer";
+	usage?: { contextTokens?: number; contextWindow: number; cost: number };
+	showContextUsage: boolean;
+	parts: { project: ReactNode; workspace: ReactNode; permissions: ReactNode; model: ReactNode; comments: ReactNode };
+	queued: { id?: string; text: string; steer: boolean; attachments?: number }[];
+	suggestions?: { items: experimental_ComposerSuggestion[]; truncated: boolean; start: number; revision: number };
+	selected: number;
+	dragging: boolean;
+	boxRef: RefObject<HTMLDivElement | null>;
+	panelRef: RefObject<HTMLDivElement | null>;
+	dropProps: Pick<ComponentProps<"div">, "onDragOver" | "onDragLeave" | "onDrop">;
+	onKeyDown(event: KeyboardEvent): void;
+	refreshSuggestions(text: string, caret: number): Promise<void>;
+	setSelected(index: number): void;
+	accept(suggestion: experimental_ComposerSuggestion): void;
+	toggleAddMenu(): Promise<void>;
+	dismissSuggestions(): void;
+	submit(alternate: boolean): experimental_EditorResult;
+	stop(): void;
+	removeImage(path: string): void;
+	queueSteer(id: string, text: string): void;
+	queueDelete(id: string): void;
+	queueEdit(id: string, text: string): void;
+}
+
+export interface experimental_ComposerController {
+	experimental_getSnapshot(): experimental_ComposerDraft;
+	experimental_insert(text: string, revision: number): experimental_EditorResult;
+	experimental_replace(range: experimental_EditorSelection, text: string, revision: number): experimental_EditorResult;
+	experimental_select(range: experimental_EditorSelection, revision: number): experimental_EditorResult;
+	experimental_focus(): experimental_EditorResult;
+	experimental_focusEnd(): experimental_EditorResult;
+	experimental_caretAnchor(): experimental_CaretAnchor | undefined;
+	experimental_lock(signal: AbortSignal): experimental_Disposable;
+	experimental_canSubmit(): boolean;
+	experimental_submit(alternate?: boolean): experimental_EditorResult;
+	experimental_stop(): experimental_EditorResult;
+}
+
 export interface experimental_DesktopHost {
+	experimental_composer(target: experimental_ComposerTarget): experimental_ComposerController;
+	experimental_attachComposerEditor(
+		target: experimental_ComposerTarget,
+		adapter: experimental_EditorAdapter,
+	): experimental_EditorAttachment;
+	experimental_useComposerDraft(target: experimental_ComposerTarget): experimental_ComposerDraft;
+	experimental_ComposerRoot(props: experimental_ComposerProps): ReactNode;
+	experimental_ComposerFrame(props: { editor?: ReactNode }): ReactNode;
+	experimental_TextareaEditor(): ReactNode;
+	experimental_useComposer(): experimental_ComposerState;
+	experimental_useComposerEditor(adapter: experimental_EditorAdapter | undefined): experimental_EditorMount | undefined;
+	experimental_ComposerContributions(props: { host: experimental_ComposerHost }): ReactNode;
+	experimental_imageThumbnail(path: string): Promise<string | undefined>;
+	experimental_conversationServices: experimental_ConversationServices;
+	experimental_pickerServices: experimental_PickerServices;
+	experimental_ItemRenderer(props: { threadId?: string; item: experimental_ViewItem; children: ReactNode }): ReactNode;
+	experimental_MessageActions(props: { threadId: string; item: experimental_ViewItem }): ReactNode;
 	experimental_useNavigation(): experimental_NavigationState;
 	experimental_useThreadList(): experimental_ThreadListState;
 	experimental_useUpdate(): experimental_Update;
@@ -223,7 +592,12 @@ export interface experimental_DesktopHost {
 	experimental_icons: Record<experimental_IconName, ComponentType<Omit<experimental_IconProps, "name">>>;
 	experimental_SurfaceHost(props: { surface: "navigation" | "threadList" | "home" | "titleBar" }): ReactNode;
 	experimental_Content(): ReactNode;
-	experimental_Slots(props: { surface: experimental_Surface; thread?: experimental_Thread; cwd?: string }): ReactNode;
+	experimental_Slots(props: {
+		surface: experimental_Surface;
+		thread?: experimental_Thread;
+		cwd?: string;
+		context?: experimental_CommandContext;
+	}): ReactNode;
 	experimental_ThreadRow(props: { threadId: string; inset?: boolean }): ReactNode;
 	experimental_controllers: experimental_Controllers;
 	experimental_useToasts(): readonly experimental_Toast[];
@@ -238,6 +612,38 @@ declare global {
 }
 
 export declare function experimental_controllers(): experimental_Controllers;
+
+export declare function experimental_composer(target: experimental_ComposerTarget): experimental_ComposerController;
+
+export declare function experimental_attachComposerEditor(target: experimental_ComposerTarget, adapter: experimental_EditorAdapter): experimental_EditorAttachment;
+
+export declare function experimental_useComposerDraft(target: experimental_ComposerTarget): experimental_ComposerDraft;
+
+export declare function experimental_ComposerRoot(props: experimental_ComposerProps): ReactNode;
+
+export declare function experimental_ComposerFrame(props: { editor?: ReactNode }): ReactNode;
+
+export declare function experimental_TextareaEditor(): ReactNode;
+
+export declare function experimental_useComposer(): experimental_ComposerState;
+
+export declare function experimental_useComposerEditor(adapter: experimental_EditorAdapter | undefined): experimental_EditorMount | undefined;
+
+export declare function experimental_ComposerContributions(props: { host: experimental_ComposerHost }): ReactNode;
+
+export declare function experimental_imageThumbnail(path: string): Promise<string | undefined>;
+
+export declare function experimental_pickerServices(): experimental_PickerServices;
+
+export declare function experimental_conversationServices(): experimental_ConversationServices;
+
+export declare function experimental_ItemRenderer(props: {
+	threadId?: string;
+	item: experimental_ViewItem;
+	children: ReactNode;
+}): ReactNode;
+
+export declare function experimental_MessageActions(props: { threadId: string; item: experimental_ViewItem }): ReactNode;
 
 export declare function experimental_useToasts(): readonly experimental_Toast[];
 
@@ -312,17 +718,55 @@ export interface experimental_Controls {
 		Omit<ComponentProps<typeof DropdownMenu.Item>, "children"> & {
 			icon?: ReactNode;
 			hint?: ReactNode;
+			danger?: boolean;
+			description?: ReactNode;
 			children: ReactNode;
 		}
 	>;
 	experimental_MenuSub: ComponentType<{ label: ReactNode; icon?: ReactNode; minWidth?: number; children: ReactNode }>;
 	experimental_MenuSeparator: ComponentType;
+	experimental_Kbd: ComponentType<{ children: ReactNode }>;
+	experimental_MenuLabel: ComponentType<{ children: ReactNode }>;
+	experimental_ListSeparator: ComponentType;
+	experimental_ListRow: ComponentType<{
+		icon?: ReactNode;
+		description?: ReactNode;
+		hint?: ReactNode;
+		checked?: boolean;
+		danger?: boolean;
+		onClick(): void;
+		children: ReactNode;
+	}>;
+	experimental_Popover: ComponentType<{
+		trigger(open: boolean): ReactNode;
+		children(close: () => void): ReactNode;
+		open?: boolean;
+		onOpenChange?(open: boolean): void;
+		takeFocus?: boolean;
+		side?: "top" | "bottom";
+		align?: "start" | "center" | "end";
+		anchor?: RefObject<HTMLElement | null>;
+		sideOffset?: number;
+		alignOffset?: number;
+		className?: string;
+	}>;
 	experimental_MenuRadioGroup: typeof DropdownMenu.RadioGroup;
 	experimental_MenuRadioItem: ComponentType<
-		Omit<ComponentProps<typeof DropdownMenu.RadioItem>, "children"> & { icon?: ReactNode; children: ReactNode }
+		Omit<ComponentProps<typeof DropdownMenu.RadioItem>, "children"> & {
+			icon?: ReactNode;
+			children: ReactNode;
+			description?: ReactNode;
+			danger?: boolean;
+		}
 	>;
 	experimental_HoverCard: ComponentType<{ content: ReactNode; children: ReactElement }>;
-	experimental_Tooltip: ComponentType<{ content: ReactNode; children: ReactElement }>;
+	experimental_Tooltip: ComponentType<{
+		content: ReactNode;
+		children: ReactElement;
+		overflow?: boolean;
+		side?: "top" | "right" | "bottom" | "left";
+		align?: "start" | "center" | "end";
+	}>;
 	experimental_ConfirmDialog: ComponentType<{
 		title: ReactNode;
 		description: ReactNode;
@@ -368,10 +812,23 @@ export interface experimental_SidebarModel {
 	recent: experimental_Thread[];
 }
 
-export type experimental_MenuAction = { label: string; run(): void; disabled?: boolean; binding?: string };
+export type experimental_MenuAction = {
+	label: string;
+	run(): void;
+	disabled?: boolean;
+	binding?: string;
+	danger?: boolean;
+	icon?: ComponentType<Omit<experimental_IconProps, "name">>;
+};
 
 export type experimental_ContextMenuItem =
-	experimental_MenuAction | "-" | { label: string; items: (experimental_MenuAction | "-")[] };
+	| experimental_MenuAction
+	| "-"
+	| {
+			label: string;
+			items: (experimental_MenuAction | "-")[];
+			icon?: ComponentType<Omit<experimental_IconProps, "name">>;
+	  };
 
 export interface experimental_ShellServices {
 	experimental_platform: string;
@@ -394,12 +851,23 @@ export interface experimental_ShellServices {
 	): experimental_RowSelection;
 	experimental_useHiddenNavigation(): readonly string[];
 	experimental_usePages(): { id: string; label: string; hidden?: boolean }[];
+	experimental_tokens(value: number): string;
 	experimental_basename(path: string): string;
 	experimental_samePath(a: string, b: string): boolean;
 	experimental_messageTime(time: number): string;
+	experimental_clockTime(time: number): string;
+	experimental_duration(time: number): string;
+	experimental_isControl(target: EventTarget | null): boolean;
+	experimental_isEditable(target: EventTarget | null): boolean;
+	experimental_useBinding(
+		id: string,
+		handler: (event: globalThis.KeyboardEvent) => void | false,
+		enabled?: boolean,
+	): void;
+	experimental_useBindings(actions: readonly { binding?: string; run(): void }[], enabled?: boolean): void;
 	experimental_isMac(): boolean;
 	experimental_bindingLabel(binding: string): string;
-	experimental_matches(event: KeyboardEvent, binding: string): boolean;
+	experimental_matches(event: KeyboardEvent | globalThis.KeyboardEvent, binding: string): boolean;
 	experimental_followDrag(move: (event: globalThis.PointerEvent) => void, end: () => void): void;
 	experimental_showContextMenu(items: experimental_ContextMenuItem[]): Promise<void>;
 	experimental_showInFolder(path: string): Promise<boolean>;
@@ -457,6 +925,7 @@ export declare function experimental_Slots(props: {
 	surface: experimental_Surface;
 	thread?: experimental_Thread;
 	cwd?: string;
+	context?: experimental_CommandContext;
 }): ReactNode;
 
 export declare function experimental_ThreadRow(props: { threadId: string; inset?: boolean }): ReactNode;

@@ -9,52 +9,39 @@
  * hidden and the running one shows in the present tense, as in Codex; a turn with no final reply shows its work open.
  */
 
-import type { TurnFile } from "@knightcode/app-server-protocol";
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { afterReply, diffStats, inputOf, isRunning, thinkingHeading, type ToolItem, workEntries } from "../activity.ts";
-import { client } from "../client.ts";
-import { clockTime, duration, messageTime } from "../format.ts";
-import { matches } from "../keys.ts";
+import { type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-	errorText,
-	fork,
-	resendEdited,
-	showChanges,
-	toast,
-	undoTurnEdits,
-	useStore,
-	type ViewItem,
-	type ViewTurn,
-} from "../store.ts";
-import { ActiveRow, ActivityGroup, BackgroundNotices, ToolRow } from "./activity.tsx";
-import { Button, IconButton } from "./button.tsx";
-import { Tooltip } from "./tooltip.tsx";
+	experimental_Button as Button,
+	experimental_controls,
+	experimental_icons,
+	experimental_shellServices,
+	experimental_conversationServices,
+	experimental_ItemRenderer as ItemRenderer,
+	experimental_MessageActions as ExtensionMessageActions,
+	type experimental_TurnFile as TurnFile,
+	type experimental_ViewItem as ViewItem,
+	type experimental_ViewTurn as ViewTurn,
+	type experimental_AppItem as AppItem,
+} from "@knightcodeai/cli/desktop";
+import { ActivityThread } from "./activity.tsx";
 import {
-	Check,
-	ChevronDown,
-	ChevronRight,
-	CircleAlert,
-	Copy,
-	Download,
-	FileDiff,
-	GitBranch,
-	Layers,
-	MoreHorizontal,
-	Pencil,
-	RefreshCw,
-	Spinner,
-	Undo,
-} from "./icons.tsx";
-import { Markdown } from "./markdown.tsx";
-import { type AppItem, McpAppCard } from "./mcp-app.tsx";
-import { ViewNode } from "./view.tsx";
-import { Menu, MenuContent, MenuItem, MenuTrigger } from "./menu.tsx";
+	afterReply,
+	diffStats,
+	inputOf,
+	isRunning,
+	thinkingHeading,
+	type ToolItem,
+	workEntries,
+} from "./activity-model.ts";
 
 /**
  * The proposed plan: a card headed "Plan" ("Writing plan" while it streams) with
  * Download, Copy and a collapse toggle, the plan's Markdown held to 320px with "Expand plan" while collapsed.
  */
 function PlanCard({ item }: { item: ToolItem }) {
+	const { experimental_IconButton: IconButton } = experimental_controls();
+	const { ChevronDown, Download } = experimental_icons();
+	const { experimental_Markdown: Markdown } = experimental_conversationServices();
 	const markdown = typeof inputOf(item).markdown === "string" ? (inputOf(item).markdown as string) : "";
 	const writing = isRunning(item);
 	// A plan still being written is collapsed and opens when it is finished, until the user toggles it.
@@ -69,51 +56,54 @@ function PlanCard({ item }: { item: ToolItem }) {
 		URL.revokeObjectURL(url);
 	};
 	const done = !writing && markdown.trim().length > 0;
+	const threadId = useContext(ActivityThread);
 	return (
-		<div className="overflow-hidden rounded-lg bg-card-soft shadow-[0_0_0_0.5px_var(--kc-border-strong)]">
-			<div className="flex h-10 items-center justify-between gap-2 px-3 py-2">
-				<span className="text-base leading-tight font-semibold text-ink">
-					{writing ? <span className="kc-shimmer">Writing plan</span> : "Plan"}
-				</span>
-				<div className="flex items-center gap-1">
-					{done ? (
+		<ItemRenderer threadId={threadId} item={item}>
+			<div className="overflow-hidden rounded-lg bg-card-soft shadow-[0_0_0_0.5px_var(--kc-border-strong)]">
+				<div className="flex h-10 items-center justify-between gap-2 px-3 py-2">
+					<span className="text-base leading-tight font-semibold text-ink">
+						{writing ? <span className="kc-shimmer">Writing plan</span> : "Plan"}
+					</span>
+					<div className="flex items-center gap-1">
+						{done ? (
+							<>
+								<IconButton label="Download plan" size="sm" className="rounded-md" onClick={download}>
+									<Download size={14} />
+								</IconButton>
+								<CopyMessage text={markdown} />
+							</>
+						) : null}
+						<IconButton
+							label={collapsed ? "Expand plan summary" : "Collapse plan summary"}
+							size="sm"
+							className="rounded-md"
+							onClick={() => setCollapsed(!collapsed)}
+						>
+							<ChevronDown size={14} className={`transition-transform ${collapsed ? "rotate-180" : ""}`} />
+						</IconButton>
+					</div>
+				</div>
+				<div className="relative overflow-hidden px-3 pb-3" style={collapsed ? { height: PLAN_COLLAPSED } : undefined}>
+					<Markdown text={markdown} />
+					{collapsed ? (
 						<>
-							<IconButton label="Download plan" size="sm" className="rounded-md" onClick={download}>
-								<Download size={14} />
-							</IconButton>
-							<CopyMessage text={markdown} />
+							<div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-surface to-transparent" />
+							<div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+								<Button
+									variant="solid"
+									size="md"
+									squircle
+									className="pointer-events-auto"
+									onClick={() => setCollapsed(false)}
+								>
+									Expand plan
+								</Button>
+							</div>
 						</>
 					) : null}
-					<IconButton
-						label={collapsed ? "Expand plan summary" : "Collapse plan summary"}
-						size="sm"
-						className="rounded-md"
-						onClick={() => setCollapsed(!collapsed)}
-					>
-						<ChevronDown size={14} className={`transition-transform ${collapsed ? "rotate-180" : ""}`} />
-					</IconButton>
 				</div>
 			</div>
-			<div className="relative overflow-hidden px-3 pb-3" style={collapsed ? { height: PLAN_COLLAPSED } : undefined}>
-				<Markdown text={markdown} />
-				{collapsed ? (
-					<>
-						<div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-surface to-transparent" />
-						<div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-							<Button
-								variant="solid"
-								size="md"
-								squircle
-								className="pointer-events-auto"
-								onClick={() => setCollapsed(false)}
-							>
-								Expand plan
-							</Button>
-						</div>
-					</>
-				) : null}
-			</div>
-		</div>
+		</ItemRenderer>
 	);
 }
 
@@ -130,23 +120,32 @@ function MessageActions({
 	shown,
 	align = "start",
 	children,
+	context,
 }: {
+	context?: { threadId: string; item: ViewItem };
 	time?: number;
 	shown?: boolean;
 	align?: "start" | "end";
 	children: ReactNode;
 }) {
+	const { experimental_messageTime: messageTime } = experimental_shellServices();
 	return (
 		<div
 			className={`flex items-center gap-2 transition-opacity ${align === "end" ? "flex-row-reverse self-end" : "-ms-1"} ${shown ? "" : "opacity-0 group-hover/message:opacity-100 focus-within:opacity-100"}`}
 		>
-			<div className="flex items-center gap-0.5">{children}</div>
+			<div className="flex items-center gap-0.5">
+				{children}
+				{context ? <ExtensionMessageActions {...context} /> : null}
+			</div>
 			{time ? <span className="text-xs text-tertiary">{messageTime(time)}</span> : null}
 		</div>
 	);
 }
 
 function CopyMessage({ text, label = "Copy" }: { text: string; label?: string }) {
+	const { experimental_IconButton: IconButton } = experimental_controls();
+	const { Check, Copy } = experimental_icons();
+	const { experimental_copyText: copyText } = experimental_conversationServices();
 	const [copied, setCopied] = useState(0);
 	// Each copy restarts the 1.5 s "Copied" state; unmounting clears it.
 	useEffect(() => {
@@ -160,10 +159,9 @@ function CopyMessage({ text, label = "Copy" }: { text: string; label?: string })
 			size="sm"
 			className="rounded-md"
 			onClick={() => {
-				client
-					.host("host/clipboard/writeText", { text })
-					.then(() => setCopied(Date.now()))
-					.catch((e: unknown) => toast(errorText(e), "error"));
+				void copyText(text).then((ok) => {
+					if (ok) setCopied(Date.now());
+				});
 			}}
 		>
 			{copied ? <Check size={16} /> : <Copy size={16} />}
@@ -173,6 +171,15 @@ function CopyMessage({ text, label = "Copy" }: { text: string; label?: string })
 
 /** Codex's "More actions" on a reply: "Branch in new chat", a fork of the thread up to the end of this turn. */
 function ReplyMenu({ threadId, atItemId }: { threadId: string; atItemId: string }) {
+	const {
+		experimental_Menu: Menu,
+		experimental_MenuTrigger: MenuTrigger,
+		experimental_MenuContent: MenuContent,
+		experimental_MenuItem: MenuItem,
+		experimental_IconButton: IconButton,
+	} = experimental_controls();
+	const { MoreHorizontal, GitBranch } = experimental_icons();
+	const { experimental_fork: fork } = experimental_conversationServices();
 	return (
 		<Menu>
 			<MenuTrigger>
@@ -198,7 +205,9 @@ export function UserBubble({
 	onRetry,
 	onDismiss,
 	onEdit,
+	context,
 }: {
+	context?: { threadId: string; item: ViewItem };
 	text: string;
 	images?: { mimeType: string; data: string }[];
 	time?: number;
@@ -209,6 +218,9 @@ export function UserBubble({
 	/** Offered on the last message of an idle thread (Codex's Edit message). */
 	onEdit?: (text: string) => void;
 }) {
+	const { experimental_IconButton: IconButton } = experimental_controls();
+	const { CircleAlert, RefreshCw, Pencil } = experimental_icons();
+	const { experimental_matches: matches } = experimental_shellServices();
 	const [editing, setEditing] = useState<string>();
 	if (editing !== undefined && onEdit)
 		return (
@@ -270,7 +282,13 @@ export function UserBubble({
 				<div
 					className={`flex max-w-[70%] flex-col rounded-composer bg-bubble px-4 py-2.5 text-base leading-[22.75px] text-bubble-text ${pending ? "opacity-60" : ""}`}
 				>
-					<FoldedText text={text} />
+					{context ? (
+						<ItemRenderer threadId={context.threadId} item={context.item}>
+							<FoldedText text={text} />
+						</ItemRenderer>
+					) : (
+						<FoldedText text={text} />
+					)}
 				</div>
 			) : null}
 			{failed ? (
@@ -284,7 +302,7 @@ export function UserBubble({
 					</Button>
 				</div>
 			) : pending ? null : (
-				<MessageActions time={time} align="end">
+				<MessageActions time={time} align="end" context={context}>
 					<CopyMessage text={text} label="Copy message" />
 					{onEdit ? (
 						<IconButton label="Edit message" size="sm" className="rounded-md" onClick={() => setEditing(text)}>
@@ -302,6 +320,8 @@ const USER_LINES = 20;
 
 /** A user message longer than USER_LINES shows its start and "Show more". */
 function FoldedText({ text }: { text: string }) {
+	const { ChevronDown } = experimental_icons();
+	const { experimental_Markdown: Markdown } = experimental_conversationServices();
 	const body = useRef<HTMLDivElement>(null);
 	const [long, setLong] = useState(false);
 	const [open, setOpen] = useState(false);
@@ -353,7 +373,25 @@ function FoldedText({ text }: { text: string }) {
  * action stays in sight; a call in progress is its present-tense row in its place, only the finished calls on either
  * side folded. Reasoning is not a row: it shows only in the "Thinking" status.
  */
-function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cwd: string }) {
+function WorkItems({
+	items,
+	live,
+	cwd,
+	threadId,
+}: {
+	items: ViewItem[];
+	live?: boolean;
+	cwd: string;
+	threadId: string;
+}) {
+	const {
+		experimental_ActiveRow: ActiveRow,
+		experimental_ToolRow: ToolRow,
+		experimental_ActivityGroup: ActivityGroup,
+		experimental_Markdown: Markdown,
+		experimental_ViewNode: ViewNode,
+		experimental_BackgroundNotices: BackgroundNotices,
+	} = experimental_conversationServices();
 	const nestedOf = (id: string) => items.filter((i): i is ToolItem => i.type === "toolCall" && i.parentItemId === id);
 	const entries = workEntries(items);
 	const rows: ReactNode[] = [];
@@ -383,24 +421,33 @@ function WorkItems({ items, live, cwd }: { items: ViewItem[]; live?: boolean; cw
 		}
 		const item = entry.item;
 		if (item.type === "toolCall") rows.push(call(item));
-		else if (item.type === "agentMessage") rows.push(<Markdown key={item.id} text={item.text} />);
+		else if (item.type === "agentMessage")
+			rows.push(
+				<ItemRenderer key={item.id} item={item} threadId={threadId}>
+					<Markdown text={item.text} />
+				</ItemRenderer>,
+			);
 		else if (item.type === "compaction") rows.push(<CompactionDivider key={item.id} />);
 		else if (item.type === "extensionMessage" && item.backgroundShells)
 			rows.push(<BackgroundNotices key={item.id} notices={item.backgroundShells} />);
 		else if (item.type === "extensionMessage")
 			rows.push(
-				<div key={item.id}>
-					<div className="mb-1 text-xs font-medium text-accent">{item.extension}</div>
-					{item.view ? <ViewNode view={item.view} /> : <Markdown text={item.text} />}
-				</div>,
+				<ItemRenderer key={item.id} item={item} threadId={threadId}>
+					<div>
+						<div className="mb-1 text-xs font-medium text-accent">{item.extension}</div>
+						{item.view ? <ViewNode view={item.view} /> : <Markdown text={item.text} />}
+					</div>
+				</ItemRenderer>,
 			);
-		else if (item.type === "userMessage") rows.push(<UserBubble key={item.id} text={item.text} images={item.images} />);
+		else if (item.type === "userMessage")
+			rows.push(<UserBubble key={item.id} text={item.text} images={item.images} context={{ threadId, item }} />);
 	}
 	return <div className="flex flex-col gap-4">{rows}</div>;
 }
 
 /** Compaction as a rule across the transcript: it changes what the model sees, so it is never folded away. */
 function CompactionDivider() {
+	const { Layers } = experimental_icons();
 	return (
 		<div className="flex items-center gap-3 py-1 text-sm text-tertiary">
 			<span className="h-px flex-1 bg-line" />
@@ -425,6 +472,8 @@ function useElapsed(since: number, running: boolean): number {
 
 /** Codex's turn header: "Working for …" or "Worked for … ›" over a hairline. */
 function WorkedFor({ turn, open, onToggle }: { turn: ViewTurn; open: boolean; onToggle?: () => void }) {
+	const { experimental_duration: duration } = experimental_shellServices();
+	const { ChevronRight } = experimental_icons();
 	const running = turn.status === "inProgress";
 	const elapsed = useElapsed(turn.startedAt, running);
 	const label = running
@@ -496,12 +545,19 @@ function EditedFilesCard({
 	files: TurnFile[];
 	undoable: boolean;
 }) {
+	const { experimental_Tooltip: Tooltip } = experimental_controls();
+	const { FileDiff, Spinner, RefreshCw, Undo } = experimental_icons();
+	const {
+		experimental_showChanges: showChanges,
+		experimental_undoTurnEdits: undoTurnEdits,
+		experimental_useUndone: useUndone,
+	} = experimental_conversationServices();
 	const added = files.reduce((n, f) => n + f.additions, 0);
 	const removed = files.reduce((n, f) => n + f.deletions, 0);
 	const view = () => showChanges(threadId, "lastTurn");
 	// As Codex's: Undo turns into Reapply and back, held while a request runs, with a spinner in place of its icon.
 	// In the store, so leaving the thread and coming back still offers Reapply.
-	const undone = useStore((s) => s.undoneTurns[turnId] === true);
+	const undone = useUndone(turnId);
 	const [pending, setPending] = useState(false);
 	const toggle = () => {
 		setPending(true);
@@ -589,11 +645,16 @@ export function TurnView({
 	threadId: string;
 }) {
 	const running = turn.status === "inProgress";
-	const idle = useStore((s) => !s.held[threadId]?.turns.some((t) => t.status === "inProgress"));
-	const cwd = useStore((s) => s.held[threadId]?.thread.cwd ?? "");
-	// An extension may hide the waiting row or name what it waits on (setWorkingVisible, setWorkingMessage).
-	const workingVisible = useStore((s) => s.held[threadId]?.ui.workingVisible !== false);
-	const workingMessage = useStore((s) => s.held[threadId]?.ui.workingMessage);
+	const { CircleAlert } = experimental_icons();
+	const { experimental_clockTime: clockTime } = experimental_shellServices();
+	const {
+		experimental_useTurnStatus: useTurnStatus,
+		experimental_resendEdited: resendEdited,
+		experimental_McpAppCard: McpAppCard,
+		experimental_BackgroundNotices: BackgroundNotices,
+		experimental_Markdown: Markdown,
+	} = experimental_conversationServices();
+	const { idle, cwd, workingVisible, workingMessage } = useTurnStatus(threadId);
 	const working = { visible: workingVisible, message: workingMessage };
 	const [open, setOpen] = useState(false);
 	const first = turn.items.find((i) => i.type === "userMessage");
@@ -625,83 +686,90 @@ export function TurnView({
 	// A fork point must be saved, as only indexed items are.
 	const forkPoint = turn.items.findLast((i) => i.index !== undefined);
 	return (
-		<div className="flex flex-col gap-3">
-			{first?.type === "userMessage" ? (
-				<UserBubble
-					text={first.text}
-					images={first.images}
-					time={turn.startedAt}
-					onEdit={latest && idle ? (text) => void resendEdited(threadId, turn.id, text, first.images) : undefined}
-				/>
-			) : null}
-			{woke?.backgroundShells ? <BackgroundNotices notices={woke.backgroundShells} /> : null}
-			{running ? (
-				<>
-					<WorkedFor turn={turn} open />
-					<WorkItems items={work} live cwd={cwd} />
-					{plan ? <PlanCard item={plan} /> : null}
-					{retry ? (
-						<div className="flex items-center gap-2 text-base text-warning">
-							<CircleAlert size={14} /> Retrying (attempt {retry.attempt} of {retry.maxAttempts}): {retry.error}
-						</div>
-					) : !typing && !work.some((i) => i.type === "toolCall" && isRunning(i)) && working.visible ? (
-						// Waiting on the model, not on a tool: a shimmering status, named for what it is thinking about,
-						// or an extension's working text.
-						<span className="kc-shimmer w-fit text-base">
-							{working.message ?? thinkingHeading(turn.items) ?? "Thinking"}
-						</span>
-					) : null}
-				</>
-			) : work.length > 0 && !final ? (
-				// No reply to fold the work under (a turn that only asked questions).
-				<WorkItems items={work} cwd={cwd} />
-			) : work.length > 0 ? (
-				<div className="flex flex-col gap-4">
-					<WorkedFor turn={turn} open={open} onToggle={() => setOpen(!open)} />
-					{open ? <WorkItems items={work} cwd={cwd} /> : null}
-				</div>
-			) : null}
-			{/* MCP Apps stay in sight when the work folds, and in one place while the turn runs and after, so the frame
+		<ActivityThread.Provider value={threadId}>
+			<div className="flex flex-col gap-3">
+				{first?.type === "userMessage" ? (
+					<UserBubble
+						text={first.text}
+						context={{ threadId, item: first }}
+						images={first.images}
+						time={turn.startedAt}
+						onEdit={latest && idle ? (text) => void resendEdited(threadId, turn.id, text, first.images) : undefined}
+					/>
+				) : null}
+				{woke?.backgroundShells ? <BackgroundNotices notices={woke.backgroundShells} /> : null}
+				{running ? (
+					<>
+						<WorkedFor turn={turn} open />
+						<WorkItems items={work} live cwd={cwd} threadId={threadId} />
+						{plan ? <PlanCard item={plan} /> : null}
+						{retry ? (
+							<div className="flex items-center gap-2 text-base text-warning">
+								<CircleAlert size={14} /> Retrying (attempt {retry.attempt} of {retry.maxAttempts}): {retry.error}
+							</div>
+						) : !typing && !work.some((i) => i.type === "toolCall" && isRunning(i)) && working.visible ? (
+							// Waiting on the model, not on a tool: a shimmering status, named for what it is thinking about,
+							// or an extension's working text.
+							<span className="kc-shimmer w-fit text-base">
+								{working.message ?? thinkingHeading(turn.items) ?? "Thinking"}
+							</span>
+						) : null}
+					</>
+				) : work.length > 0 && !final ? (
+					// No reply to fold the work under (a turn that only asked questions).
+					<WorkItems items={work} cwd={cwd} threadId={threadId} />
+				) : work.length > 0 ? (
+					<div className="flex flex-col gap-4">
+						<WorkedFor turn={turn} open={open} onToggle={() => setOpen(!open)} />
+						{open ? <WorkItems items={work} cwd={cwd} threadId={threadId} /> : null}
+					</div>
+				) : null}
+				{/* MCP Apps stay in sight when the work folds, and in one place while the turn runs and after, so the frame
 			    is never made again (mcp-app.tsx). */}
-			{apps.map((item) => (
-				<McpAppCard key={item.id} threadId={threadId} item={item} />
-			))}
-			{running ? null : (
-				<>
-					{compactedBefore ? <CompactionDivider /> : null}
-					{final?.type === "agentMessage" ? (
-						<div className="group/message flex flex-col gap-2">
-							<Markdown text={final.text} />
-							{files.length > 0 ? (
-								<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
-							) : null}
-							<MessageActions time={turn.completedAt} shown={latest}>
-								<CopyMessage text={final.text} />
-								{forkPoint ? <ReplyMenu threadId={threadId} atItemId={forkPoint.id} /> : null}
-							</MessageActions>
-						</div>
-					) : files.length > 0 ? (
-						<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
-					) : null}
-					{plan ? <PlanCard item={plan} /> : null}
-					{later.map((item) =>
-						item.type === "compaction" ? (
-							<CompactionDivider key={item.id} />
-						) : item.type === "extensionMessage" && item.backgroundShells ? (
-							<BackgroundNotices key={item.id} notices={item.backgroundShells} />
-						) : null,
-					)}
-					{turn.status === "interrupted" ? (
-						<div className="text-base text-tertiary">Interrupted · {clockTime(turn.completedAt ?? turn.startedAt)}</div>
-					) : null}
-					{turn.status === "failed" ? (
-						<div className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-base text-danger-text">
-							<CircleAlert size={14} className="mt-1 shrink-0" />
-							<span className="selectable">{turn.error?.message ?? "The turn failed."}</span>
-						</div>
-					) : null}
-				</>
-			)}
-		</div>
+				{apps.map((item) => (
+					<McpAppCard key={item.id} threadId={threadId} item={item} />
+				))}
+				{running ? null : (
+					<>
+						{compactedBefore ? <CompactionDivider /> : null}
+						{final?.type === "agentMessage" ? (
+							<div className="group/message flex flex-col gap-2">
+								<ItemRenderer threadId={threadId} item={final}>
+									<Markdown text={final.text} />
+								</ItemRenderer>
+								{files.length > 0 ? (
+									<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
+								) : null}
+								<MessageActions time={turn.completedAt} shown={latest} context={{ threadId, item: final }}>
+									<CopyMessage text={final.text} />
+									{forkPoint ? <ReplyMenu threadId={threadId} atItemId={forkPoint.id} /> : null}
+								</MessageActions>
+							</div>
+						) : files.length > 0 ? (
+							<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
+						) : null}
+						{plan ? <PlanCard item={plan} /> : null}
+						{later.map((item) =>
+							item.type === "compaction" ? (
+								<CompactionDivider key={item.id} />
+							) : item.type === "extensionMessage" && item.backgroundShells ? (
+								<BackgroundNotices key={item.id} notices={item.backgroundShells} />
+							) : null,
+						)}
+						{turn.status === "interrupted" ? (
+							<div className="text-base text-tertiary">
+								Interrupted · {clockTime(turn.completedAt ?? turn.startedAt)}
+							</div>
+						) : null}
+						{turn.status === "failed" ? (
+							<div className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-base text-danger-text">
+								<CircleAlert size={14} className="mt-1 shrink-0" />
+								<span className="selectable">{turn.error?.message ?? "The turn failed."}</span>
+							</div>
+						) : null}
+					</>
+				)}
+			</div>
+		</ActivityThread.Provider>
 	);
 }

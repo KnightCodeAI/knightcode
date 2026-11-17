@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { generateDesktopModels } from "../scripts/desktop-models.ts";
 import { generateDesktopApi, checkDesktopDocumentation } from "../scripts/desktop-api.ts";
 import { getDocsPath } from "../src/config.ts";
 describe("desktop API publication contract", () => {
@@ -26,6 +27,8 @@ describe("desktop API publication contract", () => {
 	it("ships current inventory, declarations, guide, and skill together", () => {
 		const source = readFileSync(new URL("../src/desktop.ts", import.meta.url), "utf8");
 		const generated = generateDesktopApi(source);
+		expect(readFileSync(join(getDocsPath(), "desktop-models.ts"), "utf8")).toBe(generateDesktopModels());
+		expect(readFileSync(new URL("../src/desktop-models.ts", import.meta.url), "utf8")).toBe(generateDesktopModels());
 		expect(readFileSync(join(getDocsPath(), "desktop-api.md"), "utf8")).toBe(generated.inventory);
 		expect(readFileSync(join(getDocsPath(), "desktop-sdk.d.ts"), "utf8")).toBe(generated.declarations);
 		const guide = readFileSync(join(getDocsPath(), "desktop-extensions.md"), "utf8");
@@ -38,7 +41,8 @@ describe("desktop API publication contract", () => {
 			mkdirSync(join(root, "src"), { recursive: true });
 			mkdirSync(join(root, "docs"));
 			cpSync(new URL("src/desktop.ts", source), join(root, "src/desktop.ts"));
-			for (const file of ["desktop-extensions.md", "desktop-api.md", "desktop-sdk.d.ts"])
+			cpSync(new URL("src/desktop-models.ts", source), join(root, "src/desktop-models.ts"));
+			for (const file of ["desktop-extensions.md", "desktop-api.md", "desktop-sdk.d.ts", "desktop-models.ts"])
 				cpSync(new URL(`docs/${file}`, source), join(root, "docs", file));
 			const examples = join(root, "examples/desktop-extensions");
 			const example = join(examples, "semantic-error");

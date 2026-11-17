@@ -1,4 +1,4 @@
-import { experimental_controllers } from "@knightcodeai/cli/desktop";
+import { defineDesktopExtension, experimental_controllers } from "@knightcodeai/cli/desktop";
 import { expect, test, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -44,9 +44,48 @@ test("all structural built-ins register synchronously before external work", () 
 			.getSnapshot()
 			.flatMap((entry) => (entry.kind === "provider" ? [entry.contribution.surface] : []));
 		expect(surfaces.toSorted()).toEqual(
-			["feedback", "home", "layout", "navigation", "threadList", "titleBar"].toSorted(),
+			[
+				"feedback",
+				"home",
+				"layout",
+				"navigation",
+				"threadList",
+				"titleBar",
+				"composer",
+				"threadHeader",
+				"requests",
+			].toSorted(),
 		);
 	} finally {
+		dispose();
+	}
+});
+
+test("SDK command dispatch uses the owned registry and refuses disposed actions", () => {
+	const dispose = initializeDesktopExtensions();
+	const seen: string[] = [];
+	const handle = desktopExtensions.register(
+		"command-facade",
+		defineDesktopExtension((app) => {
+			app.experimental_registerCommand({
+				id: "capture",
+				label: () => "Capture",
+				experimental_run: (context) => {
+					seen.push(context.thread!.id);
+				},
+			});
+		}),
+	);
+	try {
+		navigate({ kind: "thread", id: "B" });
+		const context = { sidebarOpen: true, thread: { id: "A", cwd: "/A" } };
+		expect(experimental_controllers().experimental_runCommand("command-facade/capture", context)).toBe(true);
+		expect(seen).toEqual(["A"]);
+		handle.dispose();
+		expect(experimental_controllers().experimental_runCommand("command-facade/capture", context)).toBe(false);
+		expect(seen).toEqual(["A"]);
+	} finally {
+		handle.dispose();
 		dispose();
 	}
 });

@@ -2,6 +2,7 @@
 import type { experimental_CommandContext, experimental_Surface } from "@knightcodeai/cli/desktop";
 import {
 	Component,
+	type ComponentType,
 	createContext,
 	type CSSProperties,
 	type ReactNode,
@@ -102,15 +103,23 @@ export function SurfaceEntry({
 	entry,
 	context,
 	fallback,
+	wrap: Wrap,
 }: {
 	entry: SurfaceRegistration;
 	context: experimental_CommandContext;
 	fallback?: ReactNode;
+	wrap?: ComponentType<{ children: ReactNode }>;
 }) {
 	const Render = entry.contribution.experimental_render;
 	return (
 		<ContributionRoot entry={entry} fallback={fallback}>
-			<Render context={context} signal={entry.signal} />
+			{Wrap ? (
+				<Wrap>
+					<Render context={context} signal={entry.signal} />
+				</Wrap>
+			) : (
+				<Render context={context} signal={entry.signal} />
+			)}
 		</ContributionRoot>
 	);
 }

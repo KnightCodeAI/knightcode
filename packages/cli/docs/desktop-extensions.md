@@ -173,9 +173,8 @@ use `experimental_controllers().experimental_notify`.
 The host owns thread state, toasts and provider preferences. Frontend component
 state belongs to that window/mount and resets on reload; it is not transcript
 storage. Cleanup cannot undo arbitrary side effects. There is no extension
-storage/settings or backend RPC API yet. Composer replacement, file/message
-renderers, workspace mutation controllers, custom settings and appearance
-providers remain later-slice APIs.
+storage/settings or backend RPC API yet. File renderers, workspace mutation
+controllers, custom settings and appearance providers remain later-slice APIs.
 
 ## Structural providers and navigation
 
@@ -244,6 +243,128 @@ Copy `04-thread-list/` to try the shared rows. Copy `workspace-layout/` and
 explicitly select both its layout and thread-list providers to group existing
 threads by cwd and show a breadcrumb. It deliberately does not create
 workspaces, perform Git mutations, or introduce a second tab/draft model.
+
+## Composer editor transactions
+
+<!-- surface: composer -->
+<!-- surface: composerActions -->
+<!-- surface: composerBanners -->
+<!-- surface: composerChips -->
+<!-- surface: composerAddMenu -->
+<!-- surface: composerSendMenu -->
+<!-- surface: composerSuggestions -->
+<!-- surface: composerPopups -->
+<!-- surface: threadHeader -->
+<!-- surface: threadHeaderActions -->
+<!-- surface: threadHeaderStatuses -->
+<!-- surface: threadHeaderTitle -->
+<!-- surface: threadHeaderRow -->
+<!-- surface: requests -->
+<!-- surface: messageActions -->
+<!-- surface: transcriptItem -->
+
+`experimental_composer({ threadId })` or `experimental_composer({ cwd })`
+returns a controller for that explicit draft. `experimental_useComposerDraft`
+subscribes to the same store-owned record. Drafts contain text, image paths,
+revision, and reported selection/focus/composition state. Content revisions
+advance when text or image paths change, not when selection or focus changes.
+All offsets use UTF-16 positions in normalized plain text. Replacement strings
+normalize Windows CRLF and CR line endings to LF before calculating the cursor.
+
+`experimental_attachComposerEditor(target, adapter)` attaches one editor and
+returns `{ status: "mounted", mount }`, `busy` during the current editor's
+composition, or `unavailable` for a retired host or invalid adapter range.
+The adapter reads text/selection/focus/composition, applies text
+and selection without echoing a transaction, focuses the editor, and supplies
+a caret rectangle in viewport coordinates. It must report normalized text and
+valid ranges. Dispose the mount on unmount. Host teardown also revokes it.
+
+Use `mount.experimental_report(revision)` for editor transactions, passing the
+revision last applied or synchronized by that mount, not an arbitrarily newer
+revision from another writer. Native reports can merge attachment-only changes
+when their last-applied text still matches canonical text. Captured programmatic
+ranges remain strictly revision checked. Use `experimental_sync()` to
+apply the canonical snapshot after another draft writer changes it. Sync
+refuses to overwrite an active composition. Insertion refuses a stale editor
+selection, even when the caller passes the latest canonical revision. A text
+writer that retains its previous selection invalidates that selection; the
+next editor report or explicit selection restores it.
+
+Controller range replacement, insertion, selection and focus commands return
+`applied` (with revision), `stale` (with current revision), `busy`, `locked`, or
+`unavailable`. Missing selection never implies an end-of-document insertion.
+`experimental_focus` preserves selection; `experimental_focusEnd` deliberately
+moves it. `experimental_lock(signal)` blocks editor reports and programmatic
+commands until disposed, the owner signal aborts, or the host ends. Locks from
+other owners remain active. Stale mount reports/disposers cannot affect a
+replacement editor. Adapter initialization errors release the failed mount
+before propagating to the caller.
+
+`experimental_ComposerRoot` owns behavior and the selected `composer` provider.
+The app mounts it for an explicit thread or new-thread project. A provider reads
+`experimental_useComposer()` and renders `experimental_ComposerFrame`, optionally
+passing its own editor. The frame includes the standard controls and every
+contribution host. `experimental_TextareaEditor` is the default adapter.
+
+A custom editor calls `experimental_useComposerEditor(adapter)` inside that root
+and marks its editable element `data-kc-editor`. The hook owns mount/report/sync
+cleanup; the root captures editor input, selection, focus, composition and image
+paste. The adapter remains responsible for normalized plain text, DOM range
+mapping and any editor-specific native insertion behavior. Do not add a second
+send shortcut handler. Unhandled keys remain available to the editor.
+
+For a custom frame, mount `experimental_ComposerContributions` once for each
+host: `actions`, `banners`, `chips`, `addMenu`, `sendMenu`, `suggestions`, `popups`.
+Missing or duplicate hosts, duplicate adapters and render failures fall back to
+the built-in. Contribution roots and owned portals keep their original owner,
+ordering and styles, including inside another owner's composer.
+
+Root behavior dispatches editor composition before configured shortcuts.
+Suggestion navigation/accept/dismiss precedes send; composing Enter cannot send.
+Text/selection commands return `busy` during composition, and a provider change
+waits for the editor's composition end. Composition in a popup does not defer
+an unrelated editor change. Input locks and submission availability also gate
+send. `experimental_submit` and `experimental_stop` target the live root;
+`applied` on submit means admission and draft clearing, not backend completion.
+Failed new-thread input is retained without overwriting newer typing. Saved
+root callbacks cannot start new actions after their root ends.
+
+Copy both `01-composer-action/` and `03-contenteditable/`, approve them, then
+explicitly select the latter's composer provider. The second owner's controls
+exercise selected-range insertion, popup staleness, locks, focus-end and caret
+anchors while the editor is genuinely contenteditable. Its previous-editor
+observer demonstrates that a retired disposer cannot detach the replacement.
+Text, image paths and usable selection remain canonical across provider changes.
+
+## Thread, transcript and request presentation
+
+A `threadHeader` provider receives an explicit `context.thread`.
+`threadHeaderTitle`, `threadHeaderRow`, `threadHeaderStatuses` and
+`threadHeaderActions` slots retain additive ownership. Shared thread controls
+keep rename, menus, confirmations and workspace identity host-mediated.
+
+`experimental_registerItemRenderer` selects an ordered renderer for
+`context.item`; its availability callback should select supported item kinds.
+`experimental_registerMessageAction` adds ordered message controls. Recursive or
+failed item replacement uses the ordinary renderer. Copy `05-message-renderer/`
+for an assistant renderer and explicit copy action. Portable domain types ship
+in `desktop-models.ts` next to the declarations; no private protocol import is
+needed.
+
+`experimental_conversationServices()` supplies finite explicit-thread reads and
+intents, shared Markdown/activity controls, history, find and scroll behavior.
+Composer send/alternate/stop and thread find/scroll/copy commands use the command
+registry. `experimental_runCommand(id, context)` returns false when unavailable;
+pass the intended composer/thread context rather than reading a later selection.
+Contextual commands do not add duplicate global palette entries.
+
+A `requests` provider receives `context.request`. Keep that exact object when
+answering through `experimental_answerApproval`, `experimental_answerDialog` or
+`experimental_answerQuestions`. They return false for a different thread, an
+out-of-order, cancelled or already-answered request. The server still validates
+all replies. The host owns request ordering and the **Use default request
+controls** recovery action, so a failed or unusable presenter cannot remove the
+standard approval/dialog controls.
 
 ## Styles
 

@@ -26,6 +26,7 @@ const fake = vi.hoisted(() => {
 		}),
 	};
 	const client = {
+		respond: vi.fn(),
 		request: (method: string, params: { threadId?: string }) => {
 			requests.push({ method, params });
 			return Promise.resolve(results[method]!(params));
@@ -52,7 +53,15 @@ const fake = vi.hoisted(() => {
 vi.mock("../../src/renderer/client.ts", () => ({ client: fake.client, RequestError: class extends Error {} }));
 
 import type { UiSnapshot } from "@knightcode/app-server-protocol";
-import { deleteThread, getState, openThread, refreshThreads, startThread } from "../../src/renderer/store.ts";
+import {
+	answerDialog,
+	deleteThread,
+	getState,
+	openThread,
+	refreshThreads,
+	startThread,
+	navigate,
+} from "../../src/renderer/store.ts";
 
 const resumed = () => fake.requests.filter((r) => r.method === "thread/resume").map((r) => r.params);
 
@@ -67,6 +76,24 @@ test("after an app server restart the window resumes every thread it held", asyn
 	expect(resumed()).toEqual([]);
 	fake.serverState("ready");
 	await vi.waitFor(() => expect(resumed()).toEqual([{ threadId: "t1" }, { threadId: "t2" }]));
+});
+
+test("request replies refuse cancelled, out-of-order and wrong-thread callbacks", async () => {
+	await openThread("requests-A");
+	fake.serverRequest("first", "ui/dialog", { threadId: "requests-A", kind: "input", title: "First" });
+	fake.serverRequest("second", "ui/dialog", { threadId: "requests-A", kind: "input", title: "Second" });
+	await vi.waitFor(() => expect(getState().held["requests-A"]?.requests).toHaveLength(2));
+	const [first, second] = getState().held["requests-A"]!.requests;
+	if (first?.method !== "ui/dialog" || second?.method !== "ui/dialog") throw new Error("Missing dialogs");
+	expect(answerDialog("requests-A", second, { value: "out of order" })).toBe(false);
+	expect(answerDialog("requests-B", first, { value: "wrong thread" })).toBe(false);
+	fake.notify("serverRequest/cancelled", { id: "first" });
+	await vi.waitFor(() => expect(getState().held["requests-A"]?.requests).toHaveLength(1));
+	expect(answerDialog("requests-A", first, { value: "cancelled" })).toBe(false);
+	expect(fake.client.respond).not.toHaveBeenCalled();
+	expect(answerDialog("requests-A", second, { value: "live" })).toBe(true);
+	expect(fake.client.respond).toHaveBeenCalledExactlyOnceWith("second", { value: "live" });
+	expect(answerDialog("requests-A", second, { value: "duplicate" })).toBe(false);
 });
 
 test("after a restart a thread whose resume fails keeps no extension UI from the old server", async () => {
@@ -312,5 +339,36 @@ test("an opened thread lists its background commands, each update replaces the l
 		expect(getState().held.bg1?.backgroundShells).toBeUndefined();
 	} finally {
 		fake.results["thread/resume"] = saved;
+	}
+});
+
+test("a delayed new-thread result sends its admitted prompt without replacing a newer view", async () => {
+	const saved = fake.results["thread/start"],
+		savedSend = fake.results["turn/start"];
+	let finish: () => void = () => {
+		throw new Error("thread/start was not admitted");
+	};
+	fake.results["thread/start"] = () =>
+		new Promise((resolve) => {
+			finish = () =>
+				resolve({
+					thread: { id: "late-start", cwd: "/old", workspace: { mode: "local" } },
+					warnings: [],
+					ui: { statuses: [], workingVisible: true, widgets: [] },
+				});
+		});
+	fake.results["turn/start"] = () => ({ status: "started", threadId: "late-start", requestId: "late-message" });
+	try {
+		const pending = startThread("/old", "admitted prompt", {});
+		navigate({ kind: "new", cwd: "/new-context" });
+		finish();
+		await pending;
+		expect(getState().view).toEqual({ kind: "new", cwd: "/new-context" });
+		expect(getState().held["late-start"]?.pending[0]?.text).toBe("admitted prompt");
+	} finally {
+		if (saved) fake.results["thread/start"] = saved;
+		else delete fake.results["thread/start"];
+		if (savedSend) fake.results["turn/start"] = savedSend;
+		else delete fake.results["turn/start"];
 	}
 });

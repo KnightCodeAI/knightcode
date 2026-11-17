@@ -6,11 +6,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stageDesktopExtension } from "../src/app-server/desktop-extensions/artifacts.ts";
 import { checkDesktopDocumentation, generateDesktopApi } from "./desktop-api.ts";
+import { generateDesktopModels } from "./desktop-models.ts";
 
 /** Fail packaging on stale API assets, undocumented surfaces, or invalid shipped examples. */
 export async function checkDesktopExtensionAssets(
 	root = fileURLToPath(new URL("../", import.meta.url)),
 ): Promise<void> {
+	const models = generateDesktopModels();
+	for (const file of ["src/desktop-models.ts", "docs/desktop-models.ts"])
+		if (readFileSync(join(root, file), "utf8") !== models)
+			throw new Error(`Stale desktop read models ${file}; regenerate desktop API assets.`);
 	const api = generateDesktopApi(readFileSync(join(root, "src/desktop.ts"), "utf8"));
 	checkDesktopDocumentation(api, readFileSync(join(root, "docs/desktop-extensions.md"), "utf8"));
 	for (const [file, content] of [
@@ -42,6 +47,9 @@ export async function checkDesktopExtensionAssets(
 if (import.meta.main) {
 	if (!process.argv.includes("--check")) {
 		const root = fileURLToPath(new URL("../", import.meta.url));
+		const models = generateDesktopModels();
+		writeFileSync(join(root, "src/desktop-models.ts"), models);
+		writeFileSync(join(root, "docs/desktop-models.ts"), models);
 		const api = generateDesktopApi(readFileSync(join(root, "src/desktop.ts"), "utf8"));
 		writeFileSync(join(root, "docs/desktop-api.md"), api.inventory);
 		writeFileSync(join(root, "docs/desktop-sdk.d.ts"), api.declarations);

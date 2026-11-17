@@ -9,15 +9,19 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { dialogOption, dialogTitle } from "../activity.ts";
-import { isControl, isEditable, matches, useBinding } from "../keys.ts";
-import { answerDialog, answerQuestions, type Dialog, type UserInput } from "../store.ts";
-import { Button, IconButton, Kbd } from "./button.tsx";
-import { ArrowRight, ChevronLeft, ChevronRight, Pencil, ShieldAlert, X } from "./icons.tsx";
-import { Markdown } from "./markdown.tsx";
+import {
+	experimental_Button as Button,
+	experimental_controls,
+	experimental_icons,
+	experimental_shellServices,
+	experimental_conversationServices,
+	type experimental_Dialog as Dialog,
+	type experimental_UserInput as UserInput,
+} from "@knightcodeai/cli/desktop";
 
 /** Takes the focus from the composer it hides, or from nothing; leaves it in any other field. */
 function useTakeFocus(ref: React.RefObject<HTMLDivElement | null>) {
+	const { experimental_isEditable: isEditable } = experimental_shellServices();
 	useEffect(() => {
 		const active = document.activeElement;
 		if (!isEditable(active) || active?.closest("[data-composer]")) ref.current?.focus();
@@ -49,6 +53,15 @@ function QuestionPanel({
 	own?: { text: string; onText: (text: string) => void; action: "Skip" | "Next" | "Submit"; onAction: () => void };
 	onDismiss: () => void;
 }) {
+	const { experimental_IconButton: IconButton } = experimental_controls();
+	const { ArrowRight, ChevronLeft, ChevronRight, Pencil, X } = experimental_icons();
+	const { experimental_Markdown: Markdown } = experimental_conversationServices();
+	const {
+		experimental_isControl: isControl,
+		experimental_isEditable: isEditable,
+		experimental_matches: matches,
+		experimental_useBinding: useBinding,
+	} = experimental_shellServices();
 	const ref = useRef<HTMLDivElement>(null);
 	useTakeFocus(ref);
 	const [highlight, setHighlight] = useState(chosen ?? 0);
@@ -182,6 +195,8 @@ type Answer = { label?: string; text: string };
  * option, text of their own, or both (the text then rides along as a note). Answering the last sends them all.
  */
 export function QuestionsCard({ threadId, request }: { threadId: string; request: UserInput }) {
+	const { experimental_dialogOption: dialogOption, experimental_answerQuestions: answerQuestions } =
+		experimental_conversationServices();
 	const { questions } = request.params;
 	const [index, setIndex] = useState(0);
 	const [answers, setAnswers] = useState<Answer[]>(() => questions.map(() => ({ text: "" })));
@@ -243,6 +258,11 @@ export function QuestionsCard({ threadId, request }: { threadId: string; request
 
 /** A select (plan review, a command's choice): the question panel without steps or a text row. */
 function SelectCard({ threadId, dialog }: { threadId: string; dialog: Dialog }) {
+	const {
+		experimental_dialogTitle: dialogTitle,
+		experimental_dialogOption: dialogOption,
+		experimental_answerDialog: answerDialog,
+	} = experimental_conversationServices();
 	const { question, body } = dialogTitle(dialog.params.title);
 	const options = dialog.params.options ?? [];
 	return (
@@ -257,9 +277,19 @@ function SelectCard({ threadId, dialog }: { threadId: string; dialog: Dialog }) 
 }
 
 function ConfirmCard({ threadId, dialog }: { threadId: string; dialog: Dialog }) {
+	const { experimental_Kbd: Kbd } = experimental_controls();
+	const { ShieldAlert } = experimental_icons();
+	const {
+		experimental_isControl: isControl,
+		experimental_isEditable: isEditable,
+		experimental_useBinding: useBinding,
+	} = experimental_shellServices();
+	const { experimental_answerDialog: answerDialog } = experimental_conversationServices();
 	const ref = useRef<HTMLDivElement>(null);
 	useTakeFocus(ref);
-	const answer = (confirmed: boolean) => answerDialog(threadId, dialog, { confirmed });
+	const answer = (confirmed: boolean) => {
+		answerDialog(threadId, dialog, { confirmed });
+	};
 	// Enter on a focused No must not answer Yes.
 	useBinding("desktop.approval.accept", (e) => (isControl(e.target) ? false : answer(true)));
 	useBinding("desktop.approval.decline", (e) => (isEditable(e.target) ? false : answer(false)));
@@ -291,6 +321,9 @@ function ConfirmCard({ threadId, dialog }: { threadId: string; dialog: Dialog })
 }
 
 function TextCard({ threadId, dialog }: { threadId: string; dialog: Dialog }) {
+	const { experimental_Kbd: Kbd } = experimental_controls();
+	const { experimental_matches: matches } = experimental_shellServices();
+	const { experimental_answerDialog: answerDialog } = experimental_conversationServices();
 	const editor = dialog.params.kind === "editor";
 	const [value, setValue] = useState(dialog.params.prefill ?? "");
 	const answer = (text?: string) => answerDialog(threadId, dialog, text === undefined ? {} : { value: text });

@@ -25,6 +25,12 @@ import {
 /** Stable window-local facade. Explicit IDs never resolve through a later selected thread. */
 export const controllers: experimental_Controllers = {
 	experimental_showNew: showNew,
+	experimental_runCommand: (id, context) => {
+		const entry = desktopExtensions.commands(context).find((command) => command.id === id);
+		if (!entry) return false;
+		desktopExtensions.runCommand(entry, context);
+		return true;
+	},
 	experimental_addProject: addProject,
 	experimental_setSidebarOpen: setSidebarOpen,
 	experimental_showSettings: (page) => navigate({ kind: "settings", page }),
