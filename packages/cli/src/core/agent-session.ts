@@ -479,6 +479,7 @@ export class AgentSession {
 	private _promptPreflightCount = 0;
 	private _agentRunAbortRequested = false;
 	private _agentRunEnded = false;
+	// Set by bindExtensions(): reload() restarts extensions only if the host started them.
 	private _extensionsBound = false;
 	private _extensionStartupFailure: Error | undefined;
 	private _idleWaitPromise: Promise<void> | undefined;
