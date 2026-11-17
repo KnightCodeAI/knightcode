@@ -18,6 +18,7 @@ export class UserMessageComponent extends Container {
 	private markdownTransformers: readonly MarkdownTransformer[];
 	private messageId?: string;
 	private timestamp?: string;
+	private zoneLines?: { source: readonly string[]; lines: string[] };
 
 	constructor(
 		text: string,
@@ -71,7 +72,7 @@ export class UserMessageComponent extends Container {
 		);
 	}
 
-	override render(width: number): string[] {
+	override render(width: number): readonly string[] {
 		// The marker sits in the transcript gutter so the text starts where assistant and tool text do; output padding
 		// is the right margin.
 		const bg = (content: string) => theme.bg("userMessageBg", content);
@@ -83,8 +84,13 @@ export class UserMessageComponent extends Container {
 			return lines;
 		}
 
-		lines[0] = OSC133_ZONE_START + lines[0];
-		lines[lines.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + lines[lines.length - 1];
-		return lines;
+		// Container output is shared across frames; copy it once per change instead of mutating it.
+		if (this.zoneLines?.source !== lines) {
+			const zoned = [...lines];
+			zoned[0] = OSC133_ZONE_START + zoned[0];
+			zoned[zoned.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + zoned[zoned.length - 1];
+			this.zoneLines = { source: lines, lines: zoned };
+		}
+		return this.zoneLines.lines;
 	}
 }

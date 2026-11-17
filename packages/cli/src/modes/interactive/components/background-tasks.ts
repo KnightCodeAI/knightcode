@@ -190,7 +190,7 @@ export class BackgroundShellsIndicator {
 	}
 
 	/** Whether rendered footer lines show the pill, so selecting it from the keyboard would be visible. */
-	shownIn(lines: string[]): boolean {
+	shownIn(lines: readonly string[]): boolean {
 		const running = this.getManager().runningCount();
 		return running > 0 && lines.some((line) => stripAnsi(line).includes(backgroundShellsLabel(running)));
 	}

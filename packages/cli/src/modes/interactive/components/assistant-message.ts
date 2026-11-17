@@ -45,6 +45,7 @@ export class AssistantMessageComponent extends Container {
 	private timestamp?: string;
 	private thinkingVisibilityOverrides = new Map<number, boolean>();
 	private markdownSlots: MarkdownSlot[] = [];
+	private zoneLines?: { source: readonly string[]; lines: string[] };
 
 	constructor(
 		message?: AssistantMessage,
@@ -101,16 +102,21 @@ export class AssistantMessageComponent extends Container {
 		this.outputPad = padding;
 	}
 
-	override render(width: number): string[] {
+	override render(width: number): readonly string[] {
 		// The gutter sets the left edge; output padding is the right margin.
 		const lines = super.render(Math.max(1, width - this.outputPad));
 		if (this.hasToolCalls || lines.length === 0) {
 			return lines;
 		}
 
-		lines[0] = OSC133_ZONE_START + lines[0];
-		lines[lines.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + lines[lines.length - 1];
-		return lines;
+		// Container output is shared across frames; copy it once per change instead of mutating it.
+		if (this.zoneLines?.source !== lines) {
+			const zoned = [...lines];
+			zoned[0] = OSC133_ZONE_START + zoned[0];
+			zoned[zoned.length - 1] = OSC133_ZONE_END + OSC133_ZONE_FINAL + zoned[zoned.length - 1];
+			this.zoneLines = { source: lines, lines: zoned };
+		}
+		return this.zoneLines.lines;
 	}
 
 	// Hit-test at the width render() laid out, or Container re-renders one column wider and rows can shift.

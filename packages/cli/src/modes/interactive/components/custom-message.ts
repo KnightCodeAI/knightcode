@@ -64,7 +64,7 @@ export class CustomMessageComponent extends Container {
 		if (this.customRenderer) this.rebuild();
 	}
 
-	override render(width: number): string[] {
+	override render(width: number): readonly string[] {
 		if (this.customComponent) return super.render(width);
 		const pad = Math.max(0, this.outputPad);
 		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
