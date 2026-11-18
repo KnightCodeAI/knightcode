@@ -96,7 +96,25 @@ const ui = {
 // One valid example per message. A message without an example fails the coverage test below.
 const backgroundShell = { id: "ab12cd34", command: "npm run dev", cwd: "/p", status: "running", startedAt: 1 };
 
+const desktopWindow = { windowId: 1, lifetime: "native-port" };
+const desktopBinding = {
+	owner: "external-example",
+	revision: "a".repeat(64),
+	epoch: "epoch",
+	window: "connection:1",
+	mount: "mount",
+};
+
 const requestParams: Record<string, unknown> = {
+	"desktopExtension/fail": { ...desktopWindow, binding: desktopBinding, message: "Render failed" },
+	"desktopExtension/window/connect": desktopWindow,
+	"desktopExtension/window/disconnect": desktopWindow,
+	"desktopExtension/reconcile": { ...desktopWindow, cwd: "/p" },
+	"desktopExtension/ack": { ...desktopWindow, binding: desktopBinding, id: "phase" },
+	"desktopExtension/call": { ...desktopWindow, binding: desktopBinding, requestId: 1, method: "count", args: null },
+	"desktopExtension/cancel": { ...desktopWindow, binding: desktopBinding, requestId: 1 },
+	"desktopExtension/subscribe": { ...desktopWindow, binding: desktopBinding, id: "watch", event: "changed" },
+	"desktopExtension/unsubscribe": { ...desktopWindow, binding: desktopBinding, id: "watch" },
 	"desktopExtension/list": { cwd: "/p" },
 	"desktopExtension/set": {
 		owner: "external-example",
@@ -244,6 +262,15 @@ const marketplaceInfo = {
 	diagnostics: [],
 };
 const requestResults: Record<string, unknown> = {
+	"desktopExtension/fail": {},
+	"desktopExtension/window/connect": {},
+	"desktopExtension/window/disconnect": {},
+	"desktopExtension/reconcile": {},
+	"desktopExtension/ack": {},
+	"desktopExtension/call": { status: "ok", value: 1 },
+	"desktopExtension/cancel": {},
+	"desktopExtension/subscribe": { status: "subscribed" },
+	"desktopExtension/unsubscribe": {},
 	"desktopExtension/list": {
 		safeMode: false,
 		extensions: [
@@ -504,6 +531,8 @@ const requestResults: Record<string, unknown> = {
 	"ui/event": {},
 };
 const notificationParams: Record<string, unknown> = {
+	"desktopExtension/phase": { ...desktopWindow, binding: desktopBinding, id: "phase", phase: "quiesce" },
+	"desktopExtension/event": { ...desktopWindow, binding: desktopBinding, id: "watch", event: "changed", value: 1 },
 	"desktopExtension/changed": { reload: true },
 	initialized: {},
 	"thread/started": { thread },
@@ -634,6 +663,15 @@ describe("app server protocol", () => {
 			checkSchema(`${method} params`, params, serverRequestParams[method]);
 			checkSchema(`${method} result`, result, serverRequestResults[method]);
 		}
+	});
+
+	test("desktop call sequences are safe positive integers and transport outcomes remain typed", () => {
+		const call = Compile(ClientRequests["desktopExtension/call"].params);
+		const params = requestParams["desktopExtension/call"] as Record<string, unknown>;
+		for (const requestId of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
+			expect(call.Check({ ...params, requestId })).toBe(false);
+		const result = Compile(ClientRequests["desktopExtension/call"].result);
+		for (const status of ["disconnected", "cancelled", "outcome-unknown"]) expect(result.Check({ status })).toBe(true);
 	});
 
 	test("Phase B params reject malformed values", () => {

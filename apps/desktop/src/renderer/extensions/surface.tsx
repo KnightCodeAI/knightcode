@@ -13,6 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { retainRevisionStyles } from "./styles.ts";
+import type { ActivationState } from "./activation.ts";
 import { type ExtensionRegistry, type Registration, type SurfaceRegistration } from "./registry.ts";
 
 export class ContributionBoundary extends Component<
@@ -36,6 +37,13 @@ export class ContributionBoundary extends Component<
 }
 
 const Ownership = createContext<Registration | undefined>(undefined);
+const builtInState: ActivationState = { phase: "live", finishingInput: false };
+const builtInActivation = { subscribe: (_listener: () => void) => () => {}, getSnapshot: () => builtInState };
+
+function useActivation(entry: Registration | undefined): ActivationState {
+	const activation = entry?.activation ?? builtInActivation;
+	return useSyncExternalStore(activation.subscribe, activation.getSnapshot, activation.getSnapshot);
+}
 const OWNED_BASE: CSSProperties = {
 	all: "initial",
 	display: "contents",
@@ -47,29 +55,52 @@ const OWNED_BASE: CSSProperties = {
 /** An out-of-tree portal keeps the contribution's original ownership, theme and mount lifetime. */
 export function OwnedPortal({ children }: { children: ReactNode }) {
 	const entry = useContext(Ownership);
+	const state = useActivation(entry);
+	const gated = state.phase !== "live" || entry?.activation?.failure !== undefined;
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	useLayoutEffect(() => {
 		if (!entry) return;
 		const root = document.createElement("div");
 		root.dataset.kcOwner = entry.owner;
 		if (entry.revision) root.dataset.kcRevision = entry.revision;
+		if (entry.activation) {
+			root.dataset.kcEpoch = entry.activation.binding.epoch;
+			root.dataset.kcMount = entry.activation.binding.mount;
+			root.dataset.kcWindow = entry.activation.binding.window;
+		}
 		Object.assign(root.style, OWNED_BASE);
 		document.body.append(root);
 		const release = retainRevisionStyles(entry.owner, entry.revision);
 		setContainer(root);
+		const remove = () => root.remove();
+		entry.signal.addEventListener("abort", remove, { once: true });
 		return () => {
+			entry.signal.removeEventListener("abort", remove);
 			root.remove();
 			release();
 		};
 	}, [entry]);
+	useLayoutEffect(() => {
+		if (container) container.inert = gated && !state.finishingInput;
+	}, [container, gated, state.finishingInput]);
 	if (!entry) throw new Error("experimental_Portal must be rendered inside a desktop contribution.");
 	return container ? createPortal(children, container) : null;
 }
 
 /** Mark each actual overlay root; the overlay library still owns presence, focus and portal mounting. */
-export function usePortalOwnership(): { "data-kc-owner"?: string; "data-kc-revision"?: string } {
+export function usePortalOwnership(): {
+	"data-kc-owner"?: string;
+	"data-kc-revision"?: string;
+	"data-kc-epoch"?: string;
+	"data-kc-mount"?: string;
+} {
 	const entry = useContext(Ownership);
-	return { "data-kc-owner": entry?.owner, "data-kc-revision": entry?.revision };
+	return {
+		"data-kc-owner": entry?.owner,
+		"data-kc-revision": entry?.revision,
+		"data-kc-epoch": entry?.activation?.binding.epoch,
+		"data-kc-mount": entry?.activation?.binding.mount,
+	};
 }
 
 /** Use for each individual command/slot/provider, not for its surrounding replacement's owner. */
@@ -83,13 +114,30 @@ export function ContributionRoot({
 	fallback?: ReactNode;
 }) {
 	const parent = useContext(Ownership);
+	const state = useActivation(entry);
+	const gated = state.phase !== "live" || entry.activation?.failure !== undefined;
 	useLayoutEffect(() => retainRevisionStyles(entry.owner, entry.revision), [entry]);
 	return (
 		<Ownership.Provider value={entry}>
-			<ContributionBoundary key={entry.sequence} owner={entry.owner} fallback={fallback} onError={entry.reportError}>
+			<ContributionBoundary
+				key={entry.sequence}
+				owner={entry.owner}
+				fallback={fallback}
+				onError={(error) => entry.reportError(error, fallback === undefined ? undefined : "fallback")}
+			>
+				{gated && (
+					<div role="status" className="text-xs text-secondary">
+						Updating extension…
+					</div>
+				)}
 				<div
+					inert={gated && !state.finishingInput}
+					aria-busy={gated || undefined}
 					data-kc-owner={entry.owner}
 					data-kc-revision={entry.revision}
+					data-kc-epoch={entry.activation?.binding.epoch}
+					data-kc-window={entry.activation?.binding.window}
+					data-kc-mount={entry.activation?.binding.mount}
 					style={entry.revision || (parent && parent.owner !== entry.owner) ? OWNED_BASE : { display: "contents" }}
 				>
 					{children}

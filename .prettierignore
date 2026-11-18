@@ -10,6 +10,7 @@ packages/ai/src/providers/images/*.models.ts
 
 # Generated desktop SDK declarations; the API publication check owns their exact bytes.
 packages/cli/docs/desktop-sdk.d.ts
+packages/cli/docs/desktop-backend-sdk.d.ts
 packages/cli/docs/desktop-models.ts
 packages/cli/src/desktop-models.ts
 

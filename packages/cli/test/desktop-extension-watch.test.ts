@@ -29,7 +29,7 @@ describe("desktop development directory watch", () => {
 		await new Promise((resolve) => setTimeout(resolve, 250));
 		expect(reloads).toBe(0);
 		const entry = (await manager.list()).extensions[0]!;
-		await manager.set({ owner: entry.owner, source, approve: true, dev: true });
+		await manager.set({ owner: entry.owner, source, approve: true, kinds: ["frontend"], dev: true });
 		watcher.update(await manager.list());
 		writeFileSync(join(source, "nested", "file.css"), ".notice {color:red}");
 		await expect.poll(() => reloads).toBe(1);

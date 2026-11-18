@@ -191,6 +191,574 @@
 		]
 	},
 	"clientRequests": {
+		"desktopExtension/window/connect": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/window/disconnect": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/reconcile": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"cwd": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/ack": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"id",
+					"binding"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"id": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"error": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/fail": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"message"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"message": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/call": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"requestId",
+					"method",
+					"args"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"requestId": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 9007199254740991
+					},
+					"method": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"args": {}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"anyOf": [
+					{
+						"type": "object",
+						"required": [
+							"status",
+							"value"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "ok"
+							},
+							"value": {}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"status",
+							"message"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "error"
+							},
+							"message": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"status"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "disconnected"
+							}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"status"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "cancelled"
+							}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"status"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "outcome-unknown"
+							}
+						},
+						"additionalProperties": false
+					}
+				]
+			}
+		},
+		"desktopExtension/cancel": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"requestId"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"requestId": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 9007199254740991
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/subscribe": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"id",
+					"event"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"id": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"event": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"status"
+				],
+				"properties": {
+					"status": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "subscribed"
+							},
+							{
+								"type": "string",
+								"const": "disconnected"
+							}
+						]
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/unsubscribe": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"id"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"id": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
 		"desktopExtension/list": {
 			"params": {
 				"type": "object",
@@ -251,6 +819,24 @@
 										}
 									]
 								},
+								"kinds": {
+									"type": "array",
+									"items": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "frontend"
+											},
+											{
+												"type": "string",
+												"const": "backend"
+											}
+										]
+									},
+									"minItems": 1,
+									"maxItems": 2,
+									"uniqueItems": true
+								},
 								"approved": {
 									"type": "boolean"
 								},
@@ -283,6 +869,24 @@
 											"type": "string",
 											"maxLength": 4096
 										},
+										"kinds": {
+											"type": "array",
+											"items": {
+												"anyOf": [
+													{
+														"type": "string",
+														"const": "frontend"
+													},
+													{
+														"type": "string",
+														"const": "backend"
+													}
+												]
+											},
+											"minItems": 1,
+											"maxItems": 2,
+											"uniqueItems": true
+										},
 										"revision": {
 											"type": "string",
 											"maxLength": 4096
@@ -292,6 +896,10 @@
 											"maxLength": 4096
 										},
 										"frontend": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"backend": {
 											"type": "string",
 											"maxLength": 4096
 										},
@@ -386,6 +994,24 @@
 					},
 					"approve": {
 						"type": "boolean"
+					},
+					"kinds": {
+						"type": "array",
+						"items": {
+							"anyOf": [
+								{
+									"type": "string",
+									"const": "frontend"
+								},
+								{
+									"type": "string",
+									"const": "backend"
+								}
+							]
+						},
+						"minItems": 1,
+						"maxItems": 2,
+						"uniqueItems": true
 					},
 					"revoke": {
 						"type": "boolean"
@@ -13654,6 +14280,278 @@
 		}
 	},
 	"serverNotifications": {
+		"desktopExtension/phase": {
+			"type": "object",
+			"required": [
+				"windowId",
+				"lifetime",
+				"id",
+				"binding",
+				"phase"
+			],
+			"properties": {
+				"windowId": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"lifetime": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"id": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"binding": {
+					"type": "object",
+					"required": [
+						"owner",
+						"revision",
+						"epoch",
+						"window",
+						"mount"
+					],
+					"properties": {
+						"owner": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"revision": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"epoch": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"window": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"mount": {
+							"type": "string",
+							"maxLength": 4096
+						}
+					},
+					"additionalProperties": false
+				},
+				"phase": {
+					"anyOf": [
+						{
+							"type": "string",
+							"const": "prepare"
+						},
+						{
+							"type": "string",
+							"const": "quiesce"
+						},
+						{
+							"type": "string",
+							"const": "publish"
+						},
+						{
+							"type": "string",
+							"const": "resume"
+						},
+						{
+							"type": "string",
+							"const": "discard"
+						},
+						{
+							"type": "string",
+							"const": "revoke"
+						},
+						{
+							"type": "string",
+							"const": "ready"
+						}
+					]
+				},
+				"artifact": {
+					"type": "object",
+					"required": [
+						"owner",
+						"revision",
+						"root",
+						"frontend",
+						"styles",
+						"files"
+					],
+					"properties": {
+						"owner": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"kinds": {
+							"type": "array",
+							"items": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "frontend"
+									},
+									{
+										"type": "string",
+										"const": "backend"
+									}
+								]
+							},
+							"minItems": 1,
+							"maxItems": 2,
+							"uniqueItems": true
+						},
+						"revision": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"root": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"frontend": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"backend": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"styles": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"files": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						}
+					},
+					"additionalProperties": false
+				},
+				"contracts": {
+					"type": "object",
+					"required": [
+						"methods",
+						"events"
+					],
+					"properties": {
+						"methods": {
+							"type": "object",
+							"patternProperties": {
+								"^.*$": {
+									"type": "object",
+									"required": [
+										"kind",
+										"params",
+										"result"
+									],
+									"properties": {
+										"kind": {
+											"anyOf": [
+												{
+													"type": "string",
+													"const": "read"
+												},
+												{
+													"type": "string",
+													"const": "write"
+												}
+											]
+										},
+										"params": {
+											"type": "object"
+										},
+										"result": {
+											"type": "object"
+										}
+									},
+									"additionalProperties": false
+								}
+							}
+						},
+						"events": {
+							"type": "object",
+							"patternProperties": {
+								"^.*$": {
+									"type": "object"
+								}
+							}
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			"additionalProperties": false
+		},
+		"desktopExtension/event": {
+			"type": "object",
+			"required": [
+				"windowId",
+				"lifetime",
+				"binding",
+				"id",
+				"event",
+				"value"
+			],
+			"properties": {
+				"windowId": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"lifetime": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"binding": {
+					"type": "object",
+					"required": [
+						"owner",
+						"revision",
+						"epoch",
+						"window",
+						"mount"
+					],
+					"properties": {
+						"owner": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"revision": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"epoch": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"window": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"mount": {
+							"type": "string",
+							"maxLength": 4096
+						}
+					},
+					"additionalProperties": false
+				},
+				"id": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"event": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"value": {}
+			},
+			"additionalProperties": false
+		},
 		"desktopExtension/changed": {
 			"type": "object",
 			"properties": {

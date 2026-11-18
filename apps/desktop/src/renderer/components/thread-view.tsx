@@ -25,7 +25,7 @@ import {
 } from "./icons.tsx";
 import { BackgroundShellTab, commandLabel } from "./background-terminals.tsx";
 import type React from "react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { basename, clockTime, dayLabel, SEPARATOR_GAP_MS } from "../format.ts";
 import { bindingLabel, matches, useBinding, useBindings } from "../keys.ts";
 import {
@@ -77,6 +77,8 @@ import { boundActions, DeleteThreadDialog, RenameThreadDialog, threadActions } f
 import { Tooltip } from "./tooltip.tsx";
 import { WidgetPanel } from "./view.tsx";
 import { followDrag } from "../drag.ts";
+import { desktopExtensions } from "../extensions/runtime.ts";
+import { SurfaceEntry } from "../extensions/surface.tsx";
 
 const NO_PINS: string[] = [];
 
@@ -166,11 +168,13 @@ function TabButton({
 	tab,
 	index,
 	active,
+	onSelect,
 }: {
 	threadId: string;
 	tab: PanelTab;
 	index: number;
 	active: boolean;
+	onSelect(): void;
 }) {
 	const app = useStore(tab.kind === "mcpApp" ? appItemOf(threadId, tab.itemId) : () => undefined);
 	return (
@@ -206,7 +210,10 @@ function TabButton({
 			italic={tab.kind === "file" && tab.preview}
 			dirty={tab.kind === "file" && tab.draft !== undefined}
 			active={active}
-			onSelect={() => activateTab(threadId, index)}
+			onSelect={() => {
+				onSelect();
+				activateTab(threadId, index);
+			}}
 			onKeep={() => keepTab(threadId, index)}
 			onClose={() => closeTab(threadId, index)}
 		/>
@@ -230,6 +237,13 @@ function SidePanel({ id }: { id: string }) {
 	const full = useStore((s) => s.panel.full ?? false);
 	const { tabs, active } = useStore((s) => s.tabs[id] ?? NO_TABS);
 	const shown = tabs[active];
+	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot, desktopExtensions.getSnapshot);
+	const thread = useStore((s) => s.held[id]?.thread);
+	const sidebarOpen = useStore((s) => s.sidebarOpen);
+	const context = { sidebarOpen, cwd: thread?.cwd, thread: thread ? { id, cwd: thread.cwd } : undefined };
+	const extensionTabs = desktopExtensions.panelTabs(context);
+	const [extensionId, selectExtension] = useState<string>();
+	const selectedExtension = extensionTabs.find((entry) => entry.id === extensionId);
 	const discarding = useStore((s) => s.discarding);
 	const strip = useRef<HTMLDivElement>(null);
 	// A strip wider than the panel scrolls the chosen tab, close button included, into sight.
@@ -241,10 +255,14 @@ function SidePanel({ id }: { id: string }) {
 	useBinding(
 		"desktop.panel.closeTab",
 		() => {
+			if (selectedExtension) {
+				selectExtension(undefined);
+				return;
+			}
 			if (active === 0) return false;
 			closeTab(id, active);
 		},
-		active !== 0,
+		active !== 0 || !!selectedExtension,
 	);
 	return (
 		<aside
@@ -279,8 +297,26 @@ function SidePanel({ id }: { id: string }) {
 							}
 							divider={i !== active && i + 1 !== active && i !== tabs.length - 1}
 						>
-							<TabButton threadId={id} tab={tab} index={i} active={i === active} />
+							<TabButton
+								threadId={id}
+								tab={tab}
+								index={i}
+								active={!selectedExtension && i === active}
+								onSelect={() => selectExtension(undefined)}
+							/>
 						</StripSlot>
+					))}
+					{extensionTabs.map((entry) => (
+						<button
+							key={entry.id}
+							type="button"
+							role="tab"
+							aria-selected={selectedExtension === entry}
+							className="shrink-0 px-3 py-2 text-sm text-secondary"
+							onClick={() => selectExtension(entry.id)}
+						>
+							{entry.contribution.label}
+						</button>
 					))}
 				</div>
 				{/* New tab, right after the tabs: a preview on its new tab page. */}
@@ -300,36 +336,43 @@ function SidePanel({ id }: { id: string }) {
 				</IconButton>
 			</div>
 			{/* Changes stays mounted behind a file tab, keeping its scope, scroll and drafts. */}
-			<div className={active === 0 ? "contents" : "hidden"}>
+			<div className={!selectedExtension && active === 0 ? "contents" : "hidden"}>
 				<ChangesPane threadId={id} />
 			</div>
-			{/* File tabs and "Open file" share one tree, kept as it is from one file to the next. */}
-			{shown?.kind === "file" || shown?.kind === "files" ? (
-				<FilesPanel threadId={id} autoFocus={shown.kind === "files"}>
-					{(beside) =>
-						shown.kind === "file" ? (
-							<FileTab
-								key={shown.path}
-								threadId={id}
-								path={shown.path}
-								line={shown.line}
-								used={shown.used}
-								compare={shown.compare}
-								draft={shown.draft}
-								beside={beside}
-							/>
-						) : (
-							<FilesTab threadId={id} />
-						)
-					}
-				</FilesPanel>
+			{selectedExtension ? (
+				<div className="flex min-h-0 flex-1 flex-col overflow-auto" role="tabpanel">
+					<SurfaceEntry entry={selectedExtension} context={context} />
+				</div>
 			) : null}
-			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
-			{shown?.kind === "backgroundShell" ? <BackgroundShellTab key={shown.id} threadId={id} id={shown.id} /> : null}
-			{/* Previews stay mounted behind the other tabs, keeping their pages. */}
-			{tabs.map((tab, i) =>
-				tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,
-			)}
+			<div className={selectedExtension ? "hidden" : "contents"}>
+				{/* File tabs and "Open file" share one tree, kept as it is from one file to the next. */}
+				{shown?.kind === "file" || shown?.kind === "files" ? (
+					<FilesPanel threadId={id} autoFocus={shown.kind === "files"}>
+						{(beside) =>
+							shown.kind === "file" ? (
+								<FileTab
+									key={shown.path}
+									threadId={id}
+									path={shown.path}
+									line={shown.line}
+									used={shown.used}
+									compare={shown.compare}
+									draft={shown.draft}
+									beside={beside}
+								/>
+							) : (
+								<FilesTab threadId={id} />
+							)
+						}
+					</FilesPanel>
+				) : null}
+				{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
+				{shown?.kind === "backgroundShell" ? <BackgroundShellTab key={shown.id} threadId={id} id={shown.id} /> : null}
+				{/* Previews stay mounted behind the other tabs, keeping their pages. */}
+				{tabs.map((tab, i) =>
+					tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,
+				)}
+			</div>
 			{discarding?.threadId === id ? (
 				<ConfirmDialog
 					title="Discard file changes?"

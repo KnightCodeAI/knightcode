@@ -35,6 +35,12 @@ Do not edit by hand. See [the guide](desktop-extensions.md) and
 
 ## Exports and members
 
+- `experimental_BackendResult`
+- `experimental_BackendClient`
+- `experimental_BackendClient.experimental_call`
+- `experimental_BackendClient.experimental_settings`
+- `experimental_BackendClient.experimental_setSetting`
+- `experimental_BackendClient.experimental_subscribe`
 - `experimental_ViewItem`
 - `experimental_ViewTurn`
 - `experimental_ViewTurn.items`
@@ -179,6 +185,7 @@ Do not edit by hand. See [the guide](desktop-extensions.md) and
 - `experimental_DesktopApp.experimental_signal`
 - `experimental_DesktopApp.experimental_registerCommand`
 - `experimental_DesktopApp.experimental_registerPage`
+- `experimental_DesktopApp.experimental_registerPanelTab`
 - `experimental_DesktopApp.experimental_hideNavigation`
 - `experimental_DesktopApp.experimental_registerSlot`
 - `experimental_DesktopApp.experimental_registerItemRenderer`
@@ -282,6 +289,9 @@ Do not edit by hand. See [the guide](desktop-extensions.md) and
 - `experimental_ComposerController.experimental_submit`
 - `experimental_ComposerController.experimental_stop`
 - `experimental_DesktopHost`
+- `experimental_DesktopHost.experimental_signal`
+- `experimental_DesktopHost.experimental_backend`
+- `experimental_DesktopHost.experimental_useBackend`
 - `experimental_DesktopHost.experimental_composer`
 - `experimental_DesktopHost.experimental_attachComposerEditor`
 - `experimental_DesktopHost.experimental_useComposerDraft`
@@ -312,6 +322,8 @@ Do not edit by hand. See [the guide](desktop-extensions.md) and
 - `experimental_DesktopHost.experimental_Button`
 - `experimental_DesktopHost.experimental_KeybindingKeys`
 - `experimental_DesktopHost.experimental_Portal`
+- `experimental_backend`
+- `experimental_useBackend`
 - `experimental_controllers`
 - `experimental_composer`
 - `experimental_attachComposerEditor`

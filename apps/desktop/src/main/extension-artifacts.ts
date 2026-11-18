@@ -1,7 +1,7 @@
 /** The app://ext protocol serves registered immutable artifacts, never arbitrary filesystem paths. */
 import { readFileSync, realpathSync } from "node:fs";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
-import type { DesktopArtifact } from "@knightcode/app-server-protocol";
+import { DESKTOP_ACTIVATION_MARKER, type DesktopArtifact } from "@knightcode/app-server-protocol";
 import { experimental_RUNTIME_IMPORTS } from "@knightcodeai/cli/desktop";
 import type { Static } from "typebox";
 
@@ -37,7 +37,14 @@ export class ExtensionArtifacts {
 			!/^[a-f0-9]{64}$/.test(artifact.revision)
 		)
 			throw new Error("Invalid desktop artifact identity.");
-		for (const path of artifact.files)
+		for (const path of artifact.files) {
+			if (
+				path
+					.split("/")[0]!
+					.replace(/[. ]+$/g, "")
+					.toLowerCase() === "__backend"
+			)
+				throw new Error("Private backend source cannot be served to a renderer.");
 			if (
 				!MIME[extname(path)] ||
 				path.includes("\\") ||
@@ -45,6 +52,7 @@ export class ExtensionArtifacts {
 				isAbsolute(path)
 			)
 				throw new Error(`Unsupported staged artifact path: ${path}`);
+		}
 		const key = `${artifact.owner}/${artifact.revision}`;
 		const existing = this.artifacts.get(key);
 		if (existing) {
@@ -67,11 +75,18 @@ export class ExtensionArtifacts {
 			if (keys.length > 2048 || keys.some((key) => !/^[$a-zA-Z_][$a-zA-Z0-9_]*$/.test(key)))
 				throw new Error("Invalid runtime export name.");
 			const declarations = keys
-				.map((key, index) => `const value${index}=runtime[${JSON.stringify(key)}]; export {value${index} as ${key}};`)
+				.map((key, index) => {
+					const read = `runtime[${JSON.stringify(key)}]`;
+					const value =
+						name === "@knightcodeai/cli/desktop"
+							? `typeof ${read} === "function" ? (...args) => invoke(${JSON.stringify(key)},args) : ${read}`
+							: read;
+					return `const value${index}=${value}; export {value${index} as ${key}};`;
+				})
 				.join("\n");
 			this.shims.set(
 				name,
-				`const runtime=globalThis.__knightcodeDesktopRuntime[${JSON.stringify(name)}];\n${declarations}`,
+				`const runtime=globalThis.__knightcodeDesktopRuntime[${JSON.stringify(name)}];\n${name === "@knightcodeai/cli/desktop" ? `const activation=${JSON.stringify(DESKTOP_ACTIVATION_MARKER)}; const invoke=(key,args)=>{const scopes=globalThis.__knightcodeDesktopScopedRuntime;const target=scopes?.[activation]??scopes?.retired;if(!target)throw new Error("Desktop extension activation is retired.");return target[key](...args);};\n` : ""}${declarations}`,
 			);
 		}
 	}
@@ -113,7 +128,19 @@ export class ExtensionArtifacts {
 			return new Response(null, { status: 400, headers });
 		}
 		if (parts[0] === "runtime" && parts.length === 2 && parts[1]!.endsWith(".js")) {
-			const shim = this.shims.get(parts[1]!.slice(0, -3));
+			let shim = this.shims.get(parts[1]!.slice(0, -3));
+			if (shim?.includes(DESKTOP_ACTIVATION_MARKER)) {
+				const activation = url.searchParams.get("activation");
+				if (
+					!activation ||
+					!/^[a-f0-9-]{36}$/.test(activation) ||
+					![...this.artifacts.values()].some((artifact) =>
+						[...artifact.windows.values()].some((leases) => leases.has(activation)),
+					)
+				)
+					return new Response(null, { status: 403, headers });
+				shim = shim.replaceAll(DESKTOP_ACTIVATION_MARKER, activation);
+			}
 			return new Response(shim ?? null, {
 				status: shim ? 200 : 404,
 				headers: { ...headers, "Content-Type": MIME[".js"]! },
@@ -128,9 +155,29 @@ export class ExtensionArtifacts {
 		try {
 			const file = realpathSync(resolve(artifact.root, ...path));
 			const inside = relative(artifact.root, file);
-			if (inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside))
+			if (
+				inside === ".." ||
+				inside.startsWith(`..${sep}`) ||
+				isAbsolute(inside) ||
+				inside
+					.split(sep)[0]!
+					.replace(/[. ]+$/g, "")
+					.toLowerCase() === "__backend"
+			)
 				return new Response(null, { status: 403, headers });
-			return new Response(new Uint8Array(readFileSync(file)), {
+			const bytes = readFileSync(file);
+			let body: string | Uint8Array<ArrayBuffer> = new Uint8Array(bytes);
+			if (extname(name) === ".js" && bytes.includes(DESKTOP_ACTIVATION_MARKER)) {
+				const activation = url.searchParams.get("activation");
+				if (
+					!activation ||
+					!/^[a-f0-9-]{36}$/.test(activation) ||
+					![...artifact.windows.values()].some((leases) => leases.has(activation))
+				)
+					return new Response(null, { status: 403, headers });
+				body = bytes.toString("utf8").replaceAll(DESKTOP_ACTIVATION_MARKER, activation);
+			}
+			return new Response(body, {
 				headers: { ...headers, "Content-Type": MIME[extname(name)]! },
 			});
 		} catch {

@@ -29,6 +29,7 @@ import { clearPreview, guardWebviews } from "./main/preview.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
 import { ExtensionArtifacts } from "./main/extension-artifacts.ts";
 import { handleDesktopExtensions } from "./main/desktop-extensions.ts";
+import { DesktopExtensionWindows } from "./main/desktop-extension-runtime.ts";
 import { DesktopExtensionHostMethods } from "./shared/desktop-extensions.ts";
 import { ExtensionProviderPreferences } from "./main/extension-preferences.ts";
 import { Router } from "./main/router.ts";
@@ -115,6 +116,7 @@ const extensionProviders = new ExtensionProviderPreferences(state);
 // An app's frame may sit only in this app's own windows.
 const mcpApps = new McpApps(ORIGIN);
 let server: ServerConnection;
+let extensionRuntime: DesktopExtensionWindows;
 let openIn: OpenIn;
 let terminals: Terminals;
 let updates: Updates;
@@ -143,6 +145,7 @@ function connectPort(id: number, open: OpenWindow): void {
 	mcpApps.releaseWindow(id);
 	const { port1, port2 } = new MessageChannelMain();
 	open.port = port1;
+	extensionRuntime.attach(id, (event) => port1.postMessage(event));
 	router.attach({
 		id,
 		send: (message) => port1.postMessage(message),
@@ -157,6 +160,7 @@ function connectPort(id: number, open: OpenWindow): void {
 			if (Object.hasOwn(DesktopExtensionHostMethods, data.host)) {
 				void handleDesktopExtensions(data, open.window, id, {
 					server,
+					runtime: extensionRuntime,
 					artifacts: extensionArtifacts,
 					safeMode,
 					providers: extensionProviders,
@@ -268,12 +272,17 @@ function createWindow(route?: string): BrowserWindow {
 		return { action: "deny" };
 	});
 	let lastCrash = 0;
+	window.webContents.on("did-start-navigation", (event) => {
+		if (event.isMainFrame && !event.isSameDocument) extensionRuntime.detach(id);
+	});
 	window.webContents.on("render-process-gone", () => {
+		extensionRuntime.detach(id);
 		const now = Date.now();
 		if (now - lastCrash > 60_000) window.webContents.reload();
 		lastCrash = now;
 	});
 	window.on("closed", () => {
+		extensionRuntime.detach(id);
 		open.port?.close();
 		router.detach(id);
 		terminals.detachWindow(id);
@@ -417,6 +426,7 @@ async function start(): Promise<void> {
 		logsDir: app.getPath("logs"),
 		clientVersion: app.getVersion(),
 		onMessage: (message) => {
+			if (extensionRuntime.receive(message)) return;
 			router.fromServer(message);
 			endThread(message);
 		},
@@ -426,8 +436,12 @@ async function start(): Promise<void> {
 			else if (smoke && next !== "starting") smokeExit(1);
 			for (const open of windows.values()) sendEvent(open, { event: "server/state", state: next, message });
 		},
-		onExit: () => router.serverRestarted(),
+		onExit: () => {
+			extensionRuntime.serverRestarted();
+			router.serverRestarted();
+		},
 	});
+	extensionRuntime = new DesktopExtensionWindows(server);
 	server.start();
 	updates = new Updates((update) => {
 		for (const open of windows.values()) sendEvent(open, { event: "update", update });

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -40,6 +40,52 @@ test("only registered owner/revision files and supported MIME types are served",
 	server.clear();
 	expect((await server.serve(new Request(`${base}/app.js`))).status).toBe(404);
 });
+test.each(["__backend", "__BACKEND", "__backend.", "__backend "])(
+	"private backend source cannot enter main serving leases through %s",
+	(directory) => {
+		const root = mkdtempSync(join(tmpdir(), "kc-ext-backend-serving-"));
+		roots.push(root);
+		const server = new ExtensionArtifacts("app://desktop");
+		expect(() =>
+			server.register(
+				{
+					owner: "example",
+					revision: "a".repeat(64),
+					root,
+					frontend: "app.js",
+					styles: [],
+					files: ["app.js", `${directory}/server.js`],
+				},
+				1,
+				"bad",
+			),
+		).toThrow(/backend|private/i);
+	},
+);
+
+test("a physical backend file cannot be served through a public directory junction", async () => {
+	const root = mkdtempSync(join(tmpdir(), "kc-ext-private-alias-"));
+	roots.push(root);
+	mkdirSync(join(root, "__backend"));
+	writeFileSync(join(root, "__backend/server.js"), "export const secret = 1;");
+	symlinkSync(join(root, "__backend"), join(root, "public"), "junction");
+	const server = new ExtensionArtifacts("app://desktop");
+	server.register(
+		{
+			owner: "example",
+			revision: "a".repeat(64),
+			root,
+			frontend: "app.js",
+			styles: [],
+			files: ["public/server.js"],
+		},
+		1,
+		"alias",
+	);
+	const response = await server.serve(new Request(`app://ext/example/${"a".repeat(64)}/public/server.js`));
+	expect(response.status).toBe(403);
+});
+
 test("runtime shims name only validated host modules and exports", async () => {
 	const server = new ExtensionArtifacts("app://desktop");
 	server.runtime({ react: ["useState", "default"] });

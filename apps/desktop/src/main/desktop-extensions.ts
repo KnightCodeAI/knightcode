@@ -7,6 +7,7 @@ import type { HostRequest, HostResponse, HostParams } from "../shared/host-proto
 import type { ExtensionArtifacts } from "./extension-artifacts.ts";
 import type { ServerConnection } from "./server.ts";
 import type { ExtensionProviderPreferences } from "./extension-preferences.ts";
+import type { DesktopExtensionWindows } from "./desktop-extension-runtime.ts";
 
 const checks = Object.fromEntries(
 	Object.entries(DesktopExtensionHostMethods).map(([method, schema]) => [method, Compile(schema.params)]),
@@ -22,6 +23,7 @@ export async function handleDesktopExtensions(
 		artifacts: ExtensionArtifacts;
 		safeMode: boolean;
 		providers: ExtensionProviderPreferences;
+		runtime: DesktopExtensionWindows;
 		providersChanged(): void;
 		isCurrent(): boolean;
 	},
@@ -32,6 +34,30 @@ export async function handleDesktopExtensions(
 	try {
 		let result: unknown = {};
 		switch (request.host) {
+			case "host/desktopExtension/window/connect":
+				if (safeMode) throw new Error("External extensions are disabled in safe mode.");
+				await services.runtime.connect(windowId);
+				break;
+			case "host/desktopExtension/call":
+				result = safeMode
+					? { status: "disconnected" }
+					: await services.runtime.call(
+							windowId,
+							request.id,
+							request.params as HostParams<"host/desktopExtension/call">,
+						);
+				break;
+			case "host/desktopExtension/cancel":
+				await services.runtime.cancel(windowId, request.params as HostParams<"host/desktopExtension/cancel">);
+				break;
+			case "host/desktopExtension/reconcile":
+			case "host/desktopExtension/ack":
+			case "host/desktopExtension/fail":
+			case "host/desktopExtension/subscribe":
+			case "host/desktopExtension/unsubscribe":
+				if (safeMode) throw new Error("External extensions are disabled in safe mode.");
+				result = await services.runtime.forward(windowId, request.host.slice("host/".length), request.params as object);
+				break;
 			case "host/desktopExtension/list": {
 				const params = request.params as HostParams<"host/desktopExtension/list">;
 				if (params.runtime) artifacts.runtime(params.runtime);
@@ -53,11 +79,7 @@ export async function handleDesktopExtensions(
 			case "host/desktopExtension/acquire": {
 				if (safeMode) throw new Error("External artifacts are disabled in safe mode.");
 				const params = request.params as HostParams<"host/desktopExtension/acquire">;
-				const snapshot = await server.request("desktopExtension/list", {});
-				if (!checkList.Check(snapshot)) throw new Error("Malformed desktop extension list.");
-				const artifact = snapshot.extensions.find(
-					(entry) => entry.owner === params.owner && entry.artifact?.revision === params.revision,
-				)?.artifact;
+				const artifact = services.runtime.artifact(windowId, params.owner, params.revision);
 				if (!artifact || !services.isCurrent())
 					throw new Error("The artifact or requesting window is no longer available.");
 				artifacts.register(artifact, windowId, params.lease);
@@ -77,17 +99,31 @@ export async function handleDesktopExtensions(
 					const entry = snapshot.extensions.find((entry) => entry.owner === params.owner);
 					if (!entry || entry.source !== params.source)
 						throw new Error("The extension source changed. Review its source again.");
+					const kinds = entry.kinds;
+					if (!kinds?.length) throw new Error("The extension has no valid native entry kinds to review.");
+					const risks = [
+						...(kinds.includes("frontend")
+							? [
+									"Frontend code shares the app renderer. It can inspect conversations and change the app UI. It is not sandboxed from the app.",
+								]
+							: []),
+						...(kinds.includes("backend")
+							? [
+									"Backend code runs with the app server's OS permissions. It can read and write files, access credentials and start processes. It is not sandboxed.",
+								]
+							: []),
+					].join("\n\n");
 					const { response } = await dialog.showMessageBox(window, {
 						type: "warning",
 						title: "Trust native desktop code?",
 						message: `Trust ${entry.name}?`,
-						detail: `Source: ${entry.source}\nEntry kind: native frontend\n\nThis code shares the app renderer. It can inspect conversations and change the app UI. It is not sandboxed from the app. Session/plugin trust does not grant this permission.\n\nTrusting development reloads also approves future edits at this source.`,
+						detail: `Source: ${entry.source}\nEntry kinds: ${kinds.map((kind) => `native ${kind}`).join(", ")}\n\n${risks}\n\nSession/plugin trust does not grant these permissions.\n\nTrusting development reloads also approves future edits at this source, but not new native entry kinds.`,
 						buttons: ["Trust this revision", "Trust development reloads", "Cancel"],
 						defaultId: 2,
 						cancelId: 2,
 					});
 					if (response === 2) break;
-					result = await server.request("desktopExtension/set", { ...params, dev: response === 1 });
+					result = await server.request("desktopExtension/set", { ...params, kinds, dev: response === 1 });
 				} else result = await server.request("desktopExtension/set", params);
 				break;
 			}

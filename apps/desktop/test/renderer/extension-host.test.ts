@@ -1,4 +1,5 @@
 import { defineDesktopExtension, experimental_controllers } from "@knightcodeai/cli/desktop";
+import { FrontendActivation } from "../../src/renderer/extensions/activation.ts";
 import { expect, test, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -86,6 +87,36 @@ test("SDK command dispatch uses the owned registry and refuses disposed actions"
 		expect(seen).toEqual(["A"]);
 	} finally {
 		handle.dispose();
+		dispose();
+	}
+});
+
+test("host navigation cannot enter a page whose extension epoch is gated", async () => {
+	const dispose = initializeDesktopExtensions();
+	const activation = new FrontendActivation(
+		{ owner: "gated-page", revision: "a", epoch: "epoch", window: "window", mount: "mount" },
+		globalThis.__knightcodeDesktop!,
+		() => desktopExtensions.invalidate(),
+	);
+	const registration = desktopExtensions.prepare(
+		"gated-page",
+		defineDesktopExtension((app) => {
+			app.experimental_registerPage({ id: "page", label: "Page", experimental_render: () => null });
+		}),
+		"a",
+		activation,
+	);
+	try {
+		activation.publish();
+		registration.commit();
+		activation.ready();
+		expect(experimental_controllers().experimental_openPage("gated-page/page")).toBe(true);
+		await activation.quiesce(new AbortController().signal);
+		expect(desktopExtensions.pages({ sidebarOpen: true }).some((entry) => entry.id === "gated-page/page")).toBe(true);
+		expect(experimental_controllers().experimental_openPage("gated-page/page")).toBe(false);
+	} finally {
+		registration.dispose();
+		activation.dispose();
 		dispose();
 	}
 });

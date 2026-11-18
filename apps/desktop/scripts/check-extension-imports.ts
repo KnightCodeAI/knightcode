@@ -7,6 +7,7 @@ import { traverseFast } from "@babel/types";
 
 const ALLOWED = new Set([
 	"@knightcodeai/cli/desktop",
+	"@knightcodeai/cli/desktop-backend",
 	"@knightcodeai/cli/desktop/testing",
 	"react",
 	"react-dom",

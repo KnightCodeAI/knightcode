@@ -103,6 +103,12 @@ export class AppServer implements Subscriber {
 	private readonly dispatching = new Set<Promise<void>>();
 	private readonly unfinishedAnswers = new Set<() => void>();
 	private inputEnded = false;
+	private readonly lifetime = new AbortController();
+
+	/** Connection authority ends on input loss as well as transport close. */
+	get signal(): AbortSignal {
+		return this.lifetime.signal;
+	}
 
 	constructor(options: AppServerOptions) {
 		this.options = options;
@@ -164,6 +170,7 @@ export class AppServer implements Subscriber {
 	endInput(): void {
 		if (this.inputEnded || this.state === "closed") return;
 		this.inputEnded = true;
+		this.lifetime.abort();
 		for (const pending of this.outgoing.values()) pending.reject(new SubscriberGone());
 		this.outgoing.clear();
 		this.options.onInputEnd?.(this);
@@ -184,6 +191,7 @@ export class AppServer implements Subscriber {
 	private closed(): void {
 		if (this.state === "closed") return;
 		this.state = "closed";
+		this.lifetime.abort();
 		this.settleUnfinishedRequests();
 		for (const pending of this.outgoing.values()) pending.reject(new SubscriberGone());
 		this.outgoing.clear();

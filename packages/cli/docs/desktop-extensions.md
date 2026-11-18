@@ -1,7 +1,8 @@
 # Desktop extensions (preview)
 
 API version 1 is experimental. This guide, the [generated API inventory](desktop-api.md),
-[portable declarations](desktop-sdk.d.ts), skill and examples ship with the CLI and
+[portable declarations](desktop-sdk.d.ts), [backend API](desktop-backend-api.md),
+[backend declarations](desktop-backend-sdk.d.ts), skill and examples ship with the CLI and
 Desktop's bundled binary. They match the installed release, not the latest website.
 
 ## Authoring
@@ -55,8 +56,9 @@ checking that instance has stopped, remove only its discovery file.
 
 Native frontend extensions add palette commands, ordered contributions, pages
 and named feedback or structural providers. Installing a provider never selects
-it. All new members retain the `experimental_` prefix. Backend entries remain
-unavailable.
+it. All new members retain the `experimental_` prefix. Optional backend entries
+run once per app-server process with its OS permissions and require separate
+native-kind approval.
 
 These extensions share the app renderer, React, and the DOM. They can inspect
 conversations and change application UI. Error boundaries are not a security
@@ -94,8 +96,8 @@ opens a native confirmation showing the source and entry kind:
 
 Consent is stored in the agent directory's `desktop-extension-consent.json`,
 not in project settings. **Reload extensions** rereads configured sources and
-updates every open window independently. A failed preparation keeps that
-window's previous working registration and stylesheet set. Disable and revoke
+coordinates one revision/epoch decision across every open window. A failed
+preparation retains the old matching frontend/CSS/backend pair everywhere. Disable and revoke
 trust take effect without ending threads or terminals. Development-approved
 sources are watched; other sources require an explicit reload and new consent
 when their pinned revision changes.
@@ -110,7 +112,7 @@ selected extension. That notice and its settings are host-owned.
 To recover when the renderer cannot respond, use the native View menu's
 **Restart without extensions**, or launch the desktop executable with
 `--safe-mode`. Restarting still asks before interrupting running threads.
-Safe-mode startup skips external frontend execution and artifact staging. It does
+Safe-mode startup skips external frontend/backend execution and artifact staging. It does
 not revoke saved trust. A normal restart enables approved extensions again.
 
 ## Imports and lifecycle
@@ -172,9 +174,71 @@ use `experimental_controllers().experimental_notify`.
 
 The host owns thread state, toasts and provider preferences. Frontend component
 state belongs to that window/mount and resets on reload; it is not transcript
-storage. Cleanup cannot undo arbitrary side effects. There is no extension
-storage/settings or backend RPC API yet. File renderers, workspace mutation
-controllers, custom settings and appearance providers remain later-slice APIs.
+storage. Cleanup cannot undo arbitrary side effects. Backend settings and
+storage use explicit scopes described below. File engines, workspace mutation
+controllers, custom settings sections and appearance providers remain later APIs.
+
+## Backend RPC, settings and data
+
+Declare `desktop.backend: "./server.ts"` alongside the optional frontend entry.
+Neither half is inferred. Adding a backend requires fresh native approval,
+including for development-approved packages. It permits trusted code with the
+app server's OS permissions, not a restricted permission sandbox. Backends use
+`@knightcodeai/cli/desktop-backend`, `typebox`, Node built-ins and package-local
+modules. Mutable third-party graphs, require/inline imports and remote imports
+are rejected. Backend source is private and never served to the renderer.
+See `02-backend/` for a complete page and live side-panel example.
+
+Use `experimental_defineDesktopBackend(app => { ... })` for synchronous,
+inert declarations. `experimental_registerRpc` declares a local ID, server-owned
+`read`/`write` kind, TypeBox parameter/result schemas and an async-capable
+`experimental_handle(params, signal)`. Both boundaries are checked. Services
+start in `experimental_onActivate`; register pause/resume hooks for producers
+and return cleanup or use `experimental_onDispose`. Activation runs once for
+the shared process, not once per renderer/thread.
+
+Frontend commands can capture `experimental_backend()`; React components use
+`experimental_useBackend()`, which returns a handle only after the matching
+backend/frontend ready decision. Call `experimental_call({ id, params, result },
+args, signal)` with shared schemas. Results are `ok` with `value`, `error`
+with `message`, `cancelled`, `disconnected`, or `outcome-unknown`. A cancelled
+or lost admitted write may have completed: read/reconcile state, never blindly
+retry. Handles never retarget another epoch. `experimental_subscribe({ id,
+schema }, listener, signal)` checks events and exact bindings and returns an
+owned disposable. Reconnect subscriptions explicitly after an update.
+
+`experimental_setting({ id, schema, default, secret? })` and
+`experimental_storage({ id, schema })` create backend value handles. Omitted
+context means app/user data. Resolve a project/thread context explicitly with
+`await app.experimental_context({ scope: "thread", cwd, threadId }, signal)`;
+project selectors omit threadId and use scope `project`. Paths must be absolute,
+existing and trusted; thread IDs must belong to that project. Captured contexts
+retain that identity or refuse after cancellation, trust revocation or identity
+change. They never follow the selected thread. Pass the activation-owned token
+to `experimental_get(context)` or `experimental_set(value, context)`;
+do not serialize tokens over RPC.
+
+Settings precedence is thread > project > app/user > declared default. Storage
+has no inheritance. Records are owner-namespaced under the app server's
+`desktop-extension-data/`, outside repositories and transcripts. Frontend
+`experimental_settings(selector?, signal?)` reads only public values;
+`experimental_setSetting(id, value, selector?, signal?)` validates writes and
+refuses secrets. Secrets stay server-side at every scope. Window-local
+provider/layout preferences retain their existing native/session storage.
+
+Preparation validates saved scopes without mutation. After gating new actions
+and waiting for admitted calls/IME input to drain, the host commits one epoch,
+disposes old services and publishes prepared frontends. A drain timeout resumes
+the old pair; post-commit renderer failure falls back only in that window.
+Failed backend activation/teardown disables all windows rather than reviving
+disposed services. Server restart requires a fresh handshake. Persistent writes
+are not rolled back; incompatible migrations need an explicit recovery plan.
+
+`experimental_registerPanelTab({ id, label, experimental_render })` adds an
+owned tab beside the thread's built-in tabs. It receives explicit thread context
+and uses the same registry, CSS, gate, boundary and disposal lifetime as a page.
+Disable/removal returns to the built-in tab. This does not replace the file,
+preview, terminal or workspace engines.
 
 ## Structural providers and navigation
 
@@ -411,7 +475,8 @@ load/render diagnostics. The app-server methods `desktopExtension/list`,
 `desktopExtension/set`, `desktopExtension/reload` and
 `desktopExtension/diagnostic` expose the same frontend-only inventory and
 bounded diagnostics. `desktopExtension/changed` tells connected windows to
-reread it. Backend RPC remains unavailable.
+reread it. Renderer RPC uses only the epoch-bound SDK facade; raw runtime
+protocol envelopes are refused by the native router.
 
 ## Testing and recovery
 

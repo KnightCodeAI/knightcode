@@ -33,6 +33,7 @@ import { NativeExtensionRecovery } from "./settings.tsx";
 export function initializeDesktopExtensions(): () => void {
 	const lifetime = new AbortController();
 	const host: experimental_DesktopHost = {
+		experimental_signal: lifetime.signal,
 		experimental_conversationServices: conversationServices,
 		experimental_pickerServices: pickerServices,
 		experimental_ItemRenderer: (props) => createElement(ItemRenderer, props),

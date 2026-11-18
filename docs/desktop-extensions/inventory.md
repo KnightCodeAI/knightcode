@@ -24,6 +24,8 @@ without exposing its behavior does not complete a surface.
 | Composer | `renderer/builtins/composer/`; `renderer/extensions/composer-root.tsx`, `composer-behavior.tsx`, `composer-controller.ts`; store drafts | Revisioned root/controller, replaceable adapters, seven contribution hosts, shared IME/keys/paste/drop/submit/queue behavior and SDK-only pickers | S5 |
 | Git/workspaces | `renderer/components/git.tsx`; store workspace state; `packages/cli/src/app-server/git-actions.ts`, `workspaces.ts` | Explicit-context Git/workspace controllers and durable operation handles | S7 |
 | Requests | `renderer/builtins/requests/`; `renderer/extensions/conversation.tsx`; store response guards; app-server approvals/dialogs | Replaceable presenter inside host ordering/recovery; exact-head, explicit-thread replies; server retains authority | S5 |
+| Live extension tab | `renderer/components/thread-view.tsx`; shared registry/surface hosts | `experimental_registerPanelTab`, explicit thread context and epoch-owned RPC/settings/event facade | S6 |
+| Backend/data | `packages/cli/src/app-server/desktop-extensions/` | Real jiti backend, coordinated revision/epoch, schema-checked RPC and explicit scoped persistence | S6 |
 | Side panel | `renderer/components/thread-view.tsx`: SidePanel; `changes.tsx`; `files-panel.tsx`; `file-tab.tsx`; `open-in.tsx` | Tabs, file openers, code/diff renderers, file draft/save/discard controller | S7 |
 | Preview | `renderer/components/preview.tsx`; `main/preview.ts`; `renderer/drag.ts` | Preview intents/hosts and annotations; keep guest isolation | S7 |
 | MCP Apps | `renderer/components/mcp-app.tsx`; `renderer/mcp-app-bridge.ts`; `main/mcp-apps.ts` | Public host, not a replacement for the isolated MCP App runtime | S7 |

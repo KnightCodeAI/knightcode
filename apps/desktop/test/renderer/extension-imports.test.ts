@@ -10,6 +10,7 @@ const file = `${root}/index.tsx`;
 test("extension imports allow only the SDK, shared runtimes and files inside the same built-in", () => {
 	for (const name of [
 		"@knightcodeai/cli/desktop",
+		"@knightcodeai/cli/desktop-backend",
 		"react",
 		"react-dom",
 		"react/jsx-runtime",

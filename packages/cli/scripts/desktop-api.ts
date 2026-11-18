@@ -10,15 +10,25 @@ export interface DesktopApiPublication {
 }
 
 /** Generate declarations without importing or executing the renderer SDK. */
-export function generateDesktopApi(source: string): DesktopApiPublication {
+export function generateDesktopApi(source: string, entry: "frontend" | "backend" = "frontend"): DesktopApiPublication {
+	const sourceName = entry === "backend" ? "desktop-backend.ts" : "desktop.ts";
+	const declarationName = entry === "backend" ? "desktop-backend-sdk.d.ts" : "desktop-sdk.d.ts";
 	const ast = parse(source, { sourceType: "module", plugins: ["typescript"] });
-	const declarations = ["// Generated from src/desktop.ts. Run bun packages/cli/scripts/generate-desktop-api.ts.\n"];
+	const declarations = [`// Generated from src/${sourceName}. Run bun packages/cli/scripts/generate-desktop-api.ts.\n`];
 	const entries: string[] = [];
 	const surfaces: string[] = [];
 	let apiVersion: number | undefined;
 	for (const statement of ast.program.body) {
-		if (statement.type === "ImportDeclaration" || statement.type === "TSModuleDeclaration") {
-			declarations.push(source.slice(statement.start!, statement.end!));
+		if (
+			statement.type === "ImportDeclaration" ||
+			statement.type === "TSModuleDeclaration" ||
+			(statement.type === "VariableDeclaration" && statement.declare)
+		) {
+			declarations.push(
+				source
+					.slice(statement.start!, statement.end!)
+					.replace('"./desktop-backend.ts"', '"./desktop-backend-sdk.d.ts"'),
+			);
 			continue;
 		}
 		if (statement.type !== "ExportNamedDeclaration" || !statement.declaration) continue;
@@ -53,6 +63,19 @@ export function generateDesktopApi(source: string): DesktopApiPublication {
 					}
 				}
 			}
+			if (node.id.name === "experimental_defineDesktopBackend") {
+				for (const item of node.body?.body ?? []) {
+					if (item.type !== "ReturnStatement" || item.argument?.type !== "ObjectExpression") continue;
+					for (const property of item.argument.properties)
+						if (
+							property.type === "ObjectProperty" &&
+							property.key.type === "Identifier" &&
+							property.key.name === "apiVersion" &&
+							property.value.type === "NumericLiteral"
+						)
+							apiVersion = property.value.value;
+				}
+			}
 			const params = node.params.map((param) => {
 				const value = param.type === "AssignmentPattern" ? param.left : param;
 				if (value.type !== "Identifier") throw new Error("Add declaration generation for the new SDK parameter shape.");
@@ -60,7 +83,7 @@ export function generateDesktopApi(source: string): DesktopApiPublication {
 				return `${id.name}${param.type === "AssignmentPattern" || id.optional ? "?" : ""}${id.typeAnnotation ? source.slice(id.typeAnnotation.start!, id.typeAnnotation.end!) : ""}`;
 			});
 			declarations.push(
-				`export declare function ${node.id.name}(${params.join(", ")})${node.returnType ? source.slice(node.returnType.start!, node.returnType.end!) : ""};`,
+				`export declare function ${node.id.name}${node.typeParameters ? source.slice(node.typeParameters.start!, node.typeParameters.end!) : ""}(${params.join(", ")})${node.returnType ? source.slice(node.returnType.start!, node.returnType.end!) : ""};`,
 			);
 			entries.push(node.id.name);
 		} else if (node.type === "TSInterfaceDeclaration") {
@@ -89,7 +112,7 @@ export function generateDesktopApi(source: string): DesktopApiPublication {
 		apiVersion,
 		declarations: declarations.join("\n\n") + "\n",
 		inventory:
-			`# Desktop API inventory\n\nGenerated from \`src/desktop.ts\`; API version ${apiVersion} (experimental).\nDo not edit by hand. See [the guide](desktop-extensions.md) and\n[portable declarations](desktop-sdk.d.ts) for signatures.\n\n## Surfaces\n\n` +
+			`# Desktop ${entry === "backend" ? "backend " : ""}API inventory\n\nGenerated from \`src/${sourceName}\`; API version ${apiVersion} (experimental).\nDo not edit by hand. See [the guide](desktop-extensions.md) and\n[portable declarations](${declarationName}) for signatures.\n\n## Surfaces\n\n` +
 			surfaces.map((surface) => `- \`${surface}\``).join("\n") +
 			"\n\n## Exports and members\n\n" +
 			entries.map((entry) => `- \`${entry}\``).join("\n") +

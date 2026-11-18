@@ -18,6 +18,50 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 describe("desktop native consent", () => {
+	it("requires fresh native-kind approval when a dev-approved frontend adds a backend", async () => {
+		const { agent, source } = fixture();
+		const manager = new DesktopExtensionManager(agent);
+		const { owner } = (await manager.list()).extensions[0]!;
+		await manager.set({ owner, source, approve: true, kinds: ["frontend"], dev: true });
+		writeFileSync(
+			join(source, "package.json"),
+			JSON.stringify({ knightcode: { desktop: { frontend: "./app.js", backend: "./server.js" } } }),
+		);
+		writeFileSync(join(source, "server.js"), 'throw new Error("backend must not execute"); export default {};');
+		const changed = (await manager.list()).extensions[0]!;
+		expect(changed.kinds).toEqual(["frontend", "backend"]);
+		expect(changed.approved).toBe(false);
+		expect(changed.artifact).toBeUndefined();
+		await expect(manager.set({ owner, enabled: true })).rejects.toThrow(/consent/i);
+		await expect(manager.set({ owner, source, approve: true, kinds: ["frontend"], dev: true })).rejects.toThrow(
+			/kind|changed/i,
+		);
+		await manager.set({ owner, source, approve: true, kinds: ["frontend", "backend"], dev: true });
+		const approved = (await manager.list()).extensions[0]!;
+		expect(approved.approved).toBe(true);
+		expect(approved.artifact?.backend).toBe("__backend/server.js");
+		expect(approved.error).toBeUndefined();
+		const saved = JSON.parse(readFileSync(join(agent, "desktop-extension-consent.json"), "utf8"));
+		expect(saved[owner].kinds).toEqual(["frontend", "backend"]);
+	});
+
+	it("safe mode does not even stage an approved backend-only graph", async () => {
+		const { agent, source } = fixture();
+		writeFileSync(
+			join(source, "package.json"),
+			JSON.stringify({ knightcode: { desktop: { backend: "./server.js" } } }),
+		);
+		writeFileSync(join(source, "server.js"), 'throw new Error("backend must not execute"); export default {};');
+		const manager = new DesktopExtensionManager(agent);
+		const { owner } = (await manager.list()).extensions[0]!;
+		await manager.set({ owner, source, approve: true, kinds: ["backend"] });
+		rmSync(join(source, "server.js"));
+		rmSync(join(agent, "desktop-artifacts"), { recursive: true, force: true });
+		const safe = (await new DesktopExtensionManager(agent, { safeMode: true }).list()).extensions[0]!;
+		expect(safe.approved).toBe(true);
+		expect(safe.artifact).toBeUndefined();
+		expect(safe.error).toBeUndefined();
+	});
 	it("requires separate consent and pins non-development content across restarts", async () => {
 		const { agent, source } = fixture();
 		const manager = new DesktopExtensionManager(agent);
@@ -25,7 +69,7 @@ describe("desktop native consent", () => {
 		expect(initial.approved).toBe(false);
 		expect(initial.artifact).toBeUndefined();
 		await expect(manager.set({ owner: initial.owner, enabled: true })).rejects.toThrow(/consent/i);
-		await manager.set({ owner: initial.owner, approve: true, source, enabled: true });
+		await manager.set({ owner: initial.owner, approve: true, kinds: ["frontend"], source, enabled: true });
 		const approved = (await new DesktopExtensionManager(agent).list()).extensions[0]!;
 		expect(approved.artifact).toBeDefined();
 		writeFileSync(join(source, "app.js"), "export default {apiVersion:2};");
@@ -38,7 +82,7 @@ describe("desktop native consent", () => {
 		const { agent, source } = fixture();
 		const manager = new DesktopExtensionManager(agent);
 		const { owner } = (await manager.list()).extensions[0]!;
-		await manager.set({ owner, source, approve: true, dev: true, enabled: true });
+		await manager.set({ owner, source, approve: true, kinds: ["frontend"], dev: true, enabled: true });
 		const first = (await manager.list()).extensions[0]!.artifact!.revision;
 		writeFileSync(join(source, "app.js"), "export default {apiVersion:1};");
 		expect((await manager.list()).extensions[0]!.artifact!.revision).not.toBe(first);
@@ -52,7 +96,7 @@ describe("desktop native consent", () => {
 		const { agent, source } = fixture();
 		const manager = new DesktopExtensionManager(agent);
 		const { owner } = (await manager.list()).extensions[0]!;
-		await manager.set({ owner, source, approve: true, enabled: true });
+		await manager.set({ owner, source, approve: true, kinds: ["frontend"], enabled: true });
 		await manager.set({ owner, revoke: true });
 		const revoked = (await manager.list()).extensions[0]!;
 		expect(revoked.approved).toBe(false);
@@ -73,7 +117,14 @@ describe("desktop native consent", () => {
 		trust.set(project, true);
 		const entry = (await manager.list(project)).extensions.find((entry) => entry.scope === "project")!;
 		expect(entry.artifact).toBeUndefined();
-		await manager.set({ owner: entry.owner, cwd: project, source: entry.source, approve: true, enabled: true });
+		await manager.set({
+			owner: entry.owner,
+			cwd: project,
+			source: entry.source,
+			approve: true,
+			kinds: ["frontend"],
+			enabled: true,
+		});
 		expect((await manager.list()).extensions.find((item) => item.owner === entry.owner)?.artifact).toBeDefined();
 		trust.set(project, false);
 		expect((await manager.list()).extensions.find((item) => item.owner === entry.owner)).toBeUndefined();
@@ -82,7 +133,7 @@ describe("desktop native consent", () => {
 		const { agent, source } = fixture();
 		const manager = new DesktopExtensionManager(agent);
 		const { owner } = (await manager.list()).extensions[0]!;
-		await manager.set({ owner, source, approve: true });
+		await manager.set({ owner, source, approve: true, kinds: ["frontend"] });
 		const file = join(agent, "desktop-extension-consent.json");
 		const records = JSON.parse(readFileSync(file, "utf8")) as Record<string, { kinds: string[] }>;
 		records[owner]!.kinds = [];

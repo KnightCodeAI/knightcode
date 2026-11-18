@@ -1,9 +1,9 @@
-# Desktop frontend loading (S2)
+# Desktop frontend loading
 
-S2 loads explicit `knightcode.desktop.frontend` entries in each window.
-Backend entries remain rejected until S6. Arbitrary Tailwind compilation remains
-S9 work. See `packages/cli/docs/desktop-extensions-preview.md` for the author
-contract and examples.
+S2 introduced explicit `knightcode.desktop.frontend` entries. S6 coordinates
+frontend/backend revisions across windows; see [backend.md](backend.md).
+Arbitrary Tailwind compilation remains S9 work. See
+`packages/cli/docs/desktop-extensions.md` for the shipped author contract.
 
 ## Loading and replacement
 
@@ -12,12 +12,15 @@ contract and examples.
    trust. It does not infer entries from ordinary CLI extensions.
 2. It validates the local module graph without evaluating it. Only relative
    modules and the published shared runtime imports are accepted. Real paths
-   must remain inside the extension. Unsupported imports, backend entries and
+   must remain inside the extension. Backend graphs capture local modules separately;
+   only Node built-ins, the backend SDK and TypeBox are allowed bare imports. Unsupported imports and
    invalid CSS produce diagnostics before execution.
 3. It stages content-addressed artifacts under the agent directory. The revision
-   covers the modules, validated CSS, assets and runtime contract. Direct names
+   covers both module graphs, shared schemas, validated CSS, assets and runtime
+   contract. Both graphs use one captured copy of each canonical source module. Direct names
    in CSS have separate keyframe, property, layer and font namespaces.
-4. Electron asks for native frontend consent. A normal grant pins a revision;
+4. Electron asks for native consent for the exact frontend/backend execution
+   kinds, including backend OS permissions. A normal grant pins a revision;
    the separate development choice permits later revisions. The consent file
    is not repository settings. Enabling cannot add an unapproved native kind.
 5. Main validates the requesting window's current server connection and the
@@ -28,15 +31,18 @@ contract and examples.
    `app://ext/` serves only declared files for acquired revisions, with explicit
    MIME types and desktop-origin CORS. Encoded separators, traversal, symlinks,
    undeclared files and unrelated origins are rejected.
-6. The renderer loads CSS and the module's inert declaration before preparing
-   a registration candidate. A successful synchronous setup commits once. The
-   previous activation remains live until then. Failed imports, CSS, setup,
-   duplicate IDs, versions and async setup leave that activation intact.
+6. The renderer loads CSS and inert declarations before acknowledging prepare.
+   Failed imports, CSS, setup, duplicate IDs, versions and async setup retain the
+   matching old pair in every window. After readiness, the host gates actions,
+   drains admitted work/IME input, commits one backend epoch and publishes each
+   frontend. A failed publisher is revoked in its window; failed backend start
+   or old teardown disables the owner globally instead of reviving disposed code.
 
-An explicit reload reruns setup and remounts contributions even if the revision
-is unchanged. Browser ESM caching still applies to the unchanged module graph;
-this does not promise to reevaluate module-level side effects. A changed
-revision gets a distinct module graph.
+An explicit reload creates a fresh epoch, even for unchanged files. Module
+edges and the SDK shim carry an activation nonce, so browser ESM cache cannot
+reuse an obsolete facade. Module leases are per activation; stylesheet leases
+remain per revision and retained roots. Imports are trusted code: reevaluation
+and disposal cannot roll back arbitrary module side effects.
 
 Disposal aborts owned work, revokes registrations before callbacks, removes
 owned views and portals, and releases CSS and serving leases. A stale disposer
@@ -79,7 +85,7 @@ Host-owned controls show inventory, consent state and diagnostics, reload or
 disable an owner, revoke consent and choose a provider. The settings entry,
 recovery notice and native View menu are not replaceable contributions.
 
-`--safe-mode` skips external staging and frontend execution. Main refuses
+`--safe-mode` skips external staging and frontend/backend execution. Main refuses
 artifact acquisition in safe mode. The native restart action requests this
 flag independently of renderer code. The real Electron test wedges an external
 setup in an infinite loop, invokes the native menu in main and verifies process
@@ -95,6 +101,7 @@ registered-property names, nested foreign roots, host inheritance, portal theme
 updates and failed-reload retention.
 
 The 500-row benchmark reports row selection and whole-list invalidation
-separately. The +2 ms guard is for row selection; whole-list invalidation has
-shown a larger cost and is not claimed free. macOS/Linux native packaging and
+separately. Both paths retain the strict +2 ms guard. Whole-list invalidation can land at
+that boundary on a contended machine; isolated and full-run results are recorded
+without changing the guard. macOS/Linux native packaging and
 the complete S9 CSS/utility acceptance matrix have not been run in S2.

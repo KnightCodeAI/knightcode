@@ -35,6 +35,20 @@ function setup() {
 const thread = (id: string) => ({ thread: { id } });
 
 describe("router", () => {
+	test("desktop native approval and epoch traffic cannot bypass the main-owned host boundary", () => {
+		const { router, toServer, inbox, open } = setup();
+		open(1);
+		router.fromWindow(1, {
+			id: 1,
+			method: "desktopExtension/set",
+			params: { owner: "example", approve: true, kinds: ["backend"] },
+		} as Message);
+		expect(toServer).toEqual([]);
+		expect(inbox.get(1)).toEqual([
+			{ id: 1, error: { code: "invalidParams", message: "Use the mediated desktop extension host." } },
+		]);
+	});
+
 	test("the same client id from two windows reaches the server distinct and returns to its sender", () => {
 		const { router, toServer, inbox, open } = setup();
 		open(1);

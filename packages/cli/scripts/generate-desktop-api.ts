@@ -25,6 +25,13 @@ export async function checkDesktopExtensionAssets(
 		if (readFileSync(join(root, "docs", file!), "utf8") !== content)
 			throw new Error(`Stale desktop API asset ${file}; run bun packages/cli/scripts/generate-desktop-api.ts.`);
 	}
+	const backend = generateDesktopApi(readFileSync(join(root, "src/desktop-backend.ts"), "utf8"), "backend");
+	for (const [file, content] of [
+		["desktop-backend-api.md", backend.inventory],
+		["desktop-backend-sdk.d.ts", backend.declarations],
+	])
+		if (readFileSync(join(root, "docs", file!), "utf8") !== content)
+			throw new Error(`Stale desktop backend API asset ${file}; regenerate desktop API assets.`);
 	const cache = mkdtempSync(join(tmpdir(), "kc-desktop-examples-"));
 	try {
 		const examples = join(root, "examples/desktop-extensions");
@@ -53,6 +60,9 @@ if (import.meta.main) {
 		const api = generateDesktopApi(readFileSync(join(root, "src/desktop.ts"), "utf8"));
 		writeFileSync(join(root, "docs/desktop-api.md"), api.inventory);
 		writeFileSync(join(root, "docs/desktop-sdk.d.ts"), api.declarations);
+		const backend = generateDesktopApi(readFileSync(join(root, "src/desktop-backend.ts"), "utf8"), "backend");
+		writeFileSync(join(root, "docs/desktop-backend-api.md"), backend.inventory);
+		writeFileSync(join(root, "docs/desktop-backend-sdk.d.ts"), backend.declarations);
 	}
 	await checkDesktopExtensionAssets();
 	console.log("Desktop API assets and external examples validated.");

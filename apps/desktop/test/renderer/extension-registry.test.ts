@@ -81,6 +81,21 @@ test("pages and hidden rail entries publish atomically, retain hidden pages, and
 	expect(registry.hiddenNavigation()).toEqual([]);
 });
 
+test("panel tabs stage inertly and retire with their exact registration set", () => {
+	const registry = new ExtensionRegistry();
+	const candidate = registry.prepare(
+		"panels",
+		defineDesktopExtension((app) => {
+			app.experimental_registerPanelTab({ id: "live", label: "Live", experimental_render: () => "live" });
+		}),
+	);
+	expect(registry.panelTabs(context)).toEqual([]);
+	const handle = candidate.commit();
+	expect(registry.panelTabs(context).map((entry) => entry.id)).toEqual(["panels/live"]);
+	handle.dispose();
+	expect(registry.panelTabs(context)).toEqual([]);
+});
+
 const context: experimental_CommandContext = { sidebarOpen: true };
 const command = (id: string, order = 0) => ({ id, order, label: () => id, experimental_run: () => {} });
 
@@ -449,6 +464,29 @@ test("a command rejection after disposal cannot report against a newer activatio
 	await Promise.resolve();
 	expect(report).not.toHaveBeenCalled();
 	expect(registry.commands(context).map((entry) => entry.id)).toEqual(["owner/new"]);
+});
+
+test("a retained command label callback cannot run after its registration retires", () => {
+	const registry = new ExtensionRegistry();
+	let reads = 0;
+	const handle = registry.register(
+		"owner",
+		defineDesktopExtension((app) => {
+			app.experimental_registerCommand({
+				id: "label",
+				label: () => {
+					reads++;
+					return "Label";
+				},
+				experimental_run() {},
+			});
+		}),
+	);
+	const entry = registry.commands(context)[0]!;
+	expect(registry.commandLabel(entry, context)).toBe("Label");
+	handle.dispose();
+	expect(registry.commandLabel(entry, context)).toBeUndefined();
+	expect(reads).toBe(1);
 });
 
 test("a throwing command label is contained instead of crashing the palette", () => {

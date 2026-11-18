@@ -1,5 +1,10 @@
 /** Validated host operations for native frontend artifacts, not a public extension bridge. */
-import { DesktopExtensionDiagnostic, DesktopExtensionRequests } from "@knightcode/app-server-protocol";
+import {
+	DesktopActivationBinding,
+	DesktopExtensionDiagnostic,
+	DesktopExtensionRequests,
+	DesktopRuntimeRequests,
+} from "@knightcode/app-server-protocol";
 import { type Static, Type } from "typebox";
 export const DesktopProviderPreferences = Type.Object(
 	{ app: Type.Record(Type.String(), Type.String()), window: Type.Record(Type.String(), Type.String()) },
@@ -7,6 +12,49 @@ export const DesktopProviderPreferences = Type.Object(
 );
 export type DesktopProviderPreferences = Static<typeof DesktopProviderPreferences>;
 export const DesktopExtensionHostMethods = {
+	"host/desktopExtension/window/connect": {
+		params: Type.Object({}, { additionalProperties: false }),
+		result: DesktopRuntimeRequests["desktopExtension/window/connect"].result,
+	},
+	"host/desktopExtension/reconcile": {
+		params: Type.Omit(DesktopRuntimeRequests["desktopExtension/reconcile"].params, ["windowId", "lifetime"]),
+		result: DesktopRuntimeRequests["desktopExtension/reconcile"].result,
+	},
+	"host/desktopExtension/ack": {
+		params: Type.Omit(DesktopRuntimeRequests["desktopExtension/ack"].params, ["windowId", "lifetime"]),
+		result: DesktopRuntimeRequests["desktopExtension/ack"].result,
+	},
+	"host/desktopExtension/fail": {
+		params: Type.Omit(DesktopRuntimeRequests["desktopExtension/fail"].params, ["windowId", "lifetime"]),
+		result: DesktopRuntimeRequests["desktopExtension/fail"].result,
+	},
+	"host/desktopExtension/call": {
+		params: Type.Object(
+			{
+				binding: DesktopActivationBinding,
+				call: Type.String({ minLength: 1, maxLength: 4096 }),
+				method: Type.String({ maxLength: 4096 }),
+				args: Type.Unknown(),
+			},
+			{ additionalProperties: false },
+		),
+		result: DesktopRuntimeRequests["desktopExtension/call"].result,
+	},
+	"host/desktopExtension/cancel": {
+		params: Type.Object(
+			{ binding: DesktopActivationBinding, call: Type.String({ minLength: 1, maxLength: 4096 }) },
+			{ additionalProperties: false },
+		),
+		result: DesktopRuntimeRequests["desktopExtension/cancel"].result,
+	},
+	"host/desktopExtension/subscribe": {
+		params: Type.Omit(DesktopRuntimeRequests["desktopExtension/subscribe"].params, ["windowId", "lifetime"]),
+		result: DesktopRuntimeRequests["desktopExtension/subscribe"].result,
+	},
+	"host/desktopExtension/unsubscribe": {
+		params: Type.Omit(DesktopRuntimeRequests["desktopExtension/unsubscribe"].params, ["windowId", "lifetime"]),
+		result: DesktopRuntimeRequests["desktopExtension/unsubscribe"].result,
+	},
 	"host/desktopExtension/list": {
 		params: Type.Object(
 			{

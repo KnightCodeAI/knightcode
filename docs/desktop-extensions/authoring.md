@@ -1,7 +1,8 @@
 # S3 authoring verification
 
 The authoring CLI, guide, generated API inventory/declarations and desktop-only
-skill are implemented. Later UI surfaces and backend RPC remain out of scope.
+skill are implemented. S6 adds coordinated backend RPC, scoped data and the
+page/live-panel example; see `backend.md` and the shipped author guide.
 S3 is complete: the parity gate passes 88/88 (see the verification record).
 
 ## Packaged authoring proof
@@ -65,7 +66,9 @@ generated assets and the shipped example graphs. They also type-check every
 reference example against the shipped declarations; a regression test proves
 that a stageable TypeScript assignment error fails packaging. Root type checks
 include the same standalone example project. Generated `.d.ts` files are excluded
-from manual formatting. Native backend entries remain rejected.
+from manual formatting. Backend declarations and their opaque context brand are
+published in `desktop-backend-sdk.d.ts`; the asset gate validates both SDKs and
+all frontend/backend example graphs. Native-kind consent gates execution.
 
 ## Verification record
 

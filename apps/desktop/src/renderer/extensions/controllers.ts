@@ -41,8 +41,8 @@ export const controllers: experimental_Controllers = {
 		return true;
 	},
 	experimental_openPage: (id) => {
-		if (!desktopExtensions.pages({ sidebarOpen: getState().sidebarOpen }).some((entry) => entry.id === id))
-			return false;
+		const page = desktopExtensions.pages({ sidebarOpen: getState().sidebarOpen }).find((entry) => entry.id === id);
+		if (!page || (page.activation && !page.activation.admitted())) return false;
 		navigate({ kind: "page", id });
 		return true;
 	},

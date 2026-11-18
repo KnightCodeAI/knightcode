@@ -1,4 +1,4 @@
-/** Validate and stage immutable, frontend-only module graphs without evaluating extension code. */
+/** Validate immutable frontend/backend artifacts without evaluating either entry during staging. */
 import { createHash, randomUUID } from "node:crypto";
 import {
 	existsSync,
@@ -11,22 +11,28 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isBuiltin } from "node:module";
+import { DESKTOP_ACTIVATION_MARKER } from "@knightcode/app-server-protocol";
 import { parse } from "@babel/parser";
 import { traverseFast, type StringLiteral } from "@babel/types";
 import postcss from "postcss";
 import { experimental_RUNTIME_IMPORTS as DESKTOP_RUNTIME_IMPORTS } from "../../desktop.ts";
 import { scopeDesktopCss } from "./css.ts";
+import { getPathComparisonKey } from "../../utils/paths.ts";
 
 export interface DesktopArtifact {
 	owner: string;
+	kinds: ("frontend" | "backend")[];
 	revision: string;
 	root: string;
 	frontend: string;
+	backend?: string;
 	styles: string[];
 	files: string[];
 }
 export interface DesktopManifest {
-	frontend: string;
+	frontend?: string;
+	backend?: string;
 	styles: string[];
 }
 
@@ -40,15 +46,22 @@ export function readDesktopManifest(root: string): DesktopManifest | undefined {
 	const desktop = knightcode.desktop;
 	if (!desktop || typeof desktop !== "object" || Array.isArray(desktop))
 		throw new Error("knightcode.desktop must be an object.");
-	if ("backend" in desktop) throw new Error("Desktop backend entries are not supported yet (S6).");
-	if (!("frontend" in desktop) || typeof desktop.frontend !== "string")
-		throw new Error("Declare desktop.frontend explicitly.");
+	if ("frontend" in desktop && (typeof desktop.frontend !== "string" || desktop.frontend.length === 0))
+		throw new Error("desktop.frontend must be a non-empty local module path.");
+	if ("backend" in desktop && (typeof desktop.backend !== "string" || desktop.backend.length === 0))
+		throw new Error("desktop.backend must be a non-empty local module path.");
+	if (!("frontend" in desktop) && !("backend" in desktop))
+		throw new Error("Declare desktop.frontend or desktop.backend explicitly.");
 	const styles = "styles" in desktop ? desktop.styles : [];
 	if (!Array.isArray(styles) || !styles.every((file): file is string => typeof file === "string"))
 		throw new Error("desktop.styles must be an array of local CSS paths.");
-	if (Object.keys(desktop).some((key) => !["frontend", "styles"].includes(key)))
+	if (Object.keys(desktop).some((key) => !["frontend", "backend", "styles"].includes(key)))
 		throw new Error("Unsupported desktop entry kind.");
-	return { frontend: desktop.frontend, styles };
+	return {
+		...("frontend" in desktop ? { frontend: desktop.frontend as string } : {}),
+		...("backend" in desktop ? { backend: desktop.backend as string } : {}),
+		styles,
+	};
 }
 
 /** Every path is both lexically and physically inside its source root; symlink escapes never become artifacts. */
@@ -65,29 +78,55 @@ export function containedDesktopFile(root: string, name: string): string {
 	return file;
 }
 
-/** Build only a supported module graph, then atomically expose its content-addressed directory. */
+/** Validate the complete package for coordinated activation; staging never evaluates an entry. */
 export async function stageDesktopExtension(
 	sourceRoot: string,
 	cache: string,
 	owner: string,
 ): Promise<DesktopArtifact> {
+	return stageDesktopRevision(sourceRoot, cache, owner);
+}
+
+/** Stage a complete candidate revision for consent/preparation, without granting an execution or serving lease. */
+export async function stageDesktopRevision(sourceRoot: string, cache: string, owner: string): Promise<DesktopArtifact> {
 	if (!/^[a-zA-Z0-9._-]+$/.test(owner) || owner === "." || owner === ".." || owner === "runtime")
 		throw new Error("Invalid desktop extension owner.");
 	const source = realpathSync(sourceRoot);
 	const manifest = readDesktopManifest(source);
 	if (!manifest) throw new Error("No explicit knightcode.desktop manifest.");
+	const sourceText = new Map<string, string>();
+	const readModule = (file: string): string => {
+		const identity = getPathComparisonKey(realpathSync(file));
+		const known = sourceText.get(identity);
+		if (known !== undefined) return known;
+		const code = readFileSync(file, "utf8");
+		sourceText.set(identity, code);
+		return code;
+	};
+	// Both halves must compile the same captured bytes, even if an editor saves a shared schema mid-stage.
+	const backend = manifest.backend ? readBackendGraph(source, manifest.backend, readModule) : undefined;
+	const backendSource = manifest.backend ? realpathSync(containedDesktopFile(source, manifest.backend)) : undefined;
 	const files = new Map<string, string | Buffer>();
 	const modules = new Map<string, string>();
-	let bytes = 0;
+	let bytes = backend ? [...backend.files.values()].reduce((sum, code) => sum + Buffer.byteLength(code), 0) : 0;
 	const put = (name: string, content: string | Buffer) => {
+		if (
+			name
+				.split("/")[0]!
+				.replace(/[. ]+$/g, "")
+				.toLowerCase() === "__backend"
+		)
+			throw new Error("The __backend artifact directory is reserved for private backend source.");
 		if (files.has(name)) throw new Error(`Artifact output collision: ${name}`);
 		bytes += Buffer.byteLength(content);
-		if (files.size >= 512 || bytes > 16 * 1024 * 1024)
+		if (files.size + (backend?.files.size ?? 0) >= 512 || bytes > 16 * 1024 * 1024)
 			throw new Error("Desktop extension exceeds the 512-file / 16 MiB limit.");
 		files.set(name, content);
 	};
 	const moduleFile = (name: string): string => {
 		const file = containedDesktopFile(source, name);
+		if (backendSource && getPathComparisonKey(realpathSync(file)) === getPathComparisonKey(backendSource))
+			throw new Error("A frontend module cannot import the backend entry.");
 		const known = modules.get(file);
 		if (known) return known;
 		if (!/\.(?:[cm]?js|tsx?|jsx)$/.test(file)) throw new Error(`Unsupported module import: ${name}`);
@@ -96,12 +135,14 @@ export async function stageDesktopExtension(
 			.join("/")
 			.replace(/\.(?:[cm]?js|tsx?|jsx)$/, ".js");
 		modules.set(file, out);
-		let code = readFileSync(file, "utf8");
+		let code = readModule(file);
+		if (code.includes(DESKTOP_ACTIVATION_MARKER) || out.includes(DESKTOP_ACTIVATION_MARKER))
+			throw new Error("Reserved desktop activation marker in author source.");
 		validateLoading(code, file, source);
 		if (/\.(?:tsx?|jsx)$/.test(file)) code = transpile(code, file);
 		code = rewriteImports(code, (specifier) => {
 			if (DESKTOP_RUNTIME_IMPORTS.some((name) => name === specifier))
-				return `app://ext/runtime/${encodeURIComponent(specifier)}.js`;
+				return `app://ext/runtime/${encodeURIComponent(specifier)}.js${specifier === "@knightcodeai/cli/desktop" ? `?activation=${DESKTOP_ACTIVATION_MARKER}` : ""}`;
 			if (!specifier.startsWith("./") && !specifier.startsWith("../"))
 				throw new Error(
 					`Unsupported import ${JSON.stringify(specifier)}; use the desktop SDK or a local module (desktop-extensions §Imports).`,
@@ -113,16 +154,16 @@ export async function stageDesktopExtension(
 			);
 			let path = relative(dirname(out), imported).split(sep).join("/");
 			if (!path.startsWith(".")) path = `./${path}`;
-			return path;
+			return `${path}?activation=${DESKTOP_ACTIVATION_MARKER}`;
 		});
 		put(out, code);
 		return out;
 	};
-	const entry = moduleFile(manifest.frontend);
+	const entry = manifest.frontend ? moduleFile(manifest.frontend) : undefined;
 	const frontend = "__entry.js";
 	put(
 		frontend,
-		`import extension from ${JSON.stringify(`./${entry}`)};\nglobalThis.__knightcodeDesktopLoaded(new URL(import.meta.url).searchParams.get("activation"), extension);\n`,
+		`${entry ? `import extension from ${JSON.stringify(`./${entry}?activation=${DESKTOP_ACTIVATION_MARKER}`)};` : "const extension = {apiVersion:1,experimental_setup(){}};"}\nglobalThis.__knightcodeDesktopLoaded(new URL(import.meta.url).searchParams.get("activation"), extension);\n`,
 	);
 	const readCss = (name: string, ancestors: ReadonlySet<string>): string => {
 		const file = containedDesktopFile(source, name);
@@ -171,8 +212,11 @@ export async function stageDesktopExtension(
 		});
 	// Validate and collect assets before hashing; compile original CSS again with the decided revision, never replace literal text.
 	const provisionalCss = manifest.styles.length ? compileCss("pending") : "";
-	const hash = createHash("sha256").update("desktop-artifact-v2\0").update(owner);
-	for (const [name, code] of [...files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+	const hash = createHash("sha256")
+		.update("desktop-artifact-v3\0")
+		.update(owner)
+		.update(backend?.entry ?? "");
+	for (const [name, code] of [...files, ...(backend?.files ?? [])].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
 		hash.update(JSON.stringify([name, Buffer.byteLength(code)])).update(code);
 	hash.update(provisionalCss);
 	const revision = hash.digest("hex");
@@ -182,7 +226,7 @@ export async function stageDesktopExtension(
 	if (!existsSync(root)) {
 		const temporary = join(cache, owner, `.${randomUUID()}`);
 		try {
-			for (const [name, code] of files) {
+			for (const [name, code] of [...files, ...(backend?.files ?? [])]) {
 				mkdirSync(dirname(join(temporary, name)), { recursive: true });
 				writeFileSync(join(temporary, name), code, { mode: 0o600 });
 			}
@@ -191,7 +235,74 @@ export async function stageDesktopExtension(
 			rmSync(temporary, { recursive: true, force: true });
 		}
 	}
-	return { owner, revision, root, frontend, styles, files: [...files.keys()] };
+	return {
+		owner,
+		kinds: [...(manifest.frontend ? ["frontend" as const] : []), ...(backend ? ["backend" as const] : [])],
+		revision,
+		root,
+		frontend,
+		...(backend ? { backend: backend.entry } : {}),
+		styles,
+		files: [...files.keys()],
+	};
+}
+
+function readBackendGraph(
+	source: string,
+	entry: string,
+	readModule: (file: string) => string,
+): { entry: string; files: Map<string, string> } {
+	const files = new Map<string, string>();
+	const visited = new Map<string, string>();
+	let bytes = 0;
+	const visit = (name: string): string => {
+		const file = containedDesktopFile(source, name);
+		const identity = getPathComparisonKey(file);
+		const known = visited.get(identity);
+		if (known) return known;
+		if (!/\.(?:[cm]?js|[cm]?ts|tsx|jsx)$/.test(file)) throw new Error(`Unsupported backend module: ${name}`);
+		const output = `__backend/${relative(source, file).split(sep).join("/")}`;
+		const code = readModule(file);
+		bytes += Buffer.byteLength(code);
+		if (files.size >= 512 || bytes > 16 * 1024 * 1024)
+			throw new Error("Desktop backend exceeds the 512-file / 16 MiB limit.");
+		visited.set(identity, output);
+		files.set(output, code);
+		const ast = parse(code, { sourceType: "module", plugins: ["typescript", "jsx"], createImportExpressions: true });
+		traverseFast(ast, (node) => {
+			if (
+				node.type === "ImportExpression" ||
+				node.type === "TSImportType" ||
+				node.type === "TSImportEqualsDeclaration" ||
+				(node.type === "CallExpression" && node.callee.type === "Identifier" && node.callee.name === "require")
+			)
+				throw new Error(`${file}: inline imports and require loading are unsupported; use top-level imports.`);
+			if (
+				(node.type !== "ImportDeclaration" &&
+					node.type !== "ExportNamedDeclaration" &&
+					node.type !== "ExportAllDeclaration") ||
+				!node.source
+			)
+				return;
+			const specifier = node.source.value;
+			if (
+				isBuiltin(specifier) ||
+				["@knightcodeai/cli/desktop-backend", "typebox", "typebox/compile", "typebox/value"].includes(specifier)
+			)
+				return;
+			if (!specifier.startsWith("./") && !specifier.startsWith("../"))
+				throw new Error(
+					`Unsupported backend import: ${specifier}; use local modules, Node built-ins, the backend SDK or TypeBox.`,
+				);
+			visit(
+				relative(source, resolve(dirname(file), specifier))
+					.split(sep)
+					.join("/"),
+			);
+		});
+		return output;
+	};
+	return { entry: visit(entry), files };
 }
 
 const retiredMembers: Readonly<Record<string, string>> = {

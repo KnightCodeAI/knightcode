@@ -6,18 +6,24 @@
  * A move sets the pane's style itself and `onEnd` hands the final size to the store: a store update per move
  * re-rendered everything that reads the size (the side panel's whole diff), which made dragging lag.
  */
-export function followDrag(onMove: (event: PointerEvent) => void, onEnd?: () => void): void {
+export function followDrag(onMove: (event: PointerEvent) => void, onEnd?: () => void, signal?: AbortSignal): void {
+	if (signal?.aborted) return;
+	let ended = false;
 	const move = (event: PointerEvent) => {
 		if (event.buttons === 0) end();
 		else onMove(event);
 	};
 	const end = () => {
+		if (ended) return;
+		ended = true;
+		signal?.removeEventListener("abort", end);
 		window.removeEventListener("pointermove", move);
 		window.removeEventListener("pointerup", end);
 		window.removeEventListener("pointercancel", end);
 		window.removeEventListener("blur", end);
 		onEnd?.();
 	};
+	signal?.addEventListener("abort", end, { once: true });
 	window.addEventListener("pointermove", move);
 	window.addEventListener("pointerup", end);
 	window.addEventListener("pointercancel", end);

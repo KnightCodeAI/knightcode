@@ -93,12 +93,19 @@ describe("desktop extension artifacts", () => {
 		writeFileSync(join(source, "app.tsx"), code);
 		await expect(stageDesktopExtension(source, cache, "example")).rejects.toThrow(/import|loading|outside/i);
 	});
-	it("never infers frontend entries or accepts a backend entry", async () => {
+	it("stages a backend-only package with an inert frontend instead of inferring a source entry", async () => {
 		const { source, cache } = fixture();
 		writeFileSync(
 			join(source, "package.json"),
 			JSON.stringify({ knightcode: { desktop: { backend: "./server.ts" } } }),
 		);
-		await expect(stageDesktopExtension(source, cache, "example")).rejects.toThrow(/backend/i);
+		writeFileSync(
+			join(source, "server.ts"),
+			'throw new Error("backend staging must not execute code"); export default {};',
+		);
+		const artifact = await stageDesktopExtension(source, cache, "example");
+		expect(artifact.backend).toBe("__backend/server.ts");
+		expect(artifact.kinds).toEqual(["backend"]);
+		expect(readFileSync(join(artifact.root, artifact.frontend), "utf8")).not.toContain("app.js");
 	});
 });

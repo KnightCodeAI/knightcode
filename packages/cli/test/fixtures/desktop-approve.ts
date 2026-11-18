@@ -4,4 +4,4 @@ const [agent, source] = process.argv.slice(2);
 const manager = new DesktopExtensionManager(agent!);
 const entry = (await manager.list()).extensions.find(entry => entry.source === source);
 if (!entry) throw new Error("Fixture source was not discovered.");
-await manager.set({ owner: entry.owner, source: entry.source, approve: true, dev: true });
+await manager.set({ owner: entry.owner, source: entry.source, approve: true, kinds: entry.kinds, dev: true });

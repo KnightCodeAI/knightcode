@@ -101,6 +101,13 @@ export class Router {
 
 	fromWindow(windowId: number, message: Message): void {
 		if (isRequest(message)) {
+			if (message.method.startsWith("desktopExtension/")) {
+				this.toWindow(windowId, {
+					id: message.id,
+					error: { code: "invalidParams", message: "Use the mediated desktop extension host." },
+				});
+				return;
+			}
 			const params = (message.params ?? {}) as Record<string, unknown>;
 			if (message.method === "initialize") {
 				const result = this.server.initializeResult();

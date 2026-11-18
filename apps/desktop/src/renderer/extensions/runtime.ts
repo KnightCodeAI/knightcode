@@ -3,8 +3,14 @@ import { ExtensionRegistry } from "./registry.ts";
 
 import { reportExternal } from "./external.ts";
 
-export const desktopExtensions = new ExtensionRegistry((owner, error, revision) => {
+export const desktopExtensions = new ExtensionRegistry((owner, error, revision, binding) => {
 	console.error(owner, error);
 	if (!owner.startsWith("builtin."))
-		reportExternal(owner, revision ?? "unknown", "render", error instanceof Error ? error.message : String(error));
+		reportExternal(
+			owner,
+			revision ?? "unknown",
+			"render",
+			error instanceof Error ? error.message : String(error),
+			binding,
+		);
 });

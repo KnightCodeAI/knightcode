@@ -16,6 +16,38 @@ import type { DropdownMenu } from "radix-ui";
 
 import type * as Domain from "./desktop-models.ts";
 
+import type { Static, TSchema } from "typebox";
+
+import type { experimental_BackendDataSelector } from "./desktop-backend-sdk.d.ts";
+
+export type experimental_BackendResult<T> =
+	| { status: "ok"; value: T }
+	| { status: "disconnected" | "cancelled" | "outcome-unknown" }
+	| { status: "error"; message: string };
+
+export interface experimental_BackendClient {
+	experimental_call<P extends TSchema, R extends TSchema>(
+		method: { id: string; params: P; result: R },
+		args: Static<P>,
+		signal?: AbortSignal,
+	): Promise<experimental_BackendResult<Static<R>>>;
+	experimental_settings(
+		context?: experimental_BackendDataSelector,
+		signal?: AbortSignal,
+	): Promise<experimental_BackendResult<Record<string, unknown>>>;
+	experimental_setSetting(
+		id: string,
+		value: unknown,
+		context?: experimental_BackendDataSelector,
+		signal?: AbortSignal,
+	): Promise<experimental_BackendResult<Record<string, unknown>>>;
+	experimental_subscribe<S extends TSchema>(
+		event: { id: string; schema: S },
+		listener: (value: Static<S>) => void,
+		signal?: AbortSignal,
+	): experimental_Disposable;
+}
+
 export type experimental_ViewItem = Domain.Item & { index?: number };
 
 export interface experimental_ViewTurn extends Omit<Domain.Turn, "items"> {
@@ -426,6 +458,7 @@ export interface experimental_DesktopApp {
 	experimental_signal: AbortSignal;
 	experimental_registerCommand(command: experimental_Command): experimental_Disposable;
 	experimental_registerPage(page: experimental_Page): experimental_Disposable;
+	experimental_registerPanelTab(tab: experimental_Page): experimental_Disposable;
 	experimental_hideNavigation(entry: experimental_NavigationVisibility): experimental_Disposable;
 	experimental_registerSlot(slot: experimental_SurfaceContribution): experimental_Disposable;
 	experimental_registerItemRenderer(
@@ -567,6 +600,9 @@ export interface experimental_ComposerController {
 }
 
 export interface experimental_DesktopHost {
+	experimental_signal: AbortSignal;
+	experimental_backend?: experimental_BackendClient;
+	experimental_useBackend?(): experimental_BackendClient | undefined;
 	experimental_composer(target: experimental_ComposerTarget): experimental_ComposerController;
 	experimental_attachComposerEditor(
 		target: experimental_ComposerTarget,
@@ -611,49 +647,53 @@ declare global {
 	var __knightcodeDesktop: experimental_DesktopHost | undefined;
 }
 
-export declare function experimental_controllers(): experimental_Controllers;
+export declare function experimental_backend(this: unknown): experimental_BackendClient | undefined;
 
-export declare function experimental_composer(target: experimental_ComposerTarget): experimental_ComposerController;
+export declare function experimental_useBackend(this: unknown): experimental_BackendClient | undefined;
 
-export declare function experimental_attachComposerEditor(target: experimental_ComposerTarget, adapter: experimental_EditorAdapter): experimental_EditorAttachment;
+export declare function experimental_controllers(this: unknown): experimental_Controllers;
 
-export declare function experimental_useComposerDraft(target: experimental_ComposerTarget): experimental_ComposerDraft;
+export declare function experimental_composer(this: unknown, target: experimental_ComposerTarget): experimental_ComposerController;
 
-export declare function experimental_ComposerRoot(props: experimental_ComposerProps): ReactNode;
+export declare function experimental_attachComposerEditor(this: unknown, target: experimental_ComposerTarget, adapter: experimental_EditorAdapter): experimental_EditorAttachment;
 
-export declare function experimental_ComposerFrame(props: { editor?: ReactNode }): ReactNode;
+export declare function experimental_useComposerDraft(this: unknown, target: experimental_ComposerTarget): experimental_ComposerDraft;
 
-export declare function experimental_TextareaEditor(): ReactNode;
+export declare function experimental_ComposerRoot(this: unknown, props: experimental_ComposerProps): ReactNode;
 
-export declare function experimental_useComposer(): experimental_ComposerState;
+export declare function experimental_ComposerFrame(this: unknown, props: { editor?: ReactNode }): ReactNode;
 
-export declare function experimental_useComposerEditor(adapter: experimental_EditorAdapter | undefined): experimental_EditorMount | undefined;
+export declare function experimental_TextareaEditor(this: unknown): ReactNode;
 
-export declare function experimental_ComposerContributions(props: { host: experimental_ComposerHost }): ReactNode;
+export declare function experimental_useComposer(this: unknown): experimental_ComposerState;
 
-export declare function experimental_imageThumbnail(path: string): Promise<string | undefined>;
+export declare function experimental_useComposerEditor(this: unknown, adapter: experimental_EditorAdapter | undefined): experimental_EditorMount | undefined;
 
-export declare function experimental_pickerServices(): experimental_PickerServices;
+export declare function experimental_ComposerContributions(this: unknown, props: { host: experimental_ComposerHost }): ReactNode;
 
-export declare function experimental_conversationServices(): experimental_ConversationServices;
+export declare function experimental_imageThumbnail(this: unknown, path: string): Promise<string | undefined>;
 
-export declare function experimental_ItemRenderer(props: {
-	threadId?: string;
-	item: experimental_ViewItem;
-	children: ReactNode;
-}): ReactNode;
+export declare function experimental_pickerServices(this: unknown): experimental_PickerServices;
 
-export declare function experimental_MessageActions(props: { threadId: string; item: experimental_ViewItem }): ReactNode;
+export declare function experimental_conversationServices(this: unknown): experimental_ConversationServices;
 
-export declare function experimental_useToasts(): readonly experimental_Toast[];
+export declare function experimental_ItemRenderer(this: unknown, props: {
+		threadId?: string;
+		item: experimental_ViewItem;
+		children: ReactNode;
+	}): ReactNode;
 
-export declare function experimental_Icon(props: experimental_IconProps): ReactElement;
+export declare function experimental_MessageActions(this: unknown, props: { threadId: string; item: experimental_ViewItem }): ReactNode;
 
-export declare function experimental_Button(props: experimental_ButtonProps): ReactElement;
+export declare function experimental_useToasts(this: unknown): readonly experimental_Toast[];
 
-export declare function experimental_Portal(props: { children: ReactNode }): ReactNode;
+export declare function experimental_Icon(this: unknown, props: experimental_IconProps): ReactElement;
 
-export declare function experimental_KeybindingKeys(props: { binding: experimental_KeybindingId }): ReactElement;
+export declare function experimental_Button(this: unknown, props: experimental_ButtonProps): ReactElement;
+
+export declare function experimental_Portal(this: unknown, props: { children: ReactNode }): ReactNode;
+
+export declare function experimental_KeybindingKeys(this: unknown, props: { binding: experimental_KeybindingId }): ReactElement;
 
 export interface experimental_Thread {
 	id: string;
@@ -900,32 +940,29 @@ export type experimental_Update =
 	| { state: "ready"; version?: string }
 	| { state: "available"; version: string; url: string };
 
-export declare function experimental_useNavigation(): experimental_NavigationState;
+export declare function experimental_useNavigation(this: unknown): experimental_NavigationState;
 
-export declare function experimental_useThreadList(): experimental_ThreadListState;
+export declare function experimental_useThreadList(this: unknown): experimental_ThreadListState;
 
-export declare function experimental_useUpdate(): experimental_Update;
+export declare function experimental_useUpdate(this: unknown): experimental_Update;
 
-export declare function experimental_controls(): experimental_Controls;
+export declare function experimental_controls(this: unknown): experimental_Controls;
 
-export declare function experimental_shellServices(): experimental_ShellServices;
+export declare function experimental_shellServices(this: unknown): experimental_ShellServices;
 
-export declare function experimental_icons(): Record<
-	experimental_IconName,
-	ComponentType<Omit<experimental_IconProps, "name">>
->;
+export declare function experimental_icons(this: unknown): Record<experimental_IconName, ComponentType<Omit<experimental_IconProps, "name">>>;
 
-export declare function experimental_SurfaceHost(props: {
-	surface: "navigation" | "threadList" | "home" | "titleBar";
-}): ReactNode;
+export declare function experimental_SurfaceHost(this: unknown, props: {
+		surface: "navigation" | "threadList" | "home" | "titleBar";
+	}): ReactNode;
 
-export declare function experimental_Content(): ReactNode;
+export declare function experimental_Content(this: unknown): ReactNode;
 
-export declare function experimental_Slots(props: {
-	surface: experimental_Surface;
-	thread?: experimental_Thread;
-	cwd?: string;
-	context?: experimental_CommandContext;
-}): ReactNode;
+export declare function experimental_Slots(this: unknown, props: {
+		surface: experimental_Surface;
+		thread?: experimental_Thread;
+		cwd?: string;
+		context?: experimental_CommandContext;
+	}): ReactNode;
 
-export declare function experimental_ThreadRow(props: { threadId: string; inset?: boolean }): ReactNode;
+export declare function experimental_ThreadRow(this: unknown, props: { threadId: string; inset?: boolean }): ReactNode;

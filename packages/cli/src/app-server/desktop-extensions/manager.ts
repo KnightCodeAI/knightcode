@@ -1,12 +1,13 @@
-/** Native consent and frontend artifact discovery, held outside repository-writable settings. */
+/** Native-kind consent and candidate artifact discovery, held outside repository-writable settings. */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import type {
-	DesktopExtensionDiagnostic,
-	DesktopExtensionInfo,
-	ParamsOf,
-	ResultOf,
+import {
+	DesktopEntryKinds,
+	type DesktopExtensionDiagnostic,
+	type DesktopExtensionInfo,
+	type ParamsOf,
+	type ResultOf,
 } from "@knightcode/app-server-protocol";
 import { type Static, Type } from "typebox";
 import { Compile } from "typebox/compile";
@@ -14,12 +15,12 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { SettingsManager } from "../../core/settings-manager.ts";
 import { getPathComparisonKey } from "../../utils/paths.ts";
 import { projectReadable } from "../workspaces.ts";
-import { readDesktopManifest, stageDesktopExtension } from "./artifacts.ts";
+import { readDesktopManifest, stageDesktopRevision, type DesktopArtifact } from "./artifacts.ts";
 
 const Consent = Type.Object(
 	{
 		source: Type.String(),
-		kinds: Type.Array(Type.Literal("frontend")),
+		kinds: Type.Array(DesktopEntryKinds.items, { maxItems: 2, uniqueItems: true }),
 		revision: Type.String(),
 		enabled: Type.Boolean(),
 		dev: Type.Boolean(),
@@ -30,7 +31,14 @@ const Consent = Type.Object(
 const Consents = Type.Record(Type.String(), Consent);
 const checkConsents = Compile(Consents);
 type Consents = Static<typeof Consents>;
-type Source = { owner: string; source: string; scope: "user" | "project"; project?: string; error?: string };
+type Source = {
+	owner: string;
+	source: string;
+	scope: "user" | "project";
+	project?: string;
+	kinds?: Static<typeof DesktopEntryKinds>;
+	error?: string;
+};
 
 export class DesktopExtensionManager {
 	private readonly agent: string;
@@ -42,16 +50,28 @@ export class DesktopExtensionManager {
 	}
 
 	async list(cwd?: string): Promise<ResultOf<"desktopExtension/list">> {
+		return (await this.inventory(cwd)).snapshot;
+	}
+
+	private async inventory(cwd?: string) {
 		const consents = this.readConsents();
 		const extensions: DesktopExtensionInfo[] = [];
+		const candidates = new Map<string, DesktopArtifact>();
+		const enabled = new Set<string>();
 		for (const entry of this.discover(consents, cwd)) {
 			const record = consents[entry.owner];
-			const approved = record?.source === entry.source && record.kinds.includes("frontend");
+			const approved =
+				record?.source === entry.source &&
+				!!entry.kinds?.length &&
+				entry.kinds.every((kind) => record.kinds.includes(kind));
+			if (!this.safeMode && record?.enabled && record.source === entry.source && (approved || entry.error))
+				enabled.add(entry.owner);
 			const info: DesktopExtensionInfo = {
 				owner: entry.owner,
 				name: basename(entry.source),
 				source: entry.source,
 				scope: entry.scope,
+				...(entry.kinds ? { kinds: entry.kinds } : {}),
 				approved,
 				enabled: approved && record.enabled,
 				dev: approved && record.dev,
@@ -60,50 +80,82 @@ export class DesktopExtensionManager {
 			if (entry.error) info.error = entry.error;
 			else if (approved && record.enabled && !this.safeMode) {
 				try {
-					const artifact = await stageDesktopExtension(
-						entry.source,
-						join(this.agent, "desktop-artifacts"),
-						entry.owner,
-					);
+					const artifact = await stageDesktopRevision(entry.source, join(this.agent, "desktop-artifacts"), entry.owner);
 					info.revision = artifact.revision;
-					if (!record.dev && artifact.revision !== record.revision)
+					info.kinds = artifact.kinds;
+					if (!artifact.kinds.every((kind) => record.kinds.includes(kind))) {
+						info.approved = info.enabled = info.dev = false;
+						info.error = "Native entry kinds changed. Review and grant native consent again.";
+					} else if (!record.dev && artifact.revision !== record.revision)
 						info.error =
 							"Source changed. Review and grant native consent again, or explicitly allow development reloads.";
-					else info.artifact = artifact;
+					else {
+						candidates.set(entry.owner, artifact);
+						info.artifact = artifact;
+					}
 				} catch (error) {
 					info.error = error instanceof Error ? error.message : String(error);
 				}
 			}
 			extensions.push(info);
 		}
-		return { safeMode: this.safeMode, extensions };
+		return { snapshot: { safeMode: this.safeMode, extensions }, artifacts: [...candidates.values()], enabled };
+	}
+
+	/** Coordinator-only candidates recheck consent/trust/safe mode without publishing private server files. */
+	async candidates(cwd?: string) {
+		const { artifacts, enabled } = await this.inventory(cwd);
+		return { artifacts, enabled };
+	}
+
+	/** Native consent can change while another window stages; executable admission rechecks the receipt. */
+	admits(artifact: DesktopArtifact): boolean {
+		const record = this.readConsents()[artifact.owner];
+		return (
+			!this.safeMode &&
+			!!record?.enabled &&
+			artifact.kinds.every((kind) => record.kinds.includes(kind)) &&
+			(record.dev || record.revision === artifact.revision) &&
+			(!record.project || projectReadable(this.agent, record.project))
+		);
 	}
 
 	async set(params: ParamsOf<"desktopExtension/set">): Promise<void> {
 		const entry = this.discover(this.readConsents(), params.cwd).find((item) => item.owner === params.owner);
 		if (!entry) throw new Error("Desktop extension is no longer configured or its project is not trusted.");
+		if (params.kinds && !params.approve)
+			throw new Error("Entry kinds are only accepted with explicit native approval.");
 		if (params.revoke && (params.approve || params.enabled || params.dev))
 			throw new Error("Revoking consent cannot also enable or approve an extension.");
 		let artifact;
 		if (params.approve) {
 			if (params.source !== entry.source) throw new Error("Desktop extension source changed; review its source again.");
 			if (entry.error) throw new Error(entry.error);
-			artifact = await stageDesktopExtension(entry.source, join(this.agent, "desktop-artifacts"), entry.owner);
+			artifact = await stageDesktopRevision(entry.source, join(this.agent, "desktop-artifacts"), entry.owner);
+			if (
+				!params.kinds ||
+				params.kinds.length !== artifact.kinds.length ||
+				!artifact.kinds.every((kind) => params.kinds!.includes(kind))
+			)
+				throw new Error("Native entry kinds changed or were not reviewed. Review and grant native consent again.");
 		}
 		const records = this.readConsents();
 		const previous = records[entry.owner];
 		if (
 			!params.approve &&
 			!params.revoke &&
-			(!previous || previous.source !== entry.source || !previous.kinds.includes("frontend"))
+			(!previous ||
+				previous.source !== entry.source ||
+				!entry.kinds?.length ||
+				!entry.kinds.every((kind) => previous.kinds.includes(kind)))
 		)
-			throw new Error("Native frontend consent is required before enabling this extension.");
+			throw new Error("Native entry-kind consent is required before enabling this extension.");
 		if (params.dev && !params.approve) throw new Error("Development reloads require explicit native consent.");
 		if (params.revoke) delete records[entry.owner];
 		else
 			records[entry.owner] = {
 				source: entry.source,
-				kinds: ["frontend"],
+				kinds: artifact?.kinds ?? previous!.kinds,
 				revision: artifact?.revision ?? previous!.revision,
 				enabled: params.enabled ?? previous?.enabled ?? true,
 				dev: params.approve ? (params.dev ?? false) : previous!.dev,
@@ -143,8 +195,13 @@ export class DesktopExtensionManager {
 			if (roots.has(key)) return;
 			const owner = `external-${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
 			try {
-				if (!readDesktopManifest(source)) return;
-				roots.set(key, { owner, source, scope, ...(project ? { project } : {}) });
+				const manifest = readDesktopManifest(source);
+				if (!manifest) return;
+				const kinds: Static<typeof DesktopEntryKinds> = [
+					...(manifest.frontend ? ["frontend" as const] : []),
+					...(manifest.backend ? ["backend" as const] : []),
+				];
+				roots.set(key, { owner, source, scope, kinds, ...(project ? { project } : {}) });
 			} catch (error) {
 				roots.set(key, {
 					owner,

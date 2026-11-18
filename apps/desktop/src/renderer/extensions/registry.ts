@@ -11,23 +11,27 @@ import type {
 	experimental_SurfaceContribution,
 } from "@knightcodeai/cli/desktop";
 import { STRUCTURAL_BUILTINS } from "./providers.ts";
+import type { DesktopActivationBinding } from "@knightcode/app-server-protocol";
+import type { FrontendActivation } from "./activation.ts";
 
 export type Registration = {
 	id: string;
 	owner: string;
 	revision?: string;
+	activation?: FrontendActivation;
 	sequence: number;
 	signal: AbortSignal;
-	reportError(error: unknown): void;
+	reportError(error: unknown, recovery?: "fallback"): void;
 } & (
 	| { kind: "command"; contribution: experimental_Command }
 	| { kind: "slot" | "provider"; contribution: experimental_SurfaceContribution }
 	| { kind: "page"; contribution: experimental_Page }
+	| { kind: "panelTab"; contribution: experimental_Page }
 	| { kind: "navigationVisibility"; contribution: experimental_NavigationVisibility }
 );
 
 export type CommandRegistration = Extract<Registration, { kind: "command" }>;
-export type SurfaceRegistration = Extract<Registration, { kind: "slot" | "provider" | "page" }>;
+export type SurfaceRegistration = Extract<Registration, { kind: "slot" | "provider" | "page" | "panelTab" }>;
 
 export class ExtensionRegistry {
 	private entries: readonly Registration[] = [];
@@ -35,13 +39,17 @@ export class ExtensionRegistry {
 	private preparing = new Set<string>();
 	private listeners = new Set<() => void>();
 	private sequence = 0;
-	private report: (owner: string, error: unknown, revision?: string) => void;
+	private report: (owner: string, error: unknown, revision?: string, binding?: DesktopActivationBinding) => void;
 
 	constructor(
-		report: (owner: string, error: unknown, revision?: string) => void = (owner, error) => console.error(owner, error),
+		report: (owner: string, error: unknown, revision?: string, binding?: DesktopActivationBinding) => void = (
+			owner,
+			error,
+		) => console.error(owner, error),
 	) {
-		this.report = (owner, error, revision) => {
-			if (revision === undefined) report(owner, error);
+		this.report = (owner, error, revision, binding) => {
+			if (binding) report(owner, error, revision, binding);
+			else if (revision === undefined) report(owner, error);
 			else report(owner, error, revision);
 		};
 	}
@@ -55,6 +63,12 @@ export class ExtensionRegistry {
 		};
 	};
 
+	/** Gate changes invalidate readers without replacing registrations or their retained editor lifetimes. */
+	invalidate(): void {
+		this.entries = [...this.entries];
+		for (const listener of this.listeners) listener();
+	}
+
 	/** Register a new owner; replacement requires an explicitly prepared revision. */
 	register(owner: string, extension: experimental_DesktopExtension): experimental_Disposable {
 		if (this.owners.has(owner)) throw new Error(`Extension owner already registered: ${owner}`);
@@ -66,6 +80,7 @@ export class ExtensionRegistry {
 		owner: string,
 		extension: experimental_DesktopExtension,
 		revision?: string,
+		activation?: FrontendActivation,
 	): experimental_Disposable & { commit(): experimental_Disposable } {
 		// Declaration-policy boundary: identities and supported versions cannot be expressed by these string/number types.
 		if (!/^[a-zA-Z0-9._-]+$/.test(owner)) throw new Error(`Invalid extension owner: ${owner}`);
@@ -116,19 +131,29 @@ export class ExtensionRegistry {
 		const metadata = (id: string) => {
 			if (phase !== "preparing") throw new Error("The registration set is closed.");
 			const controller = new AbortController();
-			signals.set(controller.signal, controller);
+			const signal = activation ? AbortSignal.any([controller.signal, activation.signal]) : controller.signal;
+			signals.set(signal, controller);
 			return {
 				id: `${owner}/${id}`,
 				owner,
 				revision,
+				activation,
 				sequence: this.sequence++,
-				signal: controller.signal,
-				reportError: (error: unknown) => this.report(owner, error, revision),
+				signal,
+				reportError: (error: unknown, recovery?: "fallback") => {
+					if (phase !== "published" || signal.aborted) return;
+					// A ready host-owned fallback is not a failed activation; preserve S5 sibling controls and their epoch.
+					const recovered = recovery === "fallback" && activation?.admitted();
+					if (!recovered) activation?.fail(error);
+					this.report(owner, error, revision, recovered ? undefined : activation?.binding);
+				},
 			};
 		};
 		const app: experimental_DesktopApp = {
-			experimental_signal: lifetime.signal,
+			experimental_signal: activation ? AbortSignal.any([lifetime.signal, activation.signal]) : lifetime.signal,
 			experimental_registerPage: (contribution) => add({ ...metadata(contribution.id), kind: "page", contribution }),
+			experimental_registerPanelTab: (contribution) =>
+				add({ ...metadata(contribution.id), kind: "panelTab", contribution }),
 			experimental_hideNavigation: (contribution) =>
 				add({ ...metadata(contribution.id), kind: "navigationVisibility", contribution }),
 			experimental_registerCommand: (contribution) =>
@@ -208,6 +233,13 @@ export class ExtensionRegistry {
 		);
 	}
 
+	panelTabs(context: experimental_CommandContext): Extract<Registration, { kind: "panelTab" }>[] {
+		return this.entries.filter(
+			(entry): entry is Extract<Registration, { kind: "panelTab" }> =>
+				entry.kind === "panelTab" && this.available(entry, context),
+		);
+	}
+
 	hiddenNavigation(): { owner: string; revision?: string; target: "home" | "profile" }[] {
 		return this.entries.flatMap((entry) =>
 			entry.kind === "navigationVisibility"
@@ -218,11 +250,15 @@ export class ExtensionRegistry {
 
 	commands(context: experimental_CommandContext): CommandRegistration[] {
 		return this.entries.filter(
-			(entry): entry is CommandRegistration => entry.kind === "command" && this.available(entry, context),
+			(entry): entry is CommandRegistration =>
+				entry.kind === "command" &&
+				(!entry.activation || entry.activation.admitted()) &&
+				this.available(entry, context),
 		);
 	}
 
 	commandLabel(entry: CommandRegistration, context: experimental_CommandContext): string | undefined {
+		if (!this.entries.includes(entry) || entry.signal.aborted) return;
 		try {
 			return entry.contribution.label(context);
 		} catch (error) {
@@ -232,7 +268,12 @@ export class ExtensionRegistry {
 	}
 
 	runCommand(entry: CommandRegistration, context: experimental_CommandContext): void {
-		if (!this.entries.includes(entry) || !this.available(entry, context)) return;
+		if (
+			!this.entries.includes(entry) ||
+			(entry.activation && !entry.activation.admitted()) ||
+			!this.available(entry, context)
+		)
+			return;
 		try {
 			const result = entry.contribution.experimental_run(context, entry.signal);
 			if (result)
@@ -266,6 +307,7 @@ export class ExtensionRegistry {
 	}
 
 	private available(entry: Registration, context: experimental_CommandContext): boolean {
+		if (entry.signal.aborted) return false;
 		try {
 			return entry.contribution.experimental_available?.(context) ?? true;
 		} catch (error) {

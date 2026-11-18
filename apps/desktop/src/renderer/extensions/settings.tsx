@@ -69,12 +69,12 @@ export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 			</div>
 			{list.safeMode ? (
 				<p role="status" className="text-sm text-secondary">
-					Safe mode: no external frontend code is loaded. Restart normally to use extensions.
+					Safe mode: no external frontend code or backend code is loaded. Restart normally to use extensions.
 				</p>
 			) : null}
 			<p className="text-xs text-secondary">
-				Native frontend code shares the app renderer. Session extensions and Claude/Grok plugins do not grant native
-				trust. Review each source before approving it.
+				Native frontend code shares the app renderer; backend code runs with the app server's OS permissions. Session
+				extensions and Claude/Grok plugins do not grant native trust. Review each source before approving it.
 			</p>
 			{list.extensions.map((entry) => (
 				<div key={entry.owner} className="rounded-2xl border border-line bg-section p-4" data-extension={entry.owner}>
@@ -97,7 +97,11 @@ export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 									)
 								}
 							>
-								{entry.approved ? "Review trust" : "Trust frontend"}
+								{entry.approved
+									? "Review trust"
+									: entry.kinds?.includes("backend")
+										? "Trust native code"
+										: "Trust frontend"}
 							</Button>
 							{entry.approved ? (
 								<Button
@@ -160,7 +164,12 @@ export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 			{Object.entries(STRUCTURAL_BUILTINS).map(([surface, builtin]) => {
 				const available = desktopExtensions
 					.getSnapshot()
-					.filter((entry) => entry.kind === "provider" && entry.contribution.surface === surface);
+					.filter(
+						(entry) =>
+							entry.kind === "provider" &&
+							entry.contribution.surface === surface &&
+							(!entry.activation || entry.activation.admitted()),
+					);
 				const preferred = preferences.app[surface] ?? builtin;
 				const windowChoice = preferences.window[surface] ?? "";
 				const label =

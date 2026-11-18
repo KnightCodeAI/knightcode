@@ -78,6 +78,7 @@ export function useComposer(): experimental_ComposerState {
 /** Bind one adapter; the returned handle belongs to this exact mount, never a later editor. */
 export function useComposerEditor(
 	adapter: experimental_EditorAdapter | undefined,
+	owner?: AbortSignal,
 ): experimental_EditorMount | undefined {
 	const root = useRoot();
 	const target = root.state.current.target;
@@ -97,7 +98,8 @@ export function useComposerEditor(
 					return { ...state, composing: root.composing.current || state.composing };
 				},
 			},
-			root.signal,
+			owner ? AbortSignal.any([root.signal, owner]) : root.signal,
+			owner,
 		);
 		if (result.status !== "mounted") throw new Error(`Composer editor attachment ${result.status}`);
 		let revision = root.state.current.controller.experimental_getSnapshot().revision;
@@ -136,7 +138,7 @@ export function useComposerEditor(
 			document.removeEventListener("selectionchange", selection);
 			bound.dispose();
 		};
-	}, [adapter, root, key]);
+	}, [adapter, root, key, owner]);
 	useLayoutEffect(() => {
 		attached.current?.handle.experimental_sync();
 	}, [draft.revision, root]);

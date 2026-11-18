@@ -4,6 +4,7 @@
  */
 
 import { type Static, type TSchema, Type } from "typebox";
+import type { DesktopExtensionEvent, DesktopExtensionPhase } from "@knightcode/app-server-protocol";
 import { DesktopExtensionHostMethods } from "./desktop-extensions.ts";
 
 function Obj<P extends Record<string, TSchema>>(properties: P) {
@@ -395,6 +396,8 @@ export type HostResponse = { id: number; result: unknown } | { id: number; error
 
 /** Main-originated events that are not protocol notifications. */
 export type HostEvent =
+	| { event: "desktopExtension/phase"; phase: DesktopExtensionPhase }
+	| { event: "desktopExtension/event"; payload: DesktopExtensionEvent }
 	| { event: "desktopExtension/providers"; providers: { app: Record<string, string>; window: Record<string, string> } }
 	| { event: "server/state"; state: "starting" | "ready" | "restarting" | "failed"; message?: string }
 	/** A `knightcode://` link to show (section 6.1). */

@@ -1,6 +1,11 @@
 /** Shared-runtime ESM loading through script elements; no eval, inline imports or second React instance. */
 import * as SDK from "@knightcodeai/cli/desktop";
-import type { DesktopArtifact, DesktopExtensionDiagnostic } from "@knightcode/app-server-protocol";
+import type {
+	DesktopActivationBinding,
+	DesktopArtifact,
+	DesktopExtensionDiagnostic,
+	DesktopExtensionPhase,
+} from "@knightcode/app-server-protocol";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import * as JSX from "react/jsx-runtime";
@@ -14,6 +19,7 @@ import { client } from "../client.ts";
 import { DesktopProviderPreferences } from "../../shared/desktop-extensions.ts";
 import { startupLayout } from "./startup.ts";
 import { FrontendExtensions } from "./loader.ts";
+import { FrontendActivation } from "./activation.ts";
 import type { ExtensionRegistry } from "./registry.ts";
 import { artifactUrl, loadRevisionStyles } from "./styles.ts";
 
@@ -29,6 +35,7 @@ const runtime: Record<string, object> = {
 	typebox: Typebox,
 };
 const callbacks = new Map<string, (extension: unknown) => void>();
+let activeLoader: FrontendExtensions | undefined;
 const listeners = new Set<() => void>();
 let failures: ReadonlyMap<string, string> = new Map();
 const windowKey = `knightcode.desktop.providers.window.${window.knightcode?.windowId ?? 0}`;
@@ -70,7 +77,13 @@ export function reportExternal(
 	revision: string,
 	phase: DesktopExtensionDiagnostic["phase"],
 	message: string,
+	binding?: DesktopActivationBinding,
 ): void {
+	if (binding && phase === "render")
+		queueMicrotask(() => {
+			activeLoader?.revoke(owner, binding);
+			void client.host("host/desktopExtension/fail", { binding, message: message.slice(0, 4096) }).catch(() => {});
+		});
 	const next = new Map(failures);
 	if (phase === "active") next.delete(owner);
 	else {
@@ -89,6 +102,7 @@ export function reportExternal(
 
 declare global {
 	var __knightcodeDesktopRuntime: Record<string, object> | undefined;
+	var __knightcodeDesktopScopedRuntime: Record<string, typeof SDK> | undefined;
 	var __knightcodeDesktopLoaded: ((activation: string | null, extension: unknown) => void) | undefined;
 }
 
@@ -98,7 +112,23 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 	globalThis.__knightcodeDesktopLoaded = (activation, extension) => {
 		if (activation) callbacks.get(activation)?.(extension);
 	};
-	const loader = new FrontendExtensions(registry, prepareArtifact, reportExternal, ReactDOM.flushSync);
+	const host = globalThis.__knightcodeDesktop;
+	if (!host) throw new Error("Desktop window host is unavailable.");
+	const retired = new FrontendActivation(
+		{ owner: "retired", revision: "", epoch: "", window: "", mount: "" },
+		host,
+		() => {},
+	);
+	retired.dispose();
+	const scopes: Record<string, typeof SDK> = { retired: retired.sdk };
+	globalThis.__knightcodeDesktopScopedRuntime = scopes;
+	const loader = new FrontendExtensions(
+		registry,
+		(artifact, signal, activation) => prepareArtifact(artifact, signal, activation, scopes),
+		reportExternal,
+		ReactDOM.flushSync,
+	);
+	activeLoader = loader;
 	const offRegistry = registry.subscribe(() => {
 		if (window.knightcode?.safeMode) return;
 		const hidden = registry
@@ -115,27 +145,87 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 	});
 	let closed = false;
 	let refreshId = 0;
-	const refresh = async (reason: "changed" | "reload" = "changed") => {
+	let generation = 0;
+	let connection: Promise<unknown> | undefined;
+	const refresh = async () => {
 		const id = ++refreshId;
+		const session = generation;
 		try {
 			const next = await client.host("host/desktopExtension/list", {
 				runtime: Object.fromEntries(Object.entries(runtime).map(([name, value]) => [name, Object.keys(value)])),
 			});
-			if (closed || id !== refreshId) return;
+			if (closed || id !== refreshId || session !== generation) return;
 			providers = next.providers;
 			startupLayout.reconcile(next.providers.app, next.extensions);
 			rememberProviders();
 			failures = new Map(
 				[...failures].filter(([owner]) => next.extensions.some((entry) => entry.owner === owner && entry.enabled)),
 			);
+			for (const entry of next.extensions)
+				if (entry.error) reportExternal(entry.owner, entry.revision ?? "unknown", "load", entry.error);
 			for (const listener of listeners) listener();
-			await loader.update(next, reason);
+			if (next.safeMode) {
+				loader.dispose();
+				return;
+			}
+			connection ??= client.host("host/desktopExtension/window/connect", {});
+			await connection;
+			if (!closed && id === refreshId && session === generation)
+				await client.host("host/desktopExtension/reconcile", {});
 		} catch (error) {
-			if (!closed && id === refreshId)
+			if (!closed && id === refreshId && session === generation) {
+				connection = undefined;
 				reportExternal("host", "unknown", "load", error instanceof Error ? error.message : String(error));
+			}
+		}
+	};
+	const phase = async (event: DesktopExtensionPhase) => {
+		const session = generation;
+		const { binding } = event;
+		try {
+			switch (event.phase) {
+				case "prepare":
+					if (!event.artifact || !event.contracts) throw new Error("Prepared frontend metadata is incomplete.");
+					await loader.prepare({ binding, artifact: event.artifact, contracts: event.contracts });
+					break;
+				case "quiesce":
+					await loader.quiesce(binding);
+					break;
+				case "publish":
+					loader.publish(binding);
+					break;
+				case "resume":
+					loader.resume(binding);
+					break;
+				case "discard":
+					loader.discard(binding);
+					return;
+				case "revoke":
+					loader.revoke(binding.owner);
+					return;
+				case "ready":
+					loader.ready(binding);
+					return;
+			}
+			if (!closed && session === generation) await client.host("host/desktopExtension/ack", { id: event.id, binding });
+		} catch (error) {
+			if (closed || session !== generation) return;
+			const message = (error instanceof Error ? error.message : String(error)) || "Frontend activation failed.";
+			reportExternal(binding.owner, binding.revision, "load", message);
+			if (event.phase === "ready") {
+				loader.revoke(binding.owner, binding);
+				await client.host("host/desktopExtension/fail", { binding, message: message.slice(0, 4096) }).catch(() => {});
+			} else
+				await client
+					.host("host/desktopExtension/ack", { id: event.id, binding, error: message.slice(0, 4096) })
+					.catch(() => {});
 		}
 	};
 	const offEvent = client.onHostEvent((event) => {
+		if (event.event === "desktopExtension/phase") {
+			if (!closed) void phase(event.phase);
+			return;
+		}
 		if (event.event === "desktopExtension/providers") {
 			providers = event.providers;
 			rememberProviders();
@@ -146,39 +236,63 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 		if (event.state === "ready") void refresh();
 		else {
 			refreshId++;
+			generation++;
+			connection = undefined;
 			loader.dispose();
 		}
 	});
 	const offNotification = client.onNotification((event) => {
-		if (event.method === "desktopExtension/changed") void refresh(event.params.reload ? "reload" : "changed");
+		if (event.method === "desktopExtension/changed") void refresh();
 	});
 	return () => {
 		closed = true;
 		offRegistry();
 		refreshId++;
+		generation++;
 		offEvent();
 		offNotification();
 		loader.dispose();
+		if (activeLoader === loader) activeLoader = undefined;
 		callbacks.clear();
+		if (globalThis.__knightcodeDesktopScopedRuntime === scopes) globalThis.__knightcodeDesktopScopedRuntime = undefined;
 		globalThis.__knightcodeDesktopLoaded = undefined;
 		globalThis.__knightcodeDesktopRuntime = undefined;
 	};
 }
-
 async function prepareArtifact(
 	artifact: Artifact,
 	signal: AbortSignal,
+	context: FrontendActivation,
+	scopes: Record<string, typeof SDK>,
 ): Promise<{ extension: SDK.experimental_DesktopExtension; dispose(): void }> {
-	const release = await loadRevisionStyles(artifact, signal, async () => {
-		const lease = crypto.randomUUID();
-		await client.host("host/desktopExtension/acquire", { owner: artifact.owner, revision: artifact.revision, lease });
-		return () => {
-			void client
-				.host("host/desktopExtension/release", { owner: artifact.owner, revision: artifact.revision, lease })
-				.catch(() => {});
-		};
-	});
 	const activation = crypto.randomUUID();
+	scopes[activation] = context.sdk;
+	const releaseModule = () => {
+		void client
+			.host("host/desktopExtension/release", { owner: artifact.owner, revision: artifact.revision, lease: activation })
+			.catch(() => {});
+	};
+	let release: () => void;
+	try {
+		await client.host("host/desktopExtension/acquire", {
+			owner: artifact.owner,
+			revision: artifact.revision,
+			lease: activation,
+		});
+		release = await loadRevisionStyles(artifact, signal, async () => {
+			const lease = crypto.randomUUID();
+			await client.host("host/desktopExtension/acquire", { owner: artifact.owner, revision: artifact.revision, lease });
+			return () => {
+				void client
+					.host("host/desktopExtension/release", { owner: artifact.owner, revision: artifact.revision, lease })
+					.catch(() => {});
+			};
+		});
+	} catch (error) {
+		delete scopes[activation];
+		releaseModule();
+		throw error;
+	}
 	const script = document.createElement("script");
 	script.type = "module";
 	script.crossOrigin = "anonymous";
@@ -227,12 +341,16 @@ async function prepareArtifact(
 		return {
 			extension,
 			dispose: () => {
+				delete scopes[activation];
 				script.remove();
+				releaseModule();
 				release();
 			},
 		};
 	} catch (error) {
+		delete scopes[activation];
 		script.remove();
+		releaseModule();
 		release();
 		throw error;
 	} finally {
