@@ -31,7 +31,7 @@ function fakePi(active: string[]) {
 	};
 }
 
-function plain(lines: string[]): string {
+function plain(lines: readonly string[]): string {
 	return stripTerminalSequences(lines.join("\n"));
 }
 

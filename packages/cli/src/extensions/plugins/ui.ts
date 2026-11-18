@@ -539,7 +539,7 @@ export class PluginsView implements PluginsUi, Component, Focusable {
 		this.inputHandler?.handleInput?.(data);
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		return this.content.render(width);
 	}
 

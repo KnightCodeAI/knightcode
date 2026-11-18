@@ -22,7 +22,11 @@ const IMAGE_LINE = /\x1b_G|\x1b]1337;File=/;
  * Shift transcript lines right, keeping them inside `width`. Blank lines stay put; inline images are shifted
  * too but never truncated, and their pad is capped so the image still starts on screen.
  */
-export function prefixOutputPad(lines: string[], outputPad: number, width = Number.POSITIVE_INFINITY): string[] {
+export function prefixOutputPad(
+	lines: readonly string[],
+	outputPad: number,
+	width = Number.POSITIVE_INFINITY,
+): readonly string[] {
 	if (outputPad <= 0) return lines;
 	const prefix = " ".repeat(outputPad);
 	const imagePrefix = " ".repeat(Math.max(0, Math.min(outputPad, width - 1)));
@@ -107,7 +111,7 @@ export class CollapsibleCallComponent extends Container {
 		this.outputPad = outputPad;
 	}
 
-	override render(width: number): string[] {
+	override render(width: number): readonly string[] {
 		const pad = Math.max(0, this.outputPad);
 		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
 	}

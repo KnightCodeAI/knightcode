@@ -30,3 +30,6 @@ apps/*
 
 # Plugin-managed, not repo source.
 .superpowers/
+
+# One glob per line for Macroscope; Prettier would reflow it as Markdown.
+.macroscope/ignore.md

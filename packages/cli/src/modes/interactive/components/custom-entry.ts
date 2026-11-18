@@ -43,7 +43,7 @@ export class CustomEntryComponent extends Container {
 		this.outputPad = outputPad;
 	}
 
-	override render(width: number): string[] {
+	override render(width: number): readonly string[] {
 		if (!this.padContent) return super.render(width);
 		const pad = Math.max(0, this.outputPad);
 		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);

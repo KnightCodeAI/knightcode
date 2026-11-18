@@ -1,9 +1,13 @@
-import { describe, expect, test } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, test, vi } from "vitest";
 import {
 	type ChangelogEntry,
 	getChangelogHighlights,
 	getNewEntries,
 	normalizeChangelogLinks,
+	parseChangelog,
 } from "../src/utils/changelog.ts";
 
 const entry: ChangelogEntry = {
@@ -102,5 +106,21 @@ describe("getNewEntries", () => {
 		expect(newContent("latest")).toBeUndefined();
 		expect(newContent("0.1")).toBeUndefined();
 		expect(newContent("")).toBeUndefined();
+	});
+});
+
+describe("parseChangelog", () => {
+	// Runs in the TUI (startup notes, /changelog), where a direct write draws over the screen.
+	test("returns no entries for an unreadable changelog without printing", () => {
+		const dir = mkdtempSync(join(tmpdir(), "knightcode-changelog-"));
+		const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+		try {
+			// A directory exists but cannot be read as a file (EISDIR).
+			expect(parseChangelog(dir)).toEqual([]);
+			expect(consoleError).not.toHaveBeenCalled();
+		} finally {
+			consoleError.mockRestore();
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

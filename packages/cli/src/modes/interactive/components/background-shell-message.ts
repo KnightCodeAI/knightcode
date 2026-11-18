@@ -117,7 +117,7 @@ class BackgroundShellMessageComponent extends Container {
 		});
 	}
 
-	override render(width: number): string[] {
+	override render(width: number): readonly string[] {
 		const pad = Math.max(0, this.outputPad);
 		return prefixOutputPad(super.render(Math.max(1, width - pad)), pad, width);
 	}

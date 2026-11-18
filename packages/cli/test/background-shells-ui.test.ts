@@ -63,7 +63,7 @@ function renderContext(args: Record<string, unknown>, isError: boolean) {
 	};
 }
 
-function screen(component: { render(width: number): string[] }, width = 100): string {
+function screen(component: { render(width: number): readonly string[] }, width = 100): string {
 	return stripAnsi(component.render(width).join("\n"));
 }
 
@@ -364,7 +364,7 @@ describe("background shell transcript", () => {
 			},
 		};
 		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1, keyText, keyHint }, theme);
-		const text = screen(component as { render(width: number): string[] });
+		const text = screen(component as { render(width: number): readonly string[] });
 		expect(text).toContain("Background(npm test)");
 		expect(text).toContain("Failed with exit code 1 · ID 3fa9c21e");
 		expect(text).toContain("AssertionError");
@@ -395,7 +395,9 @@ describe("background shell transcript", () => {
 			},
 		};
 		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1, keyText, keyHint }, theme);
-		const lines = stripAnsi((component as { render(width: number): string[] }).render(60).join("\n")).split("\n");
+		const lines = stripAnsi((component as { render(width: number): readonly string[] }).render(60).join("\n")).split(
+			"\n",
+		);
 		expect(lines[0]).toMatch(/Background\(curl https:\/\/example\.com.*…\)$/);
 		expect(lines.every((line) => line.length <= 60)).toBe(true);
 		expect(lines[1]).toContain("Failed: Working directory does not exist: /nope");
@@ -424,7 +426,7 @@ describe("background shell transcript", () => {
 			},
 		};
 		const component = renderBackgroundShellMessage(message, { expanded: false, outputPad: 1, keyText, keyHint }, theme);
-		expect(screen(component as { render(width: number): string[] })).toContain(
+		expect(screen(component as { render(width: number): readonly string[] })).toContain(
 			"Stopped because the session ended · ID 0badc0de",
 		);
 	});
@@ -436,7 +438,7 @@ describe("background shell transcript", () => {
 			theme,
 			renderContext({ task_id: "nope" }, true),
 		);
-		expect(screen(component as { render(width: number): string[] })).toContain(
+		expect(screen(component as { render(width: number): readonly string[] })).toContain(
 			'No background command has the ID "nope".',
 		);
 	});
@@ -450,7 +452,7 @@ describe("background shell transcript", () => {
 			theme,
 			renderContext({ command: "npm run dev" }, false),
 		);
-		const text = screen(component as { render(width: number): string[] });
+		const text = screen(component as { render(width: number): readonly string[] });
 		expect(text).toContain("Running in the background (↓ to manage)");
 		expect(text).not.toContain("The user moved");
 	});
