@@ -84,6 +84,8 @@ export const DesktopExtensionHostMethods = {
 					Type.Literal("terminal"),
 					Type.Literal("code"),
 					Type.Literal("diff"),
+					Type.Literal("settings"),
+					Type.Literal("settingsNav"),
 				]),
 				scope: Type.Union([Type.Literal("app"), Type.Literal("window")]),
 				provider: Type.String({ maxLength: 256 }),

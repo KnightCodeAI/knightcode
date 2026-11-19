@@ -49,6 +49,8 @@ test("feedback is a registered provider using host-owned notifications and SDK c
 	Object.assign(globalThis, {
 		__knightcodeDesktop: {
 			experimental_useToasts: () => [1, 2, 3, 4].map((id) => ({ id, kind: "info", text: `toast ${id}` })),
+			experimental_useZoom: () => ({ factor: 1, changes: 0 }),
+			experimental_controls: { experimental_IconButton: () => null },
 			experimental_Icon: () => createElement("svg"),
 			experimental_Button: (props: { children: string }) =>
 				createElement("button", { "aria-label": "Close" }, props.children),

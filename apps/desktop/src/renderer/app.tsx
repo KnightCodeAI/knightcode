@@ -1,6 +1,5 @@
-import { CircleAlert, Minus, Plus } from "./components/icons.tsx";
-import { Button, IconButton } from "./components/button.tsx";
-import { useEffect, useRef, useState } from "react";
+import { CircleAlert } from "./components/icons.tsx";
+import { useEffect } from "react";
 import { customTokens, fontFaces } from "./appearance.ts";
 import { client } from "./client.ts";
 import { Palette } from "./components/palette.tsx";
@@ -51,72 +50,6 @@ function ServerBanner() {
 
 const runAppCommand = (command: Parameters<typeof controllers.experimental_windowCommand>[0]) =>
 	void controllers.experimental_windowCommand(command);
-
-/**
- * Codex's zoom banner: the level after a zoom, top right beside the caption buttons (8px down, 16px in), with
- * steppers and Reset. It leaves 2s after the last change unless the pointer is on it. Electron zooms the page itself,
- * so the pill undoes the zoom to stay Codex's size.
- */
-function ZoomBanner() {
-	const [factor, setFactor] = useState(1);
-	const [shown, setShown] = useState<"hidden" | "visible" | "exiting">("hidden");
-	const timer = useRef<number | undefined>(undefined);
-	const hovered = useRef(false);
-	const hide = () => {
-		window.clearTimeout(timer.current);
-		setShown("exiting");
-		timer.current = window.setTimeout(() => setShown("hidden"), 150);
-	};
-	useEffect(() => {
-		const off = client.onHostEvent((event) => {
-			if (event.event !== "zoom") return;
-			setFactor(event.factor);
-			setShown("visible");
-			window.clearTimeout(timer.current);
-			timer.current = window.setTimeout(() => {
-				timer.current = undefined;
-				if (!hovered.current) hide();
-			}, 2000);
-		});
-		return () => {
-			off();
-			window.clearTimeout(timer.current);
-		};
-	}, []);
-	if (shown === "hidden") return null;
-	return (
-		<div
-			className={`pointer-events-none fixed top-0 z-[56] transition-[opacity,translate] duration-150 ease-out motion-reduce:transition-none ${shown === "visible" ? "" : "-translate-y-1 opacity-0"}`}
-			style={{ right: "calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))" }}
-		>
-			<div
-				className="kc-zoom-banner no-drag pointer-events-auto mt-2 me-4 inline-flex h-11 items-center overflow-hidden rounded-[20px] border-[0.5px] border-line bg-surface-secondary px-2 shadow-[0px_8px_16px_-4px_rgba(0,0,0,0.12)]"
-				style={{ zoom: 1 / factor }}
-				onMouseEnter={() => (hovered.current = true)}
-				onMouseLeave={() => {
-					hovered.current = false;
-					if (shown === "visible" && timer.current === undefined) hide();
-				}}
-			>
-				<span aria-live="polite" className="w-12 text-center text-sm font-semibold text-ink tabular-nums">
-					{Math.round(factor * 100)}%
-				</span>
-				<div className="ms-1 flex items-center">
-					<IconButton label="Zoom out" toolbar onClick={() => runAppCommand("zoomOut")}>
-						<Minus size={16} />
-					</IconButton>
-					<IconButton label="Zoom in" toolbar onClick={() => runAppCommand("zoomIn")}>
-						<Plus size={16} />
-					</IconButton>
-				</div>
-				<div className="mx-1 h-4 w-px bg-line" />
-				<Button color="secondary" toolbar disabled={factor === 1} onClick={() => runAppCommand("resetZoom")}>
-					Reset
-				</Button>
-			</div>
-		</div>
-	);
-}
 
 /**
  * Resolve the theme preference onto <html> and the native caption buttons, and lay the theme's customization
@@ -252,7 +185,6 @@ export function App() {
 			<LayoutSurface />
 			{paletteOpen ? <Palette /> : null}
 			<FeedbackSurface />
-			<ZoomBanner />
 		</div>
 	);
 }

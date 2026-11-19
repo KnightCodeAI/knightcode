@@ -37,6 +37,15 @@ export class ContributionBoundary extends Component<
 }
 
 const Ownership = createContext<Registration | undefined>(undefined);
+
+/** The nearest theme preview; undefined follows the window theme. */
+export type ThemeOverride = { theme: "light" | "dark"; tokens: Record<string, string> };
+const ThemeContext = createContext<ThemeOverride | undefined>(undefined);
+
+/** Provide a previewed theme to a subtree and to every owned portal or overlay opened inside it. */
+export function ThemeProvider({ value, children }: { value: ThemeOverride; children: ReactNode }) {
+	return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
 const builtInState: ActivationState = { phase: "live", finishingInput: false };
 const builtInActivation = { subscribe: (_listener: () => void) => () => {}, getSnapshot: () => builtInState };
 
@@ -55,6 +64,7 @@ const OWNED_BASE: CSSProperties = {
 /** An out-of-tree portal keeps the contribution's original ownership, theme and mount lifetime. */
 export function OwnedPortal({ children }: { children: ReactNode }) {
 	const entry = useContext(Ownership);
+	const theme = useContext(ThemeContext);
 	const state = useActivation(entry);
 	const gated = state.phase !== "live" || entry?.activation?.failure !== undefined;
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
@@ -83,6 +93,16 @@ export function OwnedPortal({ children }: { children: ReactNode }) {
 	useLayoutEffect(() => {
 		if (container) container.inert = gated && !state.finishingInput;
 	}, [container, gated, state.finishingInput]);
+	// A preview's theme follows into the portal; without one the container inherits the window theme live.
+	useLayoutEffect(() => {
+		if (!container) return;
+		if (theme) container.dataset.theme = theme.theme;
+		for (const [name, value] of Object.entries(theme?.tokens ?? {})) container.style.setProperty(name, value);
+		return () => {
+			delete container.dataset.theme;
+			for (const name of Object.keys(theme?.tokens ?? {})) container.style.removeProperty(name);
+		};
+	}, [container, theme]);
 	if (!entry) throw new Error("experimental_Portal must be rendered inside a desktop contribution.");
 	return container ? createPortal(children, container) : null;
 }
@@ -93,13 +113,19 @@ export function usePortalOwnership(): {
 	"data-kc-revision"?: string;
 	"data-kc-epoch"?: string;
 	"data-kc-mount"?: string;
+	"data-theme"?: "light" | "dark";
+	style?: CSSProperties;
 } {
 	const entry = useContext(Ownership);
+	const theme = useContext(ThemeContext);
 	return {
 		"data-kc-owner": entry?.owner,
 		"data-kc-revision": entry?.revision,
 		"data-kc-epoch": entry?.activation?.binding.epoch,
 		"data-kc-mount": entry?.activation?.binding.mount,
+		"data-theme": theme?.theme,
+		// A preview's derived tokens follow the overlay out of the preview's subtree.
+		style: theme ? (theme.tokens as CSSProperties) : undefined,
 	};
 }
 

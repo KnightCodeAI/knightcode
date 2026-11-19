@@ -58,6 +58,8 @@ test("all structural built-ins register synchronously before external work", () 
 				"terminal",
 				"code",
 				"diff",
+				"settings",
+				"settingsNav",
 			].toSorted(),
 		);
 	} finally {

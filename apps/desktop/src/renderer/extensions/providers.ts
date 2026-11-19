@@ -12,5 +12,7 @@ export const STRUCTURAL_BUILTINS = {
 	terminal: "builtin.workspace/terminal",
 	code: "builtin.workspace/code",
 	diff: "builtin.workspace/diff",
+	settings: "builtin.settings/default",
+	settingsNav: "builtin.settings/nav",
 } as const;
 export type ProviderSurface = keyof typeof STRUCTURAL_BUILTINS;

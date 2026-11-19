@@ -9,8 +9,11 @@ import type {
 	experimental_FileOpener,
 	experimental_FileIntent,
 	experimental_NavigationVisibility,
+	experimental_SettingsPage,
+	experimental_SettingsSection,
 	experimental_Surface,
 	experimental_SurfaceContribution,
+	experimental_ThemePreset,
 } from "@knightcodeai/cli/desktop";
 import { STRUCTURAL_BUILTINS } from "./providers.ts";
 import type { DesktopActivationBinding } from "@knightcode/app-server-protocol";
@@ -31,10 +34,14 @@ export type Registration = {
 	| { kind: "panelTab"; contribution: experimental_Page }
 	| { kind: "fileOpener"; contribution: experimental_FileOpener }
 	| { kind: "navigationVisibility"; contribution: experimental_NavigationVisibility }
+	| { kind: "settingsSection"; contribution: experimental_SettingsSection }
+	| { kind: "themePreset"; contribution: experimental_ThemePreset }
 );
 
 export type CommandRegistration = Extract<Registration, { kind: "command" }>;
 export type SurfaceRegistration = Extract<Registration, { kind: "slot" | "provider" | "page" | "panelTab" }>;
+export type SettingsSectionRegistration = Extract<Registration, { kind: "settingsSection" }>;
+export type ThemePresetRegistration = Extract<Registration, { kind: "themePreset" }>;
 
 export class ExtensionRegistry {
 	private entries: readonly Registration[] = [];
@@ -178,6 +185,10 @@ export class ExtensionRegistry {
 				}),
 			experimental_registerProvider: (contribution) =>
 				add({ ...metadata(contribution.id), kind: "provider", contribution }),
+			experimental_registerSettingsSection: (contribution) =>
+				add({ ...metadata(contribution.id), kind: "settingsSection", contribution }),
+			experimental_registerThemePreset: (contribution) =>
+				add({ ...metadata(contribution.id), kind: "themePreset", contribution }),
 			experimental_onDispose: (cleanup) => {
 				if (phase !== "preparing") throw new Error("The registration set is closed.");
 				disposers.push(cleanup);
@@ -264,6 +275,28 @@ export class ExtensionRegistry {
 		});
 	}
 
+	/** A page's admitted sections; the recovery page passes `builtinOnly`. */
+	settingsSections(
+		page: experimental_SettingsPage,
+		context: experimental_CommandContext,
+		builtinOnly: boolean,
+	): SettingsSectionRegistration[] {
+		return this.entries.filter(
+			(entry): entry is SettingsSectionRegistration =>
+				entry.kind === "settingsSection" &&
+				entry.contribution.page === page &&
+				(!builtinOnly || entry.owner.startsWith("builtin.")) &&
+				(!entry.activation || entry.activation.admitted()) &&
+				this.available(entry, context),
+		);
+	}
+
+	themePresets(): ThemePresetRegistration[] {
+		return this.entries.filter(
+			(entry): entry is ThemePresetRegistration => entry.kind === "themePreset" && this.isAdmitted(entry),
+		);
+	}
+
 	isAdmitted(entry: Registration): boolean {
 		return this.entries.includes(entry) && !entry.signal.aborted && (entry.activation?.admitted() ?? true);
 	}
@@ -337,7 +370,11 @@ export class ExtensionRegistry {
 	private available(entry: Registration, context: experimental_CommandContext): boolean {
 		if (entry.signal.aborted) return false;
 		try {
-			return (entry.kind === "fileOpener" ? undefined : entry.contribution.experimental_available?.(context)) ?? true;
+			return (
+				(entry.kind === "fileOpener" || entry.kind === "themePreset"
+					? undefined
+					: entry.contribution.experimental_available?.(context)) ?? true
+			);
 		} catch (error) {
 			this.report(entry.owner, error);
 			return false;

@@ -464,6 +464,43 @@ controller operates on existing native processes; changing providers does
 not kill them. Preview and MCP App intents use the existing guest hosts,
 not a new bridge or sandbox. See examples `07-workspace` and `09-file-viewer`.
 
+<!-- surface: settings -->
+<!-- surface: settingsNav -->
+
+## Settings and appearance
+
+`experimental_registerSettingsSection` adds a section to an existing Settings
+page. Most sections only declare a title and `fields`: switches, selects and
+numbers bound to the owner's backend app settings (see the backend guide's
+settings section). The host renders and saves them through the epoch-bound
+backend, so the frontend never sees secret settings. A section without a
+backend shows that it needs one. For anything else, give
+`experimental_render` instead; lay it out with `experimental_settingsControls()`
+(Row, Card, Section, fields) so it matches the built-in pages. Sections are
+ordered by `order` then owner. The Extensions page is the recovery route: it
+shows only built-in sections, and its layout cannot be replaced.
+
+`experimental_settingsServices()` gives the built-in pages' reads and writes:
+desktop preferences, keybindings, accounts and sign-in, archived threads, and
+a fixed list of settings app-server methods. Any other method is refused. The
+`settings` and `settingsNav` providers replace the page shell and its sidebar
+column; they are opt-in like every provider. Mount
+`experimental_SettingsSections` in a replacement shell to keep every section.
+
+Application-wide theme changes go through `experimental_appearance()`: mode,
+per-theme customization (accent, background, foreground, fonts, contrast,
+sidebar material), sizes, diff markers and pointer cursors. Each intent returns
+false once the activation is retired. `experimental_registerThemePreset` adds a
+named customization that users can apply; registering one changes nothing.
+`experimental_ThemeScope` previews a theme in a subtree. Dialogs, menus,
+popovers, tooltips and `experimental_Portal` content opened inside it follow
+the preview; outside one they follow live theme changes. Extension CSS still
+cannot redefine `--kc-*` tokens.
+
+The `feedback` provider draws toasts and the zoom level
+(`experimental_useZoom`). Server-state, unknown-operation and extension
+recovery notices stay host-owned. See example `10-settings`.
+
 ## Styles
 
 Declare authored CSS explicitly. Local quoted `@import` rules are flattened;

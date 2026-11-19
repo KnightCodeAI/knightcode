@@ -32,10 +32,21 @@ import { useCommandContext } from "./command-context.ts";
 import { panelServices } from "./panel.tsx";
 import { OperationRecovery, startWorkspaceOperations, workspaceServices } from "./workspace.ts";
 import { NativeExtensionRecovery } from "./settings.tsx";
+import {
+	appearance,
+	settingsControls,
+	SettingsSections,
+	settingsServices,
+	startZoomFeedback,
+	ThemeScope,
+	useZoom,
+} from "./settings-host.tsx";
+import settings from "../builtins/settings/index.tsx";
 
 export function initializeDesktopExtensions(): () => void {
 	const lifetime = new AbortController();
 	startWorkspaceOperations(lifetime.signal);
+	startZoomFeedback(lifetime.signal);
 	const host: experimental_DesktopHost = {
 		experimental_signal: lifetime.signal,
 		experimental_panelServices: panelServices(lifetime.signal),
@@ -70,6 +81,12 @@ export function initializeDesktopExtensions(): () => void {
 		experimental_Button: (props) => createElement(Button, props),
 		experimental_KeybindingKeys: ({ binding }) => createElement(Kbd, { children: bindingLabel(binding) }),
 		experimental_Portal: (props) => createElement(OwnedPortal, props),
+		experimental_settingsServices: settingsServices(),
+		experimental_settingsControls: settingsControls,
+		experimental_appearance: appearance(),
+		experimental_SettingsSections: (props) => createElement(SettingsSections, props),
+		experimental_ThemeScope: (props) => createElement(ThemeScope, props),
+		experimental_useZoom: useZoom,
 	};
 	globalThis.__knightcodeDesktop = host;
 	const handles = [
@@ -85,6 +102,7 @@ export function initializeDesktopExtensions(): () => void {
 		desktopExtensions.register("builtin.requests", requests),
 		desktopExtensions.register("builtin.workspace", workspace),
 		desktopExtensions.register("builtin.conversation", conversation),
+		desktopExtensions.register("builtin.settings", settings),
 	];
 	const disposeExternal = startExternalExtensions(desktopExtensions);
 	const dispose = () => {

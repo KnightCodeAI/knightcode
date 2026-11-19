@@ -372,7 +372,9 @@ export type experimental_Surface =
 	| "transcriptItem"
 	| "terminal"
 	| "code"
-	| "diff";
+	| "diff"
+	| "settings"
+	| "settingsNav";
 
 /** Only these surfaces accept selectable replacement providers. */
 export type experimental_ProviderSurface =
@@ -387,7 +389,9 @@ export type experimental_ProviderSurface =
 	| "requests"
 	| "terminal"
 	| "code"
-	| "diff";
+	| "diff"
+	| "settings"
+	| "settingsNav";
 
 export interface experimental_ProviderContribution extends Omit<experimental_SurfaceContribution, "surface"> {
 	surface: experimental_ProviderSurface;
@@ -492,6 +496,8 @@ export interface experimental_DesktopApp {
 		action: Omit<experimental_SurfaceContribution, "surface">,
 	): experimental_Disposable;
 	experimental_registerProvider(provider: experimental_ProviderContribution): experimental_Disposable;
+	experimental_registerSettingsSection(section: experimental_SettingsSection): experimental_Disposable;
+	experimental_registerThemePreset(preset: experimental_ThemePreset): experimental_Disposable;
 	experimental_onDispose(dispose: () => void): void;
 }
 
@@ -798,6 +804,17 @@ export interface experimental_DesktopHost {
 	experimental_Button(props: experimental_ButtonProps): ReactElement;
 	experimental_KeybindingKeys(props: { binding: experimental_KeybindingId }): ReactElement;
 	experimental_Portal(props: { children: ReactNode }): ReactNode;
+	experimental_settingsServices: experimental_SettingsServices;
+	experimental_settingsControls: experimental_SettingsControls;
+	experimental_appearance: experimental_Appearance;
+	experimental_SettingsSections(props: { page: experimental_SettingsPage }): ReactNode;
+	experimental_ThemeScope(props: {
+		theme: experimental_ThemeName;
+		customization?: experimental_ThemeCustomization;
+		className?: string;
+		children: ReactNode;
+	}): ReactNode;
+	experimental_useZoom(): experimental_Zoom;
 }
 
 declare global {
@@ -1109,7 +1126,11 @@ export interface experimental_Controls {
 		}
 	>;
 	experimental_RenameThreadDialog: ComponentType<{ threadId: string; onClose(): void }>;
-	experimental_DeleteThreadDialog: ComponentType<{ thread: { id: string; name: string }; onClose(): void }>;
+	experimental_DeleteThreadDialog: ComponentType<{
+		thread: { id: string; name: string };
+		onClose(): void;
+		onDeleted?(): void;
+	}>;
 	experimental_HomeComposer: ComponentType<{ cwd?: string; onChange(cwd: string): void }>;
 	experimental_ProjectPicker: ComponentType<{
 		cwd: string;
@@ -1213,7 +1234,7 @@ export interface experimental_ShellServices {
 export type experimental_Profile = { signedIn: false } | { signedIn: true; login?: string; avatarUrl?: string };
 export type experimental_Update =
 	| { state: "unavailable" }
-	| { state: "idle" }
+	| { state: "idle"; checkedAt?: number; error?: string }
 	| { state: "checking" }
 	| { state: "downloading" }
 	| { state: "ready"; version?: string }
@@ -1282,4 +1303,297 @@ export function experimental_Slots(
 /** Mount a shared thread row with its context menu, dialogs, status and keyboard activation. */
 export function experimental_ThreadRow(this: unknown, props: { threadId: string; inset?: boolean }): ReactNode {
 	return host(this).experimental_ThreadRow(props);
+}
+
+/** One theme's customization: hex colours, fonts and their faces, contrast and the sidebar material. */
+export interface experimental_ThemeCustomization {
+	accent?: string;
+	background?: string;
+	foreground?: string;
+	font?: string;
+	fontStyle?: string;
+	contentFont?: string;
+	contentFontStyle?: string;
+	codeFont?: string;
+	codeFontStyle?: string;
+	contrast?: number;
+	translucentSidebar?: boolean;
+}
+
+export type experimental_ThemeName = "light" | "dark";
+export type experimental_ThemeMode = "system" | experimental_ThemeName;
+
+/** A named customization users can apply; registering one never changes the current theme. */
+export interface experimental_ThemePreset {
+	id: string;
+	label: string;
+	theme: experimental_ThemeName;
+	customization: experimental_ThemeCustomization;
+	order?: number;
+}
+
+/** A registered preset; `id` is `<owner>/<local id>`. */
+export interface experimental_ThemePresetEntry extends experimental_ThemePreset {
+	owner: string;
+}
+
+export interface experimental_AppearanceState {
+	mode: experimental_ThemeMode;
+	theme: experimental_ThemeName;
+	customization: Readonly<Partial<Record<experimental_ThemeName, experimental_ThemeCustomization>>>;
+	uiFontSize?: number;
+	codeFontSize?: number;
+	diffMarkers?: "color" | "plusMinus";
+	pointerCursors?: boolean;
+}
+
+/** The single, explicit path for application-wide theme changes. */
+export interface experimental_Appearance {
+	experimental_useState(): experimental_AppearanceState;
+	experimental_usePresets(): readonly experimental_ThemePresetEntry[];
+	/** The built-in palette's base colours before any customization. */
+	experimental_base(theme: experimental_ThemeName): { background: string; foreground: string; accent: string };
+	experimental_accents: readonly { name: string; hex: string }[];
+	experimental_defaultContrast: number;
+	experimental_setMode(mode: experimental_ThemeMode): boolean;
+	/** Merge a patch, or with `replace` start over from it; undefined restores the built-in palette. */
+	experimental_customize(
+		theme: experimental_ThemeName,
+		patch: experimental_ThemeCustomization | undefined,
+		replace?: boolean,
+	): boolean;
+	experimental_applyPreset(id: string): boolean;
+	/** Undefined restores a size's default. */
+	experimental_setSize(key: "uiFontSize" | "codeFontSize", px: number | undefined): boolean;
+	experimental_setDiffMarkers(markers: "color" | "plusMinus"): boolean;
+	experimental_setPointerCursors(on: boolean): boolean;
+	experimental_themeString(customization: experimental_ThemeCustomization): string;
+	experimental_parseThemeString(text: string): experimental_ThemeCustomization | undefined;
+	/** Installed fonts, or undefined when the query was refused (it may need a user gesture). */
+	experimental_localFonts(): Promise<{ family: string; style: string; postscriptName: string }[] | undefined>;
+}
+
+/** A schema field bound to one setting key. */
+export type experimental_SettingsField = {
+	key: string;
+	title: string;
+	detail?: string;
+	/** Read from the user's settings only, so a project's page leaves it out. */
+	userOnly?: boolean;
+	/** What an unset key means where the store's defaults do not say. */
+	fallback?: unknown;
+} & (
+	| { kind: "switch" }
+	| { kind: "select"; options: readonly (readonly [value: unknown, label: string])[] }
+	| { kind: "number"; min: number; max: number; unit: string }
+);
+
+/**
+ * A settings section: a declarative schema over the owner's epoch-bound backend app settings (the usual case),
+ * or a custom React body.
+ */
+export type experimental_SettingsSection = {
+	id: string;
+	page: experimental_SettingsPage;
+	order?: number;
+	experimental_available?(context: experimental_CommandContext): boolean;
+} & (
+	| { title: string; fields: readonly experimental_SettingsField[] }
+	| {
+			title?: string;
+			experimental_render(props: { context: experimental_CommandContext; signal: AbortSignal }): ReactNode;
+	  }
+);
+
+export type experimental_SettingsRequests = Domain.SettingsRequests;
+
+/** Mediated settings reads and writes; the host refuses methods outside its settings allowlist. */
+export interface experimental_SettingsServices {
+	experimental_request<M extends keyof Domain.SettingsRequests>(
+		method: M,
+		params: Domain.SettingsRequests[M]["params"],
+	): Promise<Domain.SettingsRequests[M]["result"]>;
+	experimental_usePreferences(): experimental_DesktopPreferences;
+	experimental_setPreference<K extends keyof experimental_DesktopPreferences>(
+		key: K,
+		value: experimental_DesktopPreferences[K],
+	): boolean;
+	experimental_keybindings(): readonly { id: string; description: string; defaultKeys: readonly string[] }[];
+	experimental_setKeybinding(id: string, keys: string[] | undefined): boolean;
+	experimental_comboFromEvent(event: KeyboardEvent | globalThis.KeyboardEvent): string | undefined;
+	experimental_keyLabel(keys: string): string;
+	experimental_useAccounts(): Domain.SettingsRequests["account/list"]["result"] | undefined;
+	experimental_refreshAccounts(): Promise<void>;
+	experimental_useLogin(id: string): experimental_LoginState | undefined;
+	experimental_startLogin(provider: string, type: "oauth" | "api_key"): Promise<string | undefined>;
+	experimental_answerLogin(id: string, value: string): Promise<void>;
+	experimental_cancelLogin(id: string): Promise<void>;
+	experimental_logout(provider: string): Promise<void>;
+	experimental_useDefaultModel(): string | null;
+	experimental_setDefaultModel(model: Domain.ModelInfo): Promise<void>;
+	experimental_listArchived(): Promise<Domain.SettingsRequests["thread/list"]["result"]["threads"]>;
+	experimental_unarchive(threadId: string): Promise<void>;
+	experimental_deleteThread(threadId: string): Promise<void>;
+	/** Changes when a thread enters or leaves the live list. */
+	experimental_useLiveThreadIds(): string;
+	experimental_appInfo(): Promise<{ appVersion: string; serverVersion: string; platform: string; logsDir: string }>;
+	experimental_openExternal(url: string): Promise<boolean>;
+	experimental_openPath(path: string): Promise<boolean>;
+	experimental_copyText(text: string): Promise<boolean>;
+	experimental_errorText(error: unknown): string;
+	experimental_filterArchived(
+		threads: Domain.SettingsRequests["thread/list"]["result"]["threads"],
+		filter: experimental_ArchiveFilter,
+		projects: experimental_Project[],
+	): [name: string, threads: Domain.SettingsRequests["thread/list"]["result"]["threads"]][];
+	experimental_noProject: string;
+	/** Host-owned native desktop extension management and its recovery controls. */
+	experimental_NativeExtensions: ComponentType<{ cwd?: string }>;
+}
+
+export interface experimental_ArchiveFilter {
+	query: string;
+	kind: "all" | "local" | "worktree";
+	sort: "updated" | "created" | "name";
+	/** A project's folder, every project, or threads outside any project. */
+	project: "all" | "none" | (string & {});
+}
+
+export type experimental_LoginState = {
+	status: "pending" | "complete" | "failed";
+	events: unknown[];
+	error?: string;
+	pendingPrompt?: {
+		prompt: {
+			type?: string;
+			message: string;
+			placeholder?: string;
+			options?: { id: string; label: string; description?: string }[];
+		};
+	};
+};
+
+/** Desktop preferences stored in desktop-state.json; agent behaviour stays in settings.json. */
+export interface experimental_DesktopPreferences {
+	theme: experimental_ThemeMode;
+	sendKey: "enter" | "modEnter";
+	whileRunning: "queue" | "steer";
+	allowFullAccess: boolean;
+	appearance?: Partial<Record<experimental_ThemeName, experimental_ThemeCustomization>>;
+	showContextUsage?: boolean;
+	confirmClose?: "never" | "shortcut" | "always";
+	turnNotifications?: "never" | "unfocused" | "always";
+	autoArchiveDays?: number;
+	uiFontSize?: number;
+	codeFontSize?: number;
+	diffMarkers?: "color" | "plusMinus";
+	pointerCursors?: boolean;
+	keybindings?: Record<string, string[]>;
+}
+
+export interface experimental_ConfigFile {
+	read: Domain.SettingsRequests["config/read"]["result"];
+	/** The project whose settings.json this edits; the user's when unset. */
+	cwd: string | undefined;
+	write(key: string, value: unknown): Promise<void>;
+}
+
+/** Settings page layout and the declarative field renderer, shared by built-in and extension sections. */
+export interface experimental_SettingsControls {
+	experimental_Row: ComponentType<{
+		title: ReactNode;
+		detail?: ReactNode;
+		compact?: boolean;
+		below?: ReactNode;
+		children?: ReactNode;
+	}>;
+	experimental_Section: ComponentType<{ title?: ReactNode; aside?: ReactNode; children: ReactNode }>;
+	experimental_Box: ComponentType<{ children: ReactNode }>;
+	experimental_Card: ComponentType<{ title?: ReactNode; aside?: ReactNode; children: ReactNode }>;
+	experimental_PageHeader: ComponentType<{ title: string; actions?: ReactNode }>;
+	experimental_PageBody: ComponentType<{ children: ReactNode }>;
+	experimental_PageBar: ComponentType<{ children: ReactNode }>;
+	experimental_SearchField: ComponentType<{
+		value: string;
+		onChange(value: string): void;
+		placeholder: string;
+		page?: boolean;
+	}>;
+	experimental_SizeField: ComponentType<{
+		label: string;
+		value: number;
+		min: number;
+		max: number;
+		unit?: string;
+		onChange(value: number): void;
+	}>;
+	experimental_SelectMenu: ComponentType<{
+		label: string;
+		value: string | undefined;
+		options: { value: string; label: string; description?: string }[];
+		onChange(value: string): void;
+	}>;
+	experimental_Segmented: ComponentType<{
+		label: string;
+		value: string;
+		options: { value: string; label: string }[];
+		onChange(value: string): void;
+	}>;
+	experimental_DialogActions: ComponentType<{ children: ReactNode }>;
+	experimental_SidebarFrame: ComponentType<{ label: string; children: ReactNode }>;
+	experimental_ModelList: ComponentType<{
+		model: Domain.ModelInfo | undefined;
+		onModel(model: Domain.ModelInfo): void;
+		className?: string;
+	}>;
+	/** Render config fields against a settings.json read; built-in pages use this same renderer. */
+	experimental_ConfigFields: ComponentType<{
+		sections: readonly (readonly [title: string, fields: readonly experimental_SettingsField[]])[];
+		file: experimental_ConfigFile;
+	}>;
+	experimental_useConfigFile(cwd: string | undefined, trusted?: boolean): experimental_ConfigFile | undefined;
+}
+
+export interface experimental_Zoom {
+	factor: number;
+	/** Increments on every zoom change, including a repeat of the same factor. */
+	changes: number;
+}
+
+/** Get mediated settings reads/writes and preferences. */
+export function experimental_settingsServices(this: unknown): experimental_SettingsServices {
+	return host(this).experimental_settingsServices;
+}
+
+/** Get the shared settings layout controls and schema renderer. */
+export function experimental_settingsControls(this: unknown): experimental_SettingsControls {
+	return host(this).experimental_settingsControls;
+}
+
+/** Get the explicit appearance API; extension CSS cannot redefine host tokens. */
+export function experimental_appearance(this: unknown): experimental_Appearance {
+	return host(this).experimental_appearance;
+}
+
+/** Mount a page's admitted sections in order, each at its own ownership root. */
+export function experimental_SettingsSections(this: unknown, props: { page: experimental_SettingsPage }): ReactNode {
+	return host(this).experimental_SettingsSections(props);
+}
+
+/** Preview a theme in a subtree; owned portals opened inside follow the previewed theme. */
+export function experimental_ThemeScope(
+	this: unknown,
+	props: {
+		theme: experimental_ThemeName;
+		customization?: experimental_ThemeCustomization;
+		className?: string;
+		children: ReactNode;
+	},
+): ReactNode {
+	return host(this).experimental_ThemeScope(props);
+}
+
+/** Read the window zoom level for feedback presentation; zoom intents stay window commands. */
+export function experimental_useZoom(this: unknown): experimental_Zoom {
+	return host(this).experimental_useZoom();
 }

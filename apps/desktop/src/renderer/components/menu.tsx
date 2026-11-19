@@ -84,7 +84,7 @@ export function MenuContent({
 				align="start"
 				sideOffset={1}
 				collisionPadding={8}
-				style={{ minWidth, ...style }}
+				style={{ ...ownership.style, minWidth, ...style }}
 				className={`kc-menu ${variant === "app" ? "kc-app-menu" : ""} ${className}`}
 				onCloseAutoFocus={(event) => {
 					keepMovedFocus(event);
@@ -212,7 +212,7 @@ export function MenuSub({
 					sideOffset={8}
 					alignOffset={-5}
 					collisionPadding={8}
-					style={{ minWidth }}
+					style={{ ...ownership.style, minWidth }}
 					className={`kc-menu ${className}`}
 				>
 					{children}

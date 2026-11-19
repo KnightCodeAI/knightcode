@@ -7,6 +7,7 @@ import { composerController, mountEditor, whenEditorsIdle } from "./composer-con
 import { useComposerEditor } from "./composer-root.tsx";
 import { panelServices } from "./panel.tsx";
 import { workspaceServices } from "./workspace.ts";
+import { appearance, settingsServices } from "./settings-host.tsx";
 import { followDrag } from "../drag.ts";
 
 type Phase = "prepared" | "published" | "live" | "quiescing" | "closed";
@@ -16,6 +17,7 @@ export class FrontendActivation {
 	readonly binding: DesktopActivationBinding;
 	readonly signal: AbortSignal;
 	readonly sdk: typeof SDK;
+	readonly backend: FrontendBackend;
 	failure?: string;
 	private readonly lifetime = new AbortController();
 	private readonly listeners = new Set<() => void>();
@@ -32,6 +34,7 @@ export class FrontendActivation {
 		this.changed = changed;
 		this.signal = AbortSignal.any([host.experimental_signal, this.lifetime.signal]);
 		const backend = new FrontendBackend(binding, contracts, this.signal, () => this.admitted());
+		this.backend = backend;
 		const controller = (target: SDK.experimental_ComposerTarget) =>
 			composerController(target, this.signal, () => this.admitted());
 		const controls = host.experimental_controllers;
@@ -206,6 +209,8 @@ export class FrontendActivation {
 			experimental_backend: backend,
 			experimental_panelServices: panelServices(this.signal, () => this.admitted()),
 			experimental_workspaceServices: workspaceServices(this.signal, () => this.admitted()),
+			experimental_settingsServices: settingsServices(() => this.admitted()),
+			experimental_appearance: appearance(() => this.admitted()),
 			experimental_useBackend: () =>
 				useSyncExternalStore(
 					this.subscribe,

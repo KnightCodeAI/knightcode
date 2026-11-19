@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -64,4 +64,31 @@ test("standalone extension files cannot import a different extension beside them
 
 test("the migrated built-ins and shipped examples pass the real import audit", () => {
 	expect(checkExtensionImports()).toEqual([]);
+});
+
+test("settings and appearance pages live in built-ins; host code keeps only recovery and trust surfaces", () => {
+	const renderer = join(__dirname, "../../src/renderer");
+	expect(existsSync(join(renderer, "components/settings.tsx"))).toBe(false);
+	// Host files that may still draw settings UI: native extension recovery and its notices.
+	const hostSettings = readdirSync(join(renderer, "extensions")).filter((name) =>
+		/function \w+Settings\b|<Card |PageHeader/.test(readFileSync(join(renderer, "extensions", name), "utf8")),
+	);
+	expect(hostSettings.toSorted()).toEqual(["settings-host.tsx", "settings.tsx"]);
+	expect(readdirSync(join(renderer, "builtins/settings")).toSorted()).toEqual(
+		[
+			"about.tsx",
+			"appearance.tsx",
+			"archived.tsx",
+			"configuration.tsx",
+			"general.tsx",
+			"index.tsx",
+			"mcp.tsx",
+			"models.tsx",
+			"plugins.tsx",
+			"resources.tsx",
+			"shortcuts.tsx",
+			"ui.tsx",
+			"worktrees.tsx",
+		].toSorted(),
+	);
 });

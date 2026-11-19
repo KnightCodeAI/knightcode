@@ -81,6 +81,38 @@ export function declarationOf(schema: Schema): string {
 	}
 }
 
+/** App-server methods the settings services may call; the renderer refuses every other method. */
+export const SETTINGS_METHODS = [
+	"account/list",
+	"config/read",
+	"config/write",
+	"environment/list",
+	"environment/save",
+	"mcp/add",
+	"mcp/list",
+	"mcp/remove",
+	"mcp/update",
+	"plugin/install",
+	"plugin/list",
+	"plugin/marketplace/add",
+	"plugin/marketplace/list",
+	"plugin/marketplace/remove",
+	"plugin/marketplace/update",
+	"plugin/set",
+	"plugin/uninstall",
+	"plugin/update",
+	"project/trust/read",
+	"project/trust/set",
+	"resource/list",
+	"resource/set",
+	"thread/list",
+	"tool/list",
+	"tool/settings/read",
+	"tool/settings/write",
+	"worktree/delete",
+	"worktree/list",
+] as const satisfies readonly (keyof typeof ClientRequests)[];
+
 /** Generate self-contained types for renderer reads and mediated request replies. */
 export function generateDesktopModels(): string {
 	const schemas = {
@@ -122,6 +154,11 @@ export function generateDesktopModels(): string {
 		Object.entries(schemas)
 			.map(([name, schema]) => `export type ${name} = ${declarationOf(schema)};`)
 			.join("\n") +
-		"\n"
+		"\nexport type SettingsRequests = {\n" +
+		SETTINGS_METHODS.map(
+			(method) =>
+				`\t${JSON.stringify(method)}: { params: ${declarationOf(ClientRequests[method].params)}; result: ${declarationOf(ClientRequests[method].result)} };`,
+		).join("\n") +
+		"\n};\n"
 	);
 }

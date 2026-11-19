@@ -3,7 +3,6 @@ import type { experimental_CommandContext, experimental_Surface, experimental_Th
 import { createContext, type ReactNode, useContext, useSyncExternalStore, Component } from "react";
 import { Button } from "../components/button.tsx";
 import { CircleAlert } from "../components/icons.tsx";
-import { Settings, SettingsNav } from "../components/settings.tsx";
 import { ThreadView } from "../components/thread-view.tsx";
 import { navigate, selectProjects, useStore } from "../store.ts";
 import { useCommandContext } from "./command-context.ts";
@@ -47,7 +46,10 @@ export function StructuralSurface({ surface, builtinOnly }: { surface: ProviderS
 	const mounting = useContext(Mounting);
 	const view = useStore((s) => s.view);
 	const homeCwd = useStore((s) => (s.view.kind === "new" ? (s.view.cwd ?? selectProjects(s)[0]?.path) : undefined));
-	if (surface === "threadList" && view.kind === "settings") return <SettingsNav page={view.page} />;
+	// The recovery route keeps the built-in shell and column, whatever provider is chosen.
+	const recovery = view.kind === "settings" && view.page === "extensions";
+	if (surface === "threadList" && view.kind === "settings")
+		return <StructuralSurface surface="settingsNav" builtinOnly={builtinOnly || recovery} />;
 	const builtin = STRUCTURAL_BUILTINS[surface];
 	const preferred =
 		builtinOnly || mounting.includes(surface)
@@ -120,7 +122,7 @@ export function HostContent() {
 			{view.kind === "thread" ? (
 				<ThreadView key={view.id} id={view.id} />
 			) : view.kind === "settings" ? (
-				<Settings page={view.page} />
+				<StructuralSurface surface="settings" builtinOnly={view.page === "extensions"} />
 			) : view.kind === "page" ? (
 				page ? (
 					<SurfaceEntry entry={page} context={context} />

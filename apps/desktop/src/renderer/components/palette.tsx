@@ -6,7 +6,7 @@
  */
 
 import { experimental_Icon as Icon, experimental_KeybindingKeys as KeybindingKeys } from "@knightcodeai/cli/desktop";
-import { type ReactNode, useEffect, useId, useState, useSyncExternalStore } from "react";
+import { createElement, type ReactNode, useEffect, useId, useState, useSyncExternalStore } from "react";
 import { GO_TO_THREAD, type KeybindingId } from "../../shared/keybindings.ts";
 import { basename, samePath } from "../format.ts";
 import { bindingLabel, matches } from "../keys.ts";
@@ -17,7 +17,8 @@ import { desktopExtensions } from "../extensions/runtime.ts";
 import { ContributionRoot } from "../extensions/surface.tsx";
 import { Kbd } from "./button.tsx";
 import { Dialog } from "./dialog.tsx";
-import { SETTINGS_PAGES } from "./settings.tsx";
+import { SETTINGS_PAGES } from "../builtins/settings/index.tsx";
+import * as icons from "./icons.tsx";
 
 interface Entry {
 	id: string;
@@ -81,7 +82,7 @@ export function Palette() {
 				? SETTINGS_PAGES.filter((p) => has(p.label)).map((p): Entry => ({
 						id: `settings:${p.page}`,
 						label: p.label,
-						icon: p.icon,
+						icon: createElement(icons[p.icon], { size: 16 }),
 						run: () => navigate({ kind: "settings", page: p.page }),
 					}))
 				: [],
