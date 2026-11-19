@@ -24,6 +24,7 @@ import {
 	type Theme,
 } from "../modes/interactive/theme/theme.ts";
 import { requestTerminalColors } from "../modes/interactive/theme/theme-controller.ts";
+import { flushStdout } from "../utils/flush-stdout.ts";
 
 const OFFICIAL_PACKAGE_NAME = "@knightcodeai/cli";
 const OFFICIAL_APP_NAME = "knightcode";
@@ -154,6 +155,7 @@ export async function showStartupSelector<T>(
 			settled = true;
 			await clearStartupTui(ui);
 			ui.stop();
+			await flushStdout();
 			resolve(result);
 		};
 
@@ -187,6 +189,7 @@ export async function showFirstTimeSetup(settingsManager: SettingsManager): Prom
 			}
 			await clearStartupTui(ui);
 			ui.stop();
+			await flushStdout();
 			resolve();
 		};
 
@@ -226,6 +229,7 @@ export async function showStartupInput(
 			input.dispose();
 			await clearStartupTui(ui);
 			ui.stop();
+			await flushStdout();
 			resolve(result);
 		};
 
