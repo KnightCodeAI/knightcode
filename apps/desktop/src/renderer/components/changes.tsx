@@ -37,6 +37,7 @@ import {
 	WrapText,
 } from "./icons.tsx";
 import type React from "react";
+import { WorkspaceSurface } from "../extensions/panel.tsx";
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { client, RequestError } from "../client.ts";
 import diffOverrides from "../diff-overrides.css?raw";
@@ -378,7 +379,8 @@ function FileSection({
 	/** Bound to the read: marks this file unexpandable for it. */
 	onUnavailable: () => void;
 }) {
-	const project = useStore((s) => s.held[threadId]?.thread.projectCwd ?? "");
+	const thread = useStore((s) => s.held[threadId]?.thread);
+	const project = thread?.projectCwd ?? "";
 	const editor = usePreferredTarget(useOpenInTargets(), project);
 	const comments = useStore((s) => s.comments[threadId]);
 	const [draft, setDraft] = useState<{ side: "old" | "new"; start: number; end: number } | undefined>();
@@ -557,57 +559,63 @@ function FileSection({
 								? `Renamed from ${file.oldPath}`
 								: "No content changes"}
 				</div>
-			) : (
-				<PatchDiff<Annotation>
-					// One per read: PatchDiff keeps its parsed (and once expanded, hydrated) file by patch text alone, and a
-					// later read can carry the same patch between other trees.
-					key={trees ? `${trees.from}:${trees.to}` : "fixed"}
-					patch={patchOf(file)}
-					disableWorkerPool
-					options={diffOptions}
-					// The selection follows the open draft: left to the library, it outlives a save or cancel, and the next
-					// "+" reuses it instead of the line clicked.
-					selectedLines={
-						draft
-							? { start: draft.start, end: draft.end, side: draft.side === "old" ? "deletions" : "additions" }
-							: null
-					}
-					lineAnnotations={annotations}
-					renderAnnotation={(annotation) => {
-						const comment = annotation.metadata.comment;
-						if (comment)
+			) : thread ? (
+				<WorkspaceSurface
+					target={{ threadId, cwd: thread.cwd, projectCwd: thread.projectCwd }}
+					surface="diff"
+					file={{ path: file.path }}
+				>
+					<PatchDiff<Annotation>
+						// One per read: PatchDiff keeps its parsed (and once expanded, hydrated) file by patch text alone, and a
+						// later read can carry the same patch between other trees.
+						key={trees ? `${trees.from}:${trees.to}` : "fixed"}
+						patch={patchOf(file)}
+						disableWorkerPool
+						options={diffOptions}
+						// The selection follows the open draft: left to the library, it outlives a save or cancel, and the next
+						// "+" reuses it instead of the line clicked.
+						selectedLines={
+							draft
+								? { start: draft.start, end: draft.end, side: draft.side === "old" ? "deletions" : "additions" }
+								: null
+						}
+						lineAnnotations={annotations}
+						renderAnnotation={(annotation) => {
+							const comment = annotation.metadata.comment;
+							if (comment)
+								return (
+									<CommentCard
+										line={comment.endLine}
+										side={comment.side}
+										body={comment.body}
+										onDelete={() => removeComment(threadId, comment)}
+									/>
+								);
+							if (!draft) return null;
 							return (
 								<CommentCard
-									line={comment.endLine}
-									side={comment.side}
-									body={comment.body}
-									onDelete={() => removeComment(threadId, comment)}
+									line={draft.end}
+									side={draft.side}
+									onCancel={() => setDraft(undefined)}
+									onSave={(body) => {
+										addComment(threadId, {
+											scope,
+											...(selector.against ? { against: selector.against } : {}),
+											...(selector.commit ? { commit: selector.commit } : {}),
+											path: file.path,
+											side: draft.side,
+											startLine: draft.start,
+											endLine: draft.end,
+											body,
+										});
+										setDraft(undefined);
+									}}
 								/>
 							);
-						if (!draft) return null;
-						return (
-							<CommentCard
-								line={draft.end}
-								side={draft.side}
-								onCancel={() => setDraft(undefined)}
-								onSave={(body) => {
-									addComment(threadId, {
-										scope,
-										...(selector.against ? { against: selector.against } : {}),
-										...(selector.commit ? { commit: selector.commit } : {}),
-										path: file.path,
-										side: draft.side,
-										startLine: draft.start,
-										endLine: draft.end,
-										body,
-									});
-									setDraft(undefined);
-								}}
-							/>
-						);
-					}}
-				/>
-			)}
+						}}
+					/>
+				</WorkspaceSurface>
+			) : null}
 		</div>
 	);
 }

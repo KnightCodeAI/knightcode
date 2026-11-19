@@ -46,13 +46,13 @@ import {
 	openThread,
 	type PanelTab,
 	rename,
-	restoreWorktree,
 	selectUnread,
 	send,
 	sendViewEvent,
 	setFinding,
 	setPanel,
-	type State,
+	toast,
+	selectPanelContribution,
 	toggleTerminal,
 	useStore,
 } from "../store.ts";
@@ -60,9 +60,16 @@ import { ConfirmDialog } from "./dialog.tsx";
 import { FileTab } from "./file-tab.tsx";
 import { FilesPanel, FilesTab } from "./files-panel.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
-import { BottomRegion } from "./terminal.tsx";
-import { PreviewTab, previewTitle } from "./preview.tsx";
-import { type AppItem, McpAppView } from "./mcp-app.tsx";
+import {
+	AppHost,
+	appItemOf,
+	PreviewHost,
+	TerminalHost,
+	WorkspaceSurface,
+	workspaceContext,
+} from "../extensions/panel.tsx";
+import { experimental_workspaceServices } from "@knightcodeai/cli/desktop";
+import { previewTitle } from "./preview.tsx";
 import { FileIcon } from "./file-icon.tsx";
 import { ThreadHeaderSurface, RequestsSurface, bindTranscript } from "../extensions/conversation.tsx";
 import { controllers } from "../extensions/controllers.ts";
@@ -155,14 +162,6 @@ function PanelResizeHandle() {
 	);
 }
 
-/** The call a full-screen app tab belongs to, from the thread's turns. */
-function appItemOf(threadId: string, itemId: string) {
-	return (s: State) =>
-		s.held[threadId]?.turns
-			.flatMap((t) => t.items)
-			.find((i): i is AppItem => i.id === itemId && i.type === "toolCall" && i.mcpApp !== undefined);
-}
-
 function TabButton({
 	threadId,
 	tab,
@@ -220,17 +219,6 @@ function TabButton({
 	);
 }
 
-/** An app full screen (section 12.2): the call's app filling the panel; gone with its call. */
-function AppTab({ threadId, itemId }: { threadId: string; itemId: string }) {
-	const item = useStore(appItemOf(threadId, itemId));
-	if (!item) return <div className="p-4 text-sm text-tertiary">This app's call is no longer in the thread.</div>;
-	return (
-		<div className="flex min-h-0 flex-1 flex-col p-2">
-			<McpAppView threadId={threadId} item={item} mode="fullscreen" />
-		</div>
-	);
-}
-
 /** The right region (desktop-shell.md section 9.6): a tab strip over the chosen tab. */
 function SidePanel({ id }: { id: string }) {
 	const width = useStore((s) => s.panel.width);
@@ -240,10 +228,15 @@ function SidePanel({ id }: { id: string }) {
 	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot, desktopExtensions.getSnapshot);
 	const thread = useStore((s) => s.held[id]?.thread);
 	const sidebarOpen = useStore((s) => s.sidebarOpen);
-	const context = { sidebarOpen, cwd: thread?.cwd, thread: thread ? { id, cwd: thread.cwd } : undefined };
+	const target = thread && { threadId: id, cwd: thread.cwd, projectCwd: thread.projectCwd };
+	const selection = useStore((s) => s.panelContributions[id]);
+	const context = target
+		? { ...workspaceContext(target, sidebarOpen), file: selection?.file && { target, ...selection.file } }
+		: { sidebarOpen };
 	const extensionTabs = desktopExtensions.panelTabs(context);
-	const [extensionId, selectExtension] = useState<string>();
-	const selectedExtension = extensionTabs.find((entry) => entry.id === extensionId);
+	const selectedExtension = extensionTabs.find((entry) => entry.id === selection?.id);
+	const selectExtension = (idToSelect?: string) =>
+		selectPanelContribution(id, idToSelect ? { id: idToSelect } : undefined);
 	const discarding = useStore((s) => s.discarding);
 	const strip = useRef<HTMLDivElement>(null);
 	// A strip wider than the panel scrolls the chosen tab, close button included, into sight.
@@ -341,7 +334,7 @@ function SidePanel({ id }: { id: string }) {
 			</div>
 			{selectedExtension ? (
 				<div className="flex min-h-0 flex-1 flex-col overflow-auto" role="tabpanel">
-					<SurfaceEntry entry={selectedExtension} context={context} />
+					<SurfaceEntry entry={selectedExtension} context={context} fallback={<ChangesPane threadId={id} />} />
 				</div>
 			) : null}
 			<div className={selectedExtension ? "hidden" : "contents"}>
@@ -366,11 +359,15 @@ function SidePanel({ id }: { id: string }) {
 						}
 					</FilesPanel>
 				) : null}
-				{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
+				{shown?.kind === "mcpApp" && target ? (
+					<AppHost key={shown.itemId} target={target} itemId={shown.itemId} />
+				) : null}
 				{shown?.kind === "backgroundShell" ? <BackgroundShellTab key={shown.id} threadId={id} id={shown.id} /> : null}
 				{/* Previews stay mounted behind the other tabs, keeping their pages. */}
 				{tabs.map((tab, i) =>
-					tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,
+					tab.kind === "preview" && target ? (
+						<PreviewHost key={tab.id} target={target} id={tab.id} active={!selectedExtension && i === active} />
+					) : null,
 				)}
 			</div>
 			{discarding?.threadId === id ? (
@@ -517,7 +514,22 @@ export function ThreadView({ id }: { id: string }) {
 										variant="soft"
 										color="danger"
 										size="sm"
-										onClick={() => void (deleted ? restoreWorktree(id) : openThread(id))}
+										onClick={() => {
+											if (!deleted || !summary) {
+												void openThread(id);
+												return;
+											}
+											void experimental_workspaceServices()
+												.experimental_git({
+													threadId: id,
+													cwd: summary.cwd,
+													projectCwd: summary.projectCwd,
+												})
+												.experimental_run({ kind: "restore" })
+												.then((result) => {
+													if (result?.problem) toast(result.problem.message, "error");
+												});
+										}}
 									>
 										{deleted ? "Restore" : "Retry"}
 									</Button>
@@ -621,7 +633,16 @@ export function ThreadView({ id }: { id: string }) {
 					</div>
 				) : null}
 			</div>
-			{bottomOpen && view ? <BottomRegion threadId={id} cwd={cwd} /> : null}
+			{bottomOpen && view
+				? (() => {
+						const target = { threadId: id, cwd, projectCwd: view.thread.projectCwd };
+						return (
+							<WorkspaceSurface target={target} surface="terminal">
+								<TerminalHost target={target} />
+							</WorkspaceSurface>
+						);
+					})()
+				: null}
 		</div>
 	);
 }

@@ -105,7 +105,32 @@ const desktopBinding = {
 	mount: "mount",
 };
 
+const checkout = { threadId: "t1", cwd: "/p", projectCwd: "/p" };
+const operation = {
+	id: "operation-1",
+	target: checkout,
+	kind: "commitAndPush",
+	status: "partial",
+	stage: "push",
+	completed: ["branch", "commit"],
+	recovery: "retry",
+	outputs: { branch: "kc/fix-it", commit: "89abcdef", message: "fix it" },
+	problem: {
+		code: "gitConflict",
+		message: "push refused",
+		recoveryInstructions: ["Check the remote."],
+		paths: ["a.txt"],
+	},
+};
+
 const requestParams: Record<string, unknown> = {
+	"desktopOperation/start": {
+		target: checkout,
+		action: { kind: "commitAndPush", branch: "kc/fix-it", message: "fix it", includeUnstaged: true },
+	},
+	"desktopOperation/read": { threadId: "t1" },
+	"desktopOperation/recover": { target: checkout, id: "operation-1", action: "retry" },
+	"desktopOperation/preflight": { target: checkout, to: "local", branch: "kc/fix-it" },
 	"desktopExtension/fail": { ...desktopWindow, binding: desktopBinding, message: "Render failed" },
 	"desktopExtension/window/connect": desktopWindow,
 	"desktopExtension/window/disconnect": desktopWindow,
@@ -262,6 +287,10 @@ const marketplaceInfo = {
 	diagnostics: [],
 };
 const requestResults: Record<string, unknown> = {
+	"desktopOperation/start": { operation },
+	"desktopOperation/read": { operations: [operation] },
+	"desktopOperation/recover": { accepted: true, operation },
+	"desktopOperation/preflight": { branch: "kc/fix-it" },
 	"desktopExtension/fail": {},
 	"desktopExtension/window/connect": {},
 	"desktopExtension/window/disconnect": {},
@@ -531,6 +560,7 @@ const requestResults: Record<string, unknown> = {
 	"ui/event": {},
 };
 const notificationParams: Record<string, unknown> = {
+	"desktopOperation/changed": { threadId: "t1", operations: [operation] },
 	"desktopExtension/phase": { ...desktopWindow, binding: desktopBinding, id: "phase", phase: "quiesce" },
 	"desktopExtension/event": { ...desktopWindow, binding: desktopBinding, id: "watch", event: "changed", value: 1 },
 	"desktopExtension/changed": { reload: true },

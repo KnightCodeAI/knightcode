@@ -3,7 +3,10 @@
  * Plain logic, no Electron: main wires it to MessagePorts and the child process.
  */
 
-import type { Message, RequestId, Response } from "@knightcode/app-server-protocol";
+import { Value } from "typebox/value";
+import { ClientRequests } from "@knightcode/app-server-protocol";
+import { DesktopOperationJournal } from "./desktop-operation-journal.ts";
+import type { ParamsOf, ResultOf, Message, RequestId, Response } from "@knightcode/app-server-protocol";
 
 export interface WindowLink {
 	id: number;
@@ -36,6 +39,17 @@ const HOLDING = new Set(["thread/start", "thread/resume", "thread/fork", "turn/s
 
 /** The window id of a pending request whose window closed or reloaded. */
 const GONE = -1;
+const operationParams = {
+	"desktopOperation/start": ClientRequests["desktopOperation/start"].params,
+	"desktopOperation/read": ClientRequests["desktopOperation/read"].params,
+	"desktopOperation/recover": ClientRequests["desktopOperation/recover"].params,
+	"desktopOperation/preflight": ClientRequests["desktopOperation/preflight"].params,
+};
+
+function validOperationParams(method: string, params: unknown): boolean {
+	const schema = operationParams[method as keyof typeof operationParams];
+	return !!schema && Value.Check(schema, params);
+}
 
 interface Pending {
 	windowId: number;
@@ -73,6 +87,7 @@ export class Router {
 	private readonly serverRequests = new Map<string, ServerRequest>();
 	/** Threads whose last status was active, from the sidebar notifications every connection gets. */
 	private readonly active = new Set<string>();
+	private readonly operations = new DesktopOperationJournal();
 
 	constructor(server: RouterServer) {
 		this.server = server;
@@ -109,6 +124,27 @@ export class Router {
 				return;
 			}
 			const params = (message.params ?? {}) as Record<string, unknown>;
+			// The journal consumes renderer wire input before the app server can validate it.
+			if (message.method.startsWith("desktopOperation/") && !validOperationParams(message.method, params)) {
+				this.toWindow(windowId, {
+					id: message.id,
+					error: { code: "invalidParams", message: "Invalid desktop operation parameters." },
+				});
+				return;
+			}
+			const recovery = this.operations.intercept(message.method, params);
+			if (recovery) {
+				this.toWindow(windowId, { id: message.id, result: recovery });
+				if (recovery.accepted) {
+					const { threadId } = params.target as { threadId: string };
+					for (const other of this.windows.keys())
+						this.toWindow(other, {
+							method: "desktopOperation/changed",
+							params: { threadId, operations: this.operations.read(threadId, []) },
+						});
+				}
+				return;
+			}
 			if (message.method === "initialize") {
 				const result = this.server.initializeResult();
 				this.toWindow(
@@ -142,6 +178,7 @@ export class Router {
 				});
 				return;
 			}
+			this.operations.track(serverId, message.method, params);
 			this.pending.set(serverId, { windowId, clientId: message.id, method: message.method, params });
 			return;
 		}
@@ -162,6 +199,17 @@ export class Router {
 		const pending = this.pending.get(id);
 		if (!pending) return;
 		this.pending.delete(id);
+		this.operations.answered(id);
+		if ("result" in response && pending.method === "desktopOperation/read") {
+			const { threadId } = pending.params as { threadId: string };
+			const { operations } = response.result as ResultOf<"desktopOperation/read">;
+			this.operations.observe(threadId, operations);
+			this.toWindow(pending.windowId, {
+				id: pending.clientId,
+				result: { operations: this.operations.read(threadId, operations) },
+			});
+			return;
+		}
 		if ("result" in response && HOLDING.has(pending.method)) {
 			const result = response.result as Record<string, unknown>;
 			const threadId = threadOf(result) ?? threadOf(pending.params);
@@ -177,11 +225,27 @@ export class Router {
 
 	/** The server exited: every forwarded request fails, every open server request is gone. */
 	serverRestarted(): void {
-		for (const pending of this.pending.values())
+		this.operations.lost();
+		for (const threadId of this.operations.uncertainThreads()) {
+			const message = {
+				method: "desktopOperation/changed",
+				params: { threadId, operations: this.operations.read(threadId, []) },
+			};
+			for (const windowId of this.holders.get(threadId) ?? []) this.toWindow(windowId, message);
+		}
+		for (const pending of this.pending.values()) {
+			const target = pending.params.target as ParamsOf<"desktopOperation/start">["target"] | undefined;
+			const operation =
+				pending.method.startsWith("desktopOperation/") && target ? this.operations.unknownAt(target) : undefined;
 			this.toWindow(pending.windowId, {
 				id: pending.clientId,
-				error: { code: "serverRestarted", message: "KnightCode restarted before answering" },
+				error: {
+					code: "serverRestarted",
+					message: "KnightCode restarted before answering",
+					...(operation ? { data: { operation } } : {}),
+				},
 			});
+		}
 		this.pending.clear();
 		for (const [id, request] of this.serverRequests)
 			this.toWindow(request.windowId, { method: "serverRequest/cancelled", params: { id } });
@@ -200,6 +264,14 @@ export class Router {
 
 	private notification(message: { method: string; params?: unknown }): void {
 		const params = message.params as Record<string, unknown> | undefined;
+		if (message.method === "desktopOperation/changed") {
+			const { threadId, operations } = params as {
+				threadId: string;
+				operations: ResultOf<"desktopOperation/read">["operations"];
+			};
+			this.operations.observe(threadId, operations);
+			message = { ...message, params: { threadId, operations: this.operations.read(threadId, operations) } };
+		}
 		if (message.method === "serverRequest/cancelled") {
 			const id = String((params as { id: RequestId }).id);
 			const request = this.serverRequests.get(id);

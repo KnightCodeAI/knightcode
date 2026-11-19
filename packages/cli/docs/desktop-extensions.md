@@ -175,8 +175,9 @@ use `experimental_controllers().experimental_notify`.
 The host owns thread state, toasts and provider preferences. Frontend component
 state belongs to that window/mount and resets on reload; it is not transcript
 storage. Cleanup cannot undo arbitrary side effects. Backend settings and
-storage use explicit scopes described below. File engines, workspace mutation
-controllers, custom settings sections and appearance providers remain later APIs.
+storage use explicit scopes described below. File engines and workspace mutation
+controllers are described in the workspace section. Custom settings sections
+and appearance providers remain later APIs.
 
 ## Backend RPC, settings and data
 
@@ -429,6 +430,39 @@ out-of-order, cancelled or already-answered request. The server still validates
 all replies. The host owns request ordering and the **Use default request
 controls** recovery action, so a failed or unusable presenter cannot remove the
 standard approval/dialog controls.
+
+<!-- surface: terminal -->
+<!-- surface: code -->
+<!-- surface: diff -->
+
+## Workspace, files and terminal
+
+Pass `context.workspace` into `experimental_workspaceServices().experimental_git(target)`
+or `experimental_panelServices().experimental_panel(target)`. The target names the
+thread, its checkout and its project. A retained controller does not act on
+the window's later selection. A retired activation cannot start new work.
+
+Use `experimental_useGit` for status, totals, branches and operation state.
+Read the operation's completed steps and outputs before offering recovery.
+Retry resumes the same operation; it does not repeat confirmed steps. An
+unknown outcome requires checking the repository and remote first. The
+server keeps operation state across renderer and provider reloads during its
+lifetime. These workflows do not roll back completed Git writes.
+
+Use `experimental_useHandoffCheck` before offering a move between checkouts.
+The host debounces branch edits and rechecks on focus. A transport error is
+not a server refusal. The server checks again before moving the checkout.
+
+`experimental_registerPanelTab` adds a tab. A named
+`experimental_registerFileOpener` can open an intent in its owner's tab.
+Opening a file without an opener ID uses the built-in editor. File saves
+use the tab's draft and the last known mtime. Dirty-tab confirmation stays
+in the host.
+
+The `code`, `diff`, and `terminal` providers are opt-in. The terminal
+controller operates on existing native processes; changing providers does
+not kill them. Preview and MCP App intents use the existing guest hosts,
+not a new bridge or sandbox. See examples `07-workspace` and `09-file-viewer`.
 
 ## Styles
 

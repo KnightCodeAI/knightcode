@@ -22,11 +22,11 @@ without exposing its behavior does not complete a surface.
 | Thread header | `renderer/builtins/thread-header/`; `renderer/extensions/conversation.tsx`; shared thread-action controls | Header provider, row/title/status/action slots, explicit identity/title/action services | S5 |
 | Conversation | `renderer/builtins/conversation/`; `renderer/extensions/conversation.tsx`; `thread-view.tsx`, shared Markdown and `renderer/turns.ts` | Item renderers and message actions; explicit history/find/scroll/copy services; diff/preview/MCP engines remain platform capabilities | S5 |
 | Composer | `renderer/builtins/composer/`; `renderer/extensions/composer-root.tsx`, `composer-behavior.tsx`, `composer-controller.ts`; store drafts | Revisioned root/controller, replaceable adapters, seven contribution hosts, shared IME/keys/paste/drop/submit/queue behavior and SDK-only pickers | S5 |
-| Git/workspaces | `renderer/components/git.tsx`; store workspace state; `packages/cli/src/app-server/git-actions.ts`, `workspaces.ts` | Explicit-context Git/workspace controllers and durable operation handles | S7 |
+| Git/workspaces | `renderer/builtins/workspace/`; `renderer/extensions/workspace.ts`; app-server `desktop-operations.ts`, `git-actions.ts`, `workspaces.ts` | Explicit-checkout reads/actions, shared operation records, native ambiguity journal and non-replaceable recovery | S7 |
 | Requests | `renderer/builtins/requests/`; `renderer/extensions/conversation.tsx`; store response guards; app-server approvals/dialogs | Replaceable presenter inside host ordering/recovery; exact-head, explicit-thread replies; server retains authority | S5 |
 | Live extension tab | `renderer/components/thread-view.tsx`; shared registry/surface hosts | `experimental_registerPanelTab`, explicit thread context and epoch-owned RPC/settings/event facade | S6 |
 | Backend/data | `packages/cli/src/app-server/desktop-extensions/` | Real jiti backend, coordinated revision/epoch, schema-checked RPC and explicit scoped persistence | S6 |
-| Side panel | `renderer/components/thread-view.tsx`: SidePanel; `changes.tsx`; `files-panel.tsx`; `file-tab.tsx`; `open-in.tsx` | Tabs, file openers, code/diff renderers, file draft/save/discard controller | S7 |
+| Side panel | `renderer/extensions/panel.tsx`; `thread-view.tsx`, `changes.tsx`, `files-panel.tsx`, `file-tab.tsx` engines | Public tabs/file openers, code/diff providers, existing canonical file drafts and save/discard confirmation | S7 |
 | Preview | `renderer/components/preview.tsx`; `main/preview.ts`; `renderer/drag.ts` | Preview intents/hosts and annotations; keep guest isolation | S7 |
 | MCP Apps | `renderer/components/mcp-app.tsx`; `renderer/mcp-app-bridge.ts`; `main/mcp-apps.ts` | Public host, not a replacement for the isolated MCP App runtime | S7 |
 | Bottom region | `renderer/components/terminal.tsx`: BottomRegion; `main/terminals.ts` | Region provider and mediated terminal controller; mount does not own process | S7 |
@@ -107,6 +107,7 @@ The following remain explicit acceptance groups even if a screenshot exists:
 | Extension runtime | Real external loader, consent, CSS ownership/portals, provider choice/fallback, safe mode and binary-only authoring | S2/S3/S9 |
 | Coordinated revisions | Incompatible two-window RPC, preparation failure, drain timeout, stale bindings, restart and post-commit recovery | S6 |
 
+S7's implementation boundaries are described in [workspace.md](workspace.md).
 Do not mark a group complete on the strength of a renderer unit test. Record
 Electron, image-comparison, packaged-binary and native-platform results
 separately. Windows results do not establish macOS/Linux parity.

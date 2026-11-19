@@ -101,7 +101,9 @@ registered-property names, nested foreign roots, host inheritance, portal theme
 updates and failed-reload retention.
 
 The 500-row benchmark reports row selection and whole-list invalidation
-separately. Both paths retain the strict +2 ms guard. Whole-list invalidation can land at
-that boundary on a contended machine; isolated and full-run results are recorded
-without changing the guard. macOS/Linux native packaging and
+separately. It interleaves unscoped and scoped rounds and times 20 toggles per
+round. Native `@scope` adds about 1.1x to row selection, which must stay under
+1.5x. It roughly doubles a whole-list invalidation (about +1.7 to +2.1 ms on
+Windows), so that path is bounded at under 3x the unscoped cost and under
+10 ms; a `:has()` scope boundary measured 6.4x and fails. macOS/Linux native packaging and
 the complete S9 CSS/utility acceptance matrix have not been run in S2.

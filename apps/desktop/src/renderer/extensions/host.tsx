@@ -10,6 +10,7 @@ import home from "../builtins/home/index.tsx";
 import titleBar from "../builtins/title-bar/index.tsx";
 import conversation from "../builtins/conversation/index.tsx";
 import threadHeader from "../builtins/thread-header/index.tsx";
+import workspace from "../builtins/workspace/index.ts";
 import requests from "../builtins/requests/index.tsx";
 import { conversationServices, ItemRenderer, MessageActions } from "./conversation.tsx";
 import composer, { ComposerFrame } from "../builtins/composer/index.tsx";
@@ -28,12 +29,17 @@ import { desktopExtensions } from "./runtime.ts";
 import { OwnedPortal } from "./surface.tsx";
 import { startExternalExtensions } from "./external.ts";
 import { useCommandContext } from "./command-context.ts";
+import { panelServices } from "./panel.tsx";
+import { OperationRecovery, startWorkspaceOperations, workspaceServices } from "./workspace.ts";
 import { NativeExtensionRecovery } from "./settings.tsx";
 
 export function initializeDesktopExtensions(): () => void {
 	const lifetime = new AbortController();
+	startWorkspaceOperations(lifetime.signal);
 	const host: experimental_DesktopHost = {
 		experimental_signal: lifetime.signal,
+		experimental_panelServices: panelServices(lifetime.signal),
+		experimental_workspaceServices: workspaceServices(lifetime.signal),
 		experimental_conversationServices: conversationServices,
 		experimental_pickerServices: pickerServices,
 		experimental_ItemRenderer: (props) => createElement(ItemRenderer, props),
@@ -77,6 +83,7 @@ export function initializeDesktopExtensions(): () => void {
 		desktopExtensions.register("builtin.composer", composer),
 		desktopExtensions.register("builtin.thread-header", threadHeader),
 		desktopExtensions.register("builtin.requests", requests),
+		desktopExtensions.register("builtin.workspace", workspace),
 		desktopExtensions.register("builtin.conversation", conversation),
 	];
 	const disposeExternal = startExternalExtensions(desktopExtensions);
@@ -98,6 +105,7 @@ export function FeedbackSurface() {
 		<>
 			<StructuralSurface surface="feedback" />
 			<NativeExtensionRecovery context={context} />
+			<OperationRecovery />
 		</>
 	);
 }

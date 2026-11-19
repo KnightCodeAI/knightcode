@@ -55,8 +55,24 @@ test("all structural built-ins register synchronously before external work", () 
 				"composer",
 				"threadHeader",
 				"requests",
+				"terminal",
+				"code",
+				"diff",
 			].toSorted(),
 		);
+	} finally {
+		dispose();
+	}
+});
+
+test("default workspace renderers use the public editor engine instead of an unused null provider", () => {
+	const dispose = initializeDesktopExtensions();
+	try {
+		const context = { sidebarOpen: true, workspace: { threadId: "t", cwd: "/repo", projectCwd: "/repo" } };
+		for (const surface of ["code", "diff"] as const) {
+			const entry = desktopExtensions.resolveProvider(surface, `builtin.workspace/${surface}`, undefined, context);
+			expect(entry?.contribution.experimental_render({ context, signal: entry.signal })).not.toBeNull();
+		}
 	} finally {
 		dispose();
 	}

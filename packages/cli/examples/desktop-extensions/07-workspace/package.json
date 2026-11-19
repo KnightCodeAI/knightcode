@@ -1,0 +1,7 @@
+{
+	"name": "kc-example-workspace",
+	"private": true,
+	"type": "module",
+	"description": "Git/workspace actions",
+	"knightcode": { "desktop": { "frontend": "./app.tsx" } }
+}

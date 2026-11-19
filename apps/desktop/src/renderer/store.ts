@@ -207,6 +207,7 @@ export interface State {
 	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean; fileTree?: boolean; fileSplit?: boolean };
 	/** Each thread's side panel tabs: Changes first, then the files it opened. */
 	tabs: Record<string, ThreadTabs>;
+	panelContributions: Record<string, { id: string; file?: { path: string; line?: number } } | undefined>;
 	/** The bottom region's height in px (section 9.7), 0 until dragged (then 280); each thread has it open or not. */
 	bottom: { height: number };
 	/** Each thread's terminals, in tab order, and the one shown. */
@@ -244,6 +245,7 @@ let state: State = {
 	update: { state: "unavailable" },
 	panel: { open: false, width: 0 },
 	tabs: {},
+	panelContributions: {},
 	bottom: { height: 0 },
 	terminals: {},
 	attachments: {},
@@ -1665,11 +1667,27 @@ const tabKey = (path: string) => {
 	return window.knightcode.platform === "win32" ? slashes.toLowerCase() : slashes;
 };
 
+export function selectPanelContribution(threadId: string, selection?: State["panelContributions"][string]): void {
+	set((s) => ({
+		...s,
+		panelContributions: { ...s.panelContributions, [threadId]: selection },
+		...(selection ? { panel: { ...s.panel, open: true } } : {}),
+	}));
+}
+
 function updateTabs(threadId: string, fn: (tabs: ThreadTabs) => ThreadTabs, open = false): void {
 	set((s) => ({
 		...s,
 		tabs: { ...s.tabs, [threadId]: fn(s.tabs[threadId] ?? NO_TABS) },
-		...(open ? { panel: { ...s.panel, open: true } } : {}),
+		...(open
+			? {
+					panel: { ...s.panel, open: true },
+					panelContributions: {
+						...s.panelContributions,
+						[threadId]: undefined,
+					},
+				}
+			: {}),
 	}));
 }
 
@@ -1764,6 +1782,7 @@ export function openFileInView(path: string, line?: number): void {
 }
 
 export function activateTab(threadId: string, index: number): void {
+	if (state.panelContributions[threadId]) selectPanelContribution(threadId);
 	const used = ++tabClock;
 	updateTabs(threadId, ({ tabs }) => ({
 		tabs: tabs.map((t, i) => (i === index && t.kind === "file" ? { ...t, used } : t)),
@@ -1919,6 +1938,8 @@ const saving = new Map<string, Promise<unknown>>();
 export async function saveFileDraft(
 	threadId: string,
 	path: string,
+	admitted = () => true,
+	expectedCwd?: string,
 ): Promise<{ text: string; mtimeMs: number } | undefined> {
 	const key = `${threadId}\0${tabKey(path)}`;
 	while (saving.has(key)) await saving.get(key);
@@ -1927,8 +1948,14 @@ export async function saveFileDraft(
 		return tab?.kind === "file" ? tab.draft : undefined;
 	};
 	const draft = draftOf();
-	if (!draft) return undefined;
-	const write = client.request("file/write", { threadId, path, text: draft.text, expectedMtimeMs: draft.mtimeMs });
+	if (!draft || !admitted()) return undefined;
+	const write = client.request("file/write", {
+		threadId,
+		path,
+		text: draft.text,
+		expectedMtimeMs: draft.mtimeMs,
+		expectedCwd,
+	});
 	saving.set(
 		key,
 		write.catch(() => {}),

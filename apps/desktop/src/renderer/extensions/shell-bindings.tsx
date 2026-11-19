@@ -12,12 +12,14 @@ import { SIDEBAR_WIDTH, WINDOW_CHROME } from "../../shared/host-protocol.ts";
 import { DESKTOP_KEYBINDINGS, type KeybindingId } from "../../shared/keybindings.ts";
 import { IconButton, Kbd } from "../components/button.tsx";
 import { showContextMenu } from "../components/context-menu.ts";
-import { ConfirmDialog } from "../components/dialog.tsx";
+import { Switch } from "../components/switch.tsx";
+import { Totals } from "../components/changes.tsx";
+import { Dialog, ConfirmDialog } from "../components/dialog.tsx";
 import { Composer } from "../components/composer.tsx";
 import { ProjectPicker } from "../components/composer-pickers.tsx";
 import * as menu from "../components/menu.tsx";
 import { NavRow } from "../components/nav-row.tsx";
-import { HoverCard, Popover, ListRow, ListSeparator } from "../components/popover.tsx";
+import { HoverCard, Popover, ListCaption, ListRow, ListSeparator } from "../components/popover.tsx";
 import { RenameThreadDialog, DeleteThreadDialog, threadActions } from "../components/thread-actions.tsx";
 import { Tooltip } from "../components/tooltip.tsx";
 import { followDrag } from "../drag.ts";
@@ -77,6 +79,10 @@ export const pickerServices: experimental_PickerServices = {
 };
 
 export const controls: experimental_Controls = {
+	experimental_Dialog: Dialog,
+	experimental_Switch: Switch,
+	experimental_ListCaption: ListCaption,
+	experimental_GitTotals: Totals,
 	experimental_IconButton: IconButton,
 	experimental_Menu: menu.Menu,
 	experimental_MenuTrigger: menu.MenuTrigger,

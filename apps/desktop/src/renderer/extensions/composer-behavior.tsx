@@ -426,6 +426,16 @@ export function useComposerBehavior(
 		whileRunning: prefs.whileRunning,
 		usage: view?.usage,
 		showContextUsage: prefs.showContextUsage !== false,
+		workspaceChoice: threadId
+			? undefined
+			: {
+					value: workspace,
+					experimental_select: (value) => {
+						if (signal.aborted) return false;
+						setWorkspace(value);
+						return true;
+					},
+				},
 		parts: {
 			project: (
 				<ProjectChip

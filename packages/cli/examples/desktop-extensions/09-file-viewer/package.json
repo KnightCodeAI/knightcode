@@ -1,0 +1,7 @@
+{
+	"name": "kc-example-file-viewer",
+	"private": true,
+	"type": "module",
+	"description": "Read-only file opener",
+	"knightcode": { "desktop": { "frontend": "./app.tsx" } }
+}

@@ -49,6 +49,159 @@ describe("router", () => {
 		]);
 	});
 
+	test("a lost Git write retains confirmed outputs across renderer reload and cannot replay", () => {
+		const { router, toServer, inbox, open, roundTrip } = setup();
+		open(1);
+		const target = { threadId: "t", cwd: "/repo", projectCwd: "/repo" };
+		router.fromWindow(1, {
+			id: 1,
+			method: "desktopOperation/start",
+			params: {
+				target,
+				action: { kind: "pullRequest", commitFirst: false },
+			},
+		} as Message);
+		const running = {
+			id: "op",
+			kind: "pullRequest",
+			target,
+			status: "running",
+			stage: "pr",
+			completed: ["push"],
+			recovery: "none",
+			outputs: { branch: "main", remote: "origin" },
+		};
+		router.fromServer({
+			method: "desktopOperation/changed",
+			params: { threadId: "t", operations: [running] },
+		} as Message);
+		router.detach(1);
+		router.serverRestarted();
+		open(1);
+		roundTrip(1, 2, "desktopOperation/read", { threadId: "t" }, { operations: [] });
+		expect(inbox.get(1)?.at(-1)).toMatchObject({
+			id: 2,
+			result: {
+				operations: [{ id: "op", status: "outcome-unknown", recovery: "reconcile", outputs: { remote: "origin" } }],
+			},
+		});
+		const count = toServer.length;
+		router.fromWindow(1, {
+			id: 3,
+			method: "desktopOperation/start",
+			params: { target, action: { kind: "pullRequest", commitFirst: false } },
+		} as Message);
+		expect(toServer).toHaveLength(count);
+		expect(inbox.get(1)?.at(-1)).toMatchObject({
+			id: 3,
+			result: { operation: { id: "op", status: "outcome-unknown" } },
+		});
+		router.fromWindow(1, {
+			id: 4,
+			method: "desktopOperation/recover",
+			params: { target, id: "op", action: "acknowledge" },
+		} as Message);
+		expect(inbox.get(1)).toContainEqual({ id: 4, result: { accepted: true } });
+	});
+
+	test.skipIf(process.platform !== "win32")(
+		"native recovery matches the canonical Windows project key without duplicating the pending write",
+		() => {
+			const { router, open, inbox, roundTrip } = setup();
+			open(1);
+			const target = { threadId: "t", cwd: "C:\\Repo", projectCwd: "C:\\Repo" };
+			router.fromWindow(1, {
+				id: 1,
+				method: "desktopOperation/start",
+				params: { target, action: { kind: "push" } },
+			} as Message);
+			router.fromServer({
+				method: "desktopOperation/changed",
+				params: {
+					threadId: "t",
+					operations: [
+						{
+							id: "canonical",
+							kind: "push",
+							target: { ...target, projectCwd: "c:\\repo" },
+							status: "running",
+							stage: "push",
+							completed: [],
+							outputs: {},
+							recovery: "none",
+						},
+					],
+				},
+			} as Message);
+			router.serverRestarted();
+			roundTrip(1, 2, "desktopOperation/read", { threadId: "t" }, { operations: [] });
+			expect(inbox.get(1)?.at(-1)).toMatchObject({ result: { operations: [{ id: "canonical" }] } });
+			expect((inbox.get(1)?.at(-1) as { result: { operations: unknown[] } }).result.operations).toHaveLength(1);
+			router.fromWindow(1, {
+				id: 3,
+				method: "desktopOperation/recover",
+				params: { target, id: "canonical", action: "acknowledge" },
+			} as Message);
+			expect(inbox.get(1)).toContainEqual({ id: 3, result: { accepted: true } });
+		},
+	);
+
+	test.skipIf(process.platform !== "win32")(
+		"a lost request finds its journaled write when the checkout path differs only in case",
+		() => {
+			const { router, open, inbox } = setup();
+			open(1);
+			const journaled = { threadId: "t", cwd: "c:\\repo", projectCwd: "c:\\repo" };
+			router.fromServer({
+				method: "desktopOperation/changed",
+				params: {
+					threadId: "t",
+					operations: [
+						{
+							id: "op",
+							kind: "push",
+							target: journaled,
+							status: "running",
+							stage: "push",
+							completed: [],
+							outputs: {},
+							recovery: "none",
+						},
+					],
+				},
+			} as Message);
+			router.fromWindow(1, { id: 1, method: "desktopOperation/read", params: { threadId: "t" } } as Message);
+			router.fromWindow(1, {
+				id: 2,
+				method: "desktopOperation/recover",
+				params: {
+					target: { threadId: "t", cwd: "C:\\Repo", projectCwd: "C:\\Repo" },
+					id: "other",
+					action: "retry",
+				},
+			} as Message);
+			router.serverRestarted();
+			expect(inbox.get(1)).toContainEqual({
+				id: 2,
+				error: expect.objectContaining({
+					code: "serverRestarted",
+					data: { operation: expect.objectContaining({ id: "op", status: "outcome-unknown" }) },
+				}),
+			});
+		},
+	);
+
+	test("malformed workspace wire params cannot corrupt the restart journal", () => {
+		const { router, toServer, open, inbox } = setup();
+		open(1);
+		router.fromWindow(1, { id: 11, method: "desktopOperation/start", params: {} } as Message);
+		expect(() => router.serverRestarted()).not.toThrow();
+		expect(toServer).toHaveLength(0);
+		expect(inbox.get(1)).toEqual([
+			{ id: 11, error: { code: "invalidParams", message: "Invalid desktop operation parameters." } },
+		]);
+	});
+
 	test("the same client id from two windows reaches the server distinct and returns to its sender", () => {
 		const { router, toServer, inbox, open } = setup();
 		open(1);

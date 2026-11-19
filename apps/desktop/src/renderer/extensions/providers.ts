@@ -9,5 +9,8 @@ export const STRUCTURAL_BUILTINS = {
 	composer: "builtin.composer/default",
 	threadHeader: "builtin.thread-header/default",
 	requests: "builtin.requests/default",
+	terminal: "builtin.workspace/terminal",
+	code: "builtin.workspace/code",
+	diff: "builtin.workspace/diff",
 } as const;
 export type ProviderSurface = keyof typeof STRUCTURAL_BUILTINS;

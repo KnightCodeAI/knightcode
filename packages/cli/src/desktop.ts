@@ -191,6 +191,8 @@ export interface experimental_Disposable {
 
 /** A captured target, never an implicit read of whichever thread is selected later. */
 export interface experimental_CommandContext {
+	file?: experimental_FileIntent;
+	workspace?: experimental_Checkout;
 	thread?: { id: string; cwd: string };
 	cwd?: string;
 	sidebarOpen: boolean;
@@ -367,11 +369,25 @@ export type experimental_Surface =
 	| "threadHeaderTitle"
 	| "threadHeaderRow"
 	| "messageActions"
-	| "transcriptItem";
+	| "transcriptItem"
+	| "terminal"
+	| "code"
+	| "diff";
 
 /** Only these surfaces accept selectable replacement providers. */
 export type experimental_ProviderSurface =
-	"feedback" | "layout" | "navigation" | "threadList" | "home" | "titleBar" | "composer" | "threadHeader" | "requests";
+	| "feedback"
+	| "layout"
+	| "navigation"
+	| "threadList"
+	| "home"
+	| "titleBar"
+	| "composer"
+	| "threadHeader"
+	| "requests"
+	| "terminal"
+	| "code"
+	| "diff";
 
 export interface experimental_ProviderContribution extends Omit<experimental_SurfaceContribution, "surface"> {
 	surface: experimental_ProviderSurface;
@@ -466,6 +482,7 @@ export interface experimental_DesktopApp {
 	experimental_registerCommand(command: experimental_Command): experimental_Disposable;
 	experimental_registerPage(page: experimental_Page): experimental_Disposable;
 	experimental_registerPanelTab(tab: experimental_Page): experimental_Disposable;
+	experimental_registerFileOpener(opener: experimental_FileOpener): experimental_Disposable;
 	experimental_hideNavigation(entry: experimental_NavigationVisibility): experimental_Disposable;
 	experimental_registerSlot(slot: experimental_SurfaceContribution): experimental_Disposable;
 	experimental_registerItemRenderer(
@@ -578,6 +595,10 @@ export interface experimental_ComposerState {
 	whileRunning: "queue" | "steer";
 	usage?: { contextTokens?: number; contextWindow: number; cost: number };
 	showContextUsage: boolean;
+	workspaceChoice?: {
+		value: experimental_WorkspaceRequest;
+		experimental_select(value: experimental_WorkspaceRequest): boolean;
+	};
 	parts: { project: ReactNode; workspace: ReactNode; permissions: ReactNode; model: ReactNode; comments: ReactNode };
 	queued: { id?: string; text: string; steer: boolean; attachments?: number }[];
 	suggestions?: { items: experimental_ComposerSuggestion[]; truncated: boolean; start: number; revision: number };
@@ -615,7 +636,127 @@ export interface experimental_ComposerController {
 }
 
 /** Renderer-installed bindings; not a raw bridge or a separate state container. */
+export type experimental_Checkout = Domain.DesktopCheckout;
+export type experimental_GitAction = Domain.DesktopWorkspaceAction;
+export type experimental_Operation = Domain.DesktopOperation;
+export type experimental_WorkspaceThread = Domain.Thread;
+export type experimental_WorkspaceRequest = Domain.WorkspaceRequest;
+export type experimental_GitBranches = Domain.GitBranches;
+export type experimental_Environment = Domain.Environment;
+export type experimental_Handoff = Extract<experimental_GitAction, { kind: "handoff" }>;
+export type experimental_HandoffCheck =
+	| { status: "checking" }
+	| { status: "ready"; branch?: string }
+	| { status: "refused" | "transport-error"; problem: Domain.DesktopOperationProblem };
+
+export interface experimental_GitController {
+	experimental_run(action: experimental_GitAction): Promise<experimental_Operation | undefined>;
+	experimental_recover(
+		id: string,
+		action: "retry" | "cancel" | "acknowledge",
+	): Promise<experimental_Operation | undefined>;
+	experimental_openPullRequest(id: string): Promise<boolean>;
+}
+
+export interface experimental_GitRead {
+	status?: Domain.GitStatus;
+	totals?: { additions: number; deletions: number };
+	branches?: Domain.GitBranches;
+	operation?: experimental_Operation;
+	operations: readonly experimental_Operation[];
+}
+
+export interface experimental_WorkspaceServices {
+	experimental_git(target: experimental_Checkout): experimental_GitController;
+	experimental_useGit(
+		target: experimental_Checkout,
+		reads?: { status?: boolean; totals?: boolean; branches?: boolean; once?: boolean },
+	): experimental_GitRead;
+	experimental_useBranchSuggestion(title: string): string;
+	experimental_useHandoffCheck(target: experimental_Checkout, action: experimental_Handoff): experimental_HandoffCheck;
+	experimental_useWorkspaceOptions(cwd?: string): {
+		branches?: Domain.GitBranches;
+		environments?: Domain.Environment[];
+	};
+}
+
+export function experimental_workspaceServices(this: unknown): experimental_WorkspaceServices {
+	return host(this).experimental_workspaceServices;
+}
+
+export interface experimental_FileIntent {
+	target: experimental_Checkout;
+	path: string;
+	line?: number;
+}
+
+export interface experimental_FileOpener {
+	id: string;
+	label: string;
+	order?: number;
+	/** Local id of this owner's panel tab. It receives the intent as context.file. */
+	tab: string;
+	experimental_matches?(intent: experimental_FileIntent): boolean;
+}
+
+export type experimental_FileDraft = { text: string; mtimeMs: number };
+export type experimental_PanelTab = (
+	| { kind: "changes" | "files" }
+	| { kind: "file"; path: string; preview: boolean; draft?: experimental_FileDraft }
+	| { kind: "preview"; id: string; url: string }
+	| { kind: "mcpApp"; itemId: string }
+	| { kind: "backgroundShell"; id: string }
+) & { id: string };
+
+export interface experimental_PanelController {
+	experimental_openFile(path: string, line?: number, opener?: string): boolean;
+	experimental_openPreview(url?: string): boolean;
+	experimental_openApp(itemId: string): boolean;
+	experimental_select(id: string): boolean;
+	experimental_close(id: string): boolean;
+	experimental_setVisible(open: boolean): boolean;
+	experimental_readFile(path: string): Promise<Domain.FileRead | undefined>;
+	experimental_listFiles(path?: string): Promise<Domain.FileList | undefined>;
+	experimental_readDiff(scope: Domain.DiffScope): Promise<Domain.DiffRead | undefined>;
+	experimental_setFileDraft(path: string, draft?: experimental_FileDraft): boolean;
+	experimental_saveFile(path: string): Promise<experimental_FileDraft | undefined>;
+	experimental_openExternally(path: string, application: string, line?: number): boolean;
+	experimental_fileOpeners(path: string): { id: string; label: string }[];
+	experimental_newTerminal(shell?: string): Promise<void>;
+	experimental_terminalShells(): Promise<{ id: string; name: string }[]>;
+	experimental_showTerminal(open: boolean): boolean;
+	experimental_selectTerminal(id: string): boolean;
+	experimental_closeTerminal(id: string): boolean;
+	experimental_stopBackgroundShell(id: string): Promise<boolean>;
+}
+
+export interface experimental_PanelServices {
+	experimental_panel(target: experimental_Checkout): experimental_PanelController;
+	experimental_usePanel(target: experimental_Checkout): {
+		open: boolean;
+		active: string;
+		tabs: experimental_PanelTab[];
+		contributions: { id: string; label: string }[];
+	};
+	experimental_useTerminals(target: experimental_Checkout): {
+		open: boolean;
+		active?: string;
+		terminals: { terminalId: string; shellId: string; shellName: string; cwd: string; exitCode?: number }[];
+	};
+	/** The host engine for the current code/diff surface, including drafts and annotations. */
+	experimental_EditorHost: ComponentType;
+	experimental_TerminalHost: ComponentType<{ target: experimental_Checkout }>;
+	experimental_PreviewHost: ComponentType<{ target: experimental_Checkout; id: string; active: boolean }>;
+	experimental_McpAppHost: ComponentType<{ target: experimental_Checkout; itemId: string }>;
+}
+
+export function experimental_panelServices(this: unknown): experimental_PanelServices {
+	return host(this).experimental_panelServices;
+}
+
 export interface experimental_DesktopHost {
+	experimental_panelServices: experimental_PanelServices;
+	experimental_workspaceServices: experimental_WorkspaceServices;
 	experimental_signal: AbortSignal;
 	experimental_backend?: experimental_BackendClient;
 	experimental_useBackend?(): experimental_BackendClient | undefined;
@@ -861,6 +1002,26 @@ export interface experimental_ThreadListState {
 
 /** Shared themed controls; portals preserve the rendering contribution's ownership. */
 export interface experimental_Controls {
+	experimental_Dialog: ComponentType<{
+		open?: boolean;
+		onClose(): void;
+		title: ReactNode;
+		description?: ReactNode;
+		icon?: ReactNode;
+		variant?: "dialog" | "card";
+		placement?: "center" | "top";
+		width?: number;
+		children: ReactNode;
+	}>;
+	experimental_Switch: ComponentType<{
+		checked: boolean;
+		onChange(value: boolean): void;
+		label: string;
+		size?: "sm" | "md";
+		disabled?: boolean;
+	}>;
+	experimental_ListCaption: ComponentType<{ children: ReactNode }>;
+	experimental_GitTotals: ComponentType<{ additions: number; deletions: number; className?: string }>;
 	experimental_IconButton: ComponentType<
 		Omit<experimental_ButtonProps, "children" | "uniform" | "variant" | "color"> & {
 			label: string;

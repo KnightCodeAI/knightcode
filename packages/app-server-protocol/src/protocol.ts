@@ -250,6 +250,87 @@ const DiffTarget = {
 };
 const BranchName = Type.String({ maxLength: 200 });
 
+export const DesktopCheckout = Obj({ threadId: Str, cwd: Str, projectCwd: Str });
+const CommitOptions = {
+	branch: Type.Optional(BranchName),
+	message: Type.Optional(Type.String({ maxLength: 20000 })),
+	includeUnstaged: Type.Optional(Bool),
+};
+export const DesktopWorkspaceAction = Type.Union([
+	Obj({ kind: Type.Union([Type.Literal("commit"), Type.Literal("commitAndPush")]), ...CommitOptions }),
+	Obj({ kind: Type.Literal("push") }),
+	Obj({ kind: Type.Union([Type.Literal("createBranch"), Type.Literal("switchBranch")]), name: BranchName }),
+	Obj({
+		kind: Type.Literal("pullRequest"),
+		branch: Type.Optional(BranchName),
+		title: Type.Optional(Str),
+		body: Type.Optional(Str),
+		draft: Type.Optional(Bool),
+		commitFirst: Bool,
+		hasChanges: Type.Optional(Bool),
+	}),
+	Obj({
+		kind: Type.Literal("handoff"),
+		to: Type.Union([Type.Literal("local"), Type.Literal("worktree")]),
+		branch: Type.Optional(BranchName),
+		environment: Type.Optional(Str),
+	}),
+	Obj({ kind: Type.Literal("restore") }),
+]);
+const DesktopOperationStage = Type.Union([
+	Type.Literal("branch"),
+	Type.Literal("commit"),
+	Type.Literal("push"),
+	Type.Literal("pr"),
+	Type.Literal("handoff"),
+	Type.Literal("restore"),
+]);
+export const DesktopOperationProblem = Obj({
+	code: Str,
+	message: Str,
+	paths: Type.Optional(Type.Array(Str)),
+	recoveryInstructions: Type.Optional(Type.Array(Str)),
+});
+export const DesktopOperation = Obj({
+	id: Str,
+	kind: Type.Union([
+		Type.Literal("commit"),
+		Type.Literal("commitAndPush"),
+		Type.Literal("push"),
+		Type.Literal("createBranch"),
+		Type.Literal("switchBranch"),
+		Type.Literal("pullRequest"),
+		Type.Literal("handoff"),
+		Type.Literal("restore"),
+	]),
+	target: DesktopCheckout,
+	status: Type.Union([
+		Type.Literal("running"),
+		Type.Literal("completed"),
+		Type.Literal("partial"),
+		Type.Literal("refused"),
+		Type.Literal("cancelled"),
+		Type.Literal("outcome-unknown"),
+	]),
+	stage: Type.Optional(DesktopOperationStage),
+	completed: Type.Array(DesktopOperationStage),
+	recovery: Type.Union([
+		Type.Literal("none"),
+		Type.Literal("retry"),
+		Type.Literal("reconcile"),
+		Type.Literal("cancel"),
+	]),
+	outputs: Obj({
+		branch: Type.Optional(Str),
+		commit: Type.Optional(Str),
+		message: Type.Optional(Str),
+		remote: Type.Optional(Str),
+		url: Type.Optional(Str),
+		warnings: Type.Optional(Type.Array(Str)),
+	}),
+	problem: Type.Optional(DesktopOperationProblem),
+});
+
 /** `data.reason` of a gitConflict error. */
 export const GitConflictReason = Type.Union([
 	Type.Literal("diffChanged"),
@@ -895,6 +976,7 @@ export const ClientRequests = {
 			path: Str,
 			text: Type.String({ maxLength: 8 * 1024 * 1024 }),
 			expectedMtimeMs: Type.Optional(Num),
+			expectedCwd: Type.Optional(Str),
 		}),
 		result: Obj({ mtimeMs: Num }),
 	},
@@ -908,6 +990,28 @@ export const ClientRequests = {
 			turnId: Type.Optional(Str),
 		}),
 		result: Obj({ paths: Type.Array(Str) }),
+	},
+	"desktopOperation/preflight": {
+		params: Obj({
+			target: DesktopCheckout,
+			to: Type.Union([Type.Literal("local"), Type.Literal("worktree")]),
+			branch: Type.Optional(BranchName),
+			environment: Type.Optional(Str),
+		}),
+		result: Obj({ branch: Type.Optional(Str) }),
+	},
+	"desktopOperation/read": { params: ThreadId, result: Obj({ operations: Type.Array(DesktopOperation) }) },
+	"desktopOperation/start": {
+		params: Obj({ target: DesktopCheckout, action: DesktopWorkspaceAction }),
+		result: Obj({ operation: DesktopOperation }),
+	},
+	"desktopOperation/recover": {
+		params: Obj({
+			target: DesktopCheckout,
+			id: Str,
+			action: Type.Union([Type.Literal("retry"), Type.Literal("cancel"), Type.Literal("acknowledge")]),
+		}),
+		result: Obj({ operation: Type.Optional(DesktopOperation), accepted: Bool }),
 	},
 	"git/status": {
 		params: ThreadId,
@@ -1276,6 +1380,7 @@ export const ServerNotifications = {
 	...DesktopExtensionNotifications,
 	"thread/started": Obj({ thread: Thread }),
 	"thread/replaced": Obj({ oldThreadId: Str, thread: Thread }),
+	"desktopOperation/changed": Obj({ threadId: Str, operations: Type.Array(DesktopOperation) }),
 	"thread/status/changed": Obj({ threadId: Str, status: ThreadStatus }),
 	"thread/name/updated": Obj({ threadId: Str, name: Str }),
 	"thread/settings/updated": Obj({ thread: Thread }),

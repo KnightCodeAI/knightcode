@@ -202,7 +202,10 @@ reload | status [--json]` provides the authoring loop; explicitly development-ap
 sources reload on save. Desktop sessions discover the on-demand
 `desktop-customization` skill. Layout, navigation, thread-list, home and title-bar
 providers now use the same public path, with shared rows, hidden pages, ordered
-sections and mediated window intents. Backend entries remain unavailable.
+sections and mediated window intents. Git/workspace controllers, file openers,
+code/diff renderers and terminal providers use explicit checkout targets and
+retain confirmed steps during recovery. Backend entries use coordinated
+frontend/backend revisions; see the desktop extension guide.
 
 ## Keyboard shortcuts
 

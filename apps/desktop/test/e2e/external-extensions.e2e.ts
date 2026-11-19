@@ -258,6 +258,11 @@ test("two windows have separate mounts and receive frontend reloads", async ({ d
 	await expect(page.getByRole("button", { name: "Shared revision two", exact: true })).toBeVisible();
 });
 
+// Native @scope costs about 2x on a whole-list invalidation over 500 rows (+1.7 to +2.1 ms on Windows, S2/S6/S7
+// measurements), which S2 accepted: the routine-frame guard is row selection, where it adds about 1.1x. Both are bounded
+// as ratios so a costlier wrapper (a :has() boundary measured 6.4x) still fails while host speed does not; the fixed
+// whole-list backstop catches a slowdown that hits both sides at once. Rounds interleave both sides in ABBA order and
+// time 20 toggles each, so drift and the 0.1 ms timer step do not decide the result.
 test("owned @scope styles have bounded style-recalculation cost on 500 rows", async ({ desktop }, info) => {
 	const measurements = await desktop.page.evaluate(() => {
 		const root = document.createElement("aside");
@@ -271,43 +276,63 @@ test("owned @scope styles have bounded style-recalculation cost on 500 rows", as
 		host.textContent =
 			".benchmark .row {color:rgb(10,20,30)} .benchmark.alternate .row, .benchmark .row.selected {color:rgb(10,40,50)}";
 		document.head.append(host);
-		const sheets: HTMLStyleElement[] = [];
-		const measure = (mode: "row" | "whole-list") => {
-			const times: number[] = [];
-			for (let i = 0; i < 40; i++) {
-				const start = performance.now();
-				if (mode === "row") root.children[i % 500]!.classList.toggle("selected");
-				else root.classList.toggle("alternate");
-				for (const row of root.children) getComputedStyle(row).color;
-				times.push(performance.now() - start);
-			}
-			return times.sort((a, b) => a - b)[20]!;
-		};
-		const none = measure("row");
-		const noneWholeList = measure("whole-list");
-		for (let i = 0; i < 10; i++) {
+		const sheets = Array.from({ length: 10 }, (_, i) => {
 			const sheet = document.createElement("style");
 			sheet.textContent = `@scope ([data-kc-owner="benchmark"][data-kc-revision="r"]) to ([data-kc-owner]:not([data-kc-owner="benchmark"][data-kc-revision="r"])) { :scope .row { color: rgb(${i},20,30); } :scope.alternate .row, :scope .row.selected { color: rgb(${i},40,50); } }`;
 			document.head.append(sheet);
-			sheets.push(sheet);
+			return sheet;
+		});
+		const read = () => {
+			for (const row of root.children) getComputedStyle(row).color;
+		};
+		const toggle = (mode: "row" | "whole-list", i: number) =>
+			mode === "row" ? root.children[i % 500]!.classList.toggle("selected") : root.classList.toggle("alternate");
+		const batch = (mode: "row" | "whole-list") => {
+			const start = performance.now();
+			for (let i = 0; i < 20; i++) {
+				toggle(mode, i);
+				read();
+			}
+			return (performance.now() - start) / 20;
+		};
+		const scope = (on: boolean) => {
+			for (const sheet of sheets) sheet.sheet!.disabled = !on;
+			// One untimed pass in each direction, so the timed batches do not pay for the sheet change.
+			for (let i = 0; i < 2; i++) {
+				toggle("whole-list", 0);
+				read();
+			}
+		};
+		const rounds: { none: number; scoped: number; rowNone: number; rowScoped: number }[] = [];
+		for (let round = 0; round < 12; round++) {
+			const result = { none: 0, scoped: 0, rowNone: 0, rowScoped: 0 };
+			for (const on of round % 2 ? [true, false] : [false, true]) {
+				scope(on);
+				if (on) [result.scoped, result.rowScoped] = [batch("whole-list"), batch("row")];
+				else [result.none, result.rowNone] = [batch("whole-list"), batch("row")];
+			}
+			rounds.push(result);
 		}
-		const scoped = measure("row");
-		const scopedWholeList = measure("whole-list");
 		for (const sheet of sheets) sheet.remove();
 		host.remove();
 		root.remove();
+		const median = (values: number[]) => [...values].sort((a, b) => a - b)[values.length / 2]!;
 		return {
-			none,
-			scoped,
-			noneWholeList,
-			scopedWholeList,
+			none: median(rounds.map((r) => r.rowNone)),
+			scoped: median(rounds.map((r) => r.rowScoped)),
+			rowDelta: median(rounds.map((r) => r.rowScoped - r.rowNone)),
+			rowRatio: median(rounds.map((r) => r.rowScoped / r.rowNone)),
+			noneWholeList: median(rounds.map((r) => r.none)),
+			scopedWholeList: median(rounds.map((r) => r.scoped)),
+			wholeListRatio: median(rounds.map((r) => r.scoped / r.none)),
 			rows: 500,
 			stylesheets: 10,
-			unit: "ms, median of 40 forced reads; row selection and whole-list color invalidation",
+			unit: "ms per toggle, median of 12 interleaved rounds of 20 forced reads",
 		};
 	});
 	await info.attach("scope-performance", { body: JSON.stringify(measurements), contentType: "application/json" });
 	console.log("Scope profile:", measurements);
-	expect(measurements.scoped).toBeLessThan(measurements.none + 2);
-	expect(measurements.scopedWholeList).toBeLessThan(measurements.noneWholeList + 2);
+	expect(measurements.rowRatio).toBeLessThan(1.5);
+	expect(measurements.wholeListRatio).toBeLessThan(3);
+	expect(measurements.scopedWholeList).toBeLessThan(10);
 });

@@ -6,6 +6,8 @@ import type {
 	experimental_DesktopExtension,
 	experimental_Disposable,
 	experimental_Page,
+	experimental_FileOpener,
+	experimental_FileIntent,
 	experimental_NavigationVisibility,
 	experimental_Surface,
 	experimental_SurfaceContribution,
@@ -27,6 +29,7 @@ export type Registration = {
 	| { kind: "slot" | "provider"; contribution: experimental_SurfaceContribution }
 	| { kind: "page"; contribution: experimental_Page }
 	| { kind: "panelTab"; contribution: experimental_Page }
+	| { kind: "fileOpener"; contribution: experimental_FileOpener }
 	| { kind: "navigationVisibility"; contribution: experimental_NavigationVisibility }
 );
 
@@ -154,6 +157,8 @@ export class ExtensionRegistry {
 			experimental_registerPage: (contribution) => add({ ...metadata(contribution.id), kind: "page", contribution }),
 			experimental_registerPanelTab: (contribution) =>
 				add({ ...metadata(contribution.id), kind: "panelTab", contribution }),
+			experimental_registerFileOpener: (contribution) =>
+				add({ ...metadata(contribution.id), kind: "fileOpener", contribution }),
 			experimental_hideNavigation: (contribution) =>
 				add({ ...metadata(contribution.id), kind: "navigationVisibility", contribution }),
 			experimental_registerCommand: (contribution) =>
@@ -202,6 +207,13 @@ export class ExtensionRegistry {
 				if (ids.has(entry.id)) throw new Error(`Duplicate registration: ${entry.id}`);
 				ids.add(entry.id);
 			}
+			for (const entry of staged) {
+				if (
+					entry.kind === "fileOpener" &&
+					!staged.some((tab) => tab.kind === "panelTab" && tab.contribution.id === entry.contribution.tab)
+				)
+					throw new Error(`File opener has no panel tab: ${entry.id}`);
+			}
 			phase = "prepared";
 			return {
 				dispose,
@@ -238,6 +250,22 @@ export class ExtensionRegistry {
 			(entry): entry is Extract<Registration, { kind: "panelTab" }> =>
 				entry.kind === "panelTab" && this.available(entry, context),
 		);
+	}
+
+	fileOpeners(intent: experimental_FileIntent): Extract<Registration, { kind: "fileOpener" }>[] {
+		return this.entries.filter((entry): entry is Extract<Registration, { kind: "fileOpener" }> => {
+			if (entry.kind !== "fileOpener" || !this.isAdmitted(entry)) return false;
+			try {
+				return entry.contribution.experimental_matches?.(intent) ?? true;
+			} catch (error) {
+				entry.reportError(error, "fallback");
+				return false;
+			}
+		});
+	}
+
+	isAdmitted(entry: Registration): boolean {
+		return this.entries.includes(entry) && !entry.signal.aborted && (entry.activation?.admitted() ?? true);
 	}
 
 	hiddenNavigation(): { owner: string; revision?: string; target: "home" | "profile" }[] {
@@ -309,7 +337,7 @@ export class ExtensionRegistry {
 	private available(entry: Registration, context: experimental_CommandContext): boolean {
 		if (entry.signal.aborted) return false;
 		try {
-			return entry.contribution.experimental_available?.(context) ?? true;
+			return (entry.kind === "fileOpener" ? undefined : entry.contribution.experimental_available?.(context)) ?? true;
 		} catch (error) {
 			this.report(entry.owner, error);
 			return false;

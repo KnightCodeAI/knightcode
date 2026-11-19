@@ -7294,6 +7294,9 @@
 					},
 					"expectedMtimeMs": {
 						"type": "number"
+					},
+					"expectedCwd": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false
@@ -7386,6 +7389,1059 @@
 						"items": {
 							"type": "string"
 						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopOperation/preflight": {
+			"params": {
+				"type": "object",
+				"required": [
+					"target",
+					"to"
+				],
+				"properties": {
+					"target": {
+						"type": "object",
+						"required": [
+							"threadId",
+							"cwd",
+							"projectCwd"
+						],
+						"properties": {
+							"threadId": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"projectCwd": {
+								"type": "string"
+							}
+						},
+						"additionalProperties": false
+					},
+					"to": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "local"
+							},
+							{
+								"type": "string",
+								"const": "worktree"
+							}
+						]
+					},
+					"branch": {
+						"type": "string",
+						"maxLength": 200
+					},
+					"environment": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {
+					"branch": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopOperation/read": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"operations"
+				],
+				"properties": {
+					"operations": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"id",
+								"kind",
+								"target",
+								"status",
+								"completed",
+								"recovery",
+								"outputs"
+							],
+							"properties": {
+								"id": {
+									"type": "string"
+								},
+								"kind": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "commitAndPush"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "createBranch"
+										},
+										{
+											"type": "string",
+											"const": "switchBranch"
+										},
+										{
+											"type": "string",
+											"const": "pullRequest"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								},
+								"target": {
+									"type": "object",
+									"required": [
+										"threadId",
+										"cwd",
+										"projectCwd"
+									],
+									"properties": {
+										"threadId": {
+											"type": "string"
+										},
+										"cwd": {
+											"type": "string"
+										},
+										"projectCwd": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								"status": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "running"
+										},
+										{
+											"type": "string",
+											"const": "completed"
+										},
+										{
+											"type": "string",
+											"const": "partial"
+										},
+										{
+											"type": "string",
+											"const": "refused"
+										},
+										{
+											"type": "string",
+											"const": "cancelled"
+										},
+										{
+											"type": "string",
+											"const": "outcome-unknown"
+										}
+									]
+								},
+								"stage": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "branch"
+										},
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "pr"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								},
+								"completed": {
+									"type": "array",
+									"items": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "branch"
+											},
+											{
+												"type": "string",
+												"const": "commit"
+											},
+											{
+												"type": "string",
+												"const": "push"
+											},
+											{
+												"type": "string",
+												"const": "pr"
+											},
+											{
+												"type": "string",
+												"const": "handoff"
+											},
+											{
+												"type": "string",
+												"const": "restore"
+											}
+										]
+									}
+								},
+								"recovery": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "none"
+										},
+										{
+											"type": "string",
+											"const": "retry"
+										},
+										{
+											"type": "string",
+											"const": "reconcile"
+										},
+										{
+											"type": "string",
+											"const": "cancel"
+										}
+									]
+								},
+								"outputs": {
+									"type": "object",
+									"properties": {
+										"branch": {
+											"type": "string"
+										},
+										"commit": {
+											"type": "string"
+										},
+										"message": {
+											"type": "string"
+										},
+										"remote": {
+											"type": "string"
+										},
+										"url": {
+											"type": "string"
+										},
+										"warnings": {
+											"type": "array",
+											"items": {
+												"type": "string"
+											}
+										}
+									},
+									"additionalProperties": false
+								},
+								"problem": {
+									"type": "object",
+									"required": [
+										"code",
+										"message"
+									],
+									"properties": {
+										"code": {
+											"type": "string"
+										},
+										"message": {
+											"type": "string"
+										},
+										"paths": {
+											"type": "array",
+											"items": {
+												"type": "string"
+											}
+										},
+										"recoveryInstructions": {
+											"type": "array",
+											"items": {
+												"type": "string"
+											}
+										}
+									},
+									"additionalProperties": false
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopOperation/start": {
+			"params": {
+				"type": "object",
+				"required": [
+					"target",
+					"action"
+				],
+				"properties": {
+					"target": {
+						"type": "object",
+						"required": [
+							"threadId",
+							"cwd",
+							"projectCwd"
+						],
+						"properties": {
+							"threadId": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"projectCwd": {
+								"type": "string"
+							}
+						},
+						"additionalProperties": false
+					},
+					"action": {
+						"anyOf": [
+							{
+								"type": "object",
+								"required": [
+									"kind"
+								],
+								"properties": {
+									"kind": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "commit"
+											},
+											{
+												"type": "string",
+												"const": "commitAndPush"
+											}
+										]
+									},
+									"branch": {
+										"type": "string",
+										"maxLength": 200
+									},
+									"message": {
+										"type": "string",
+										"maxLength": 20000
+									},
+									"includeUnstaged": {
+										"type": "boolean"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind"
+								],
+								"properties": {
+									"kind": {
+										"type": "string",
+										"const": "push"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"name"
+								],
+								"properties": {
+									"kind": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "createBranch"
+											},
+											{
+												"type": "string",
+												"const": "switchBranch"
+											}
+										]
+									},
+									"name": {
+										"type": "string",
+										"maxLength": 200
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"commitFirst"
+								],
+								"properties": {
+									"kind": {
+										"type": "string",
+										"const": "pullRequest"
+									},
+									"branch": {
+										"type": "string",
+										"maxLength": 200
+									},
+									"title": {
+										"type": "string"
+									},
+									"body": {
+										"type": "string"
+									},
+									"draft": {
+										"type": "boolean"
+									},
+									"commitFirst": {
+										"type": "boolean"
+									},
+									"hasChanges": {
+										"type": "boolean"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"to"
+								],
+								"properties": {
+									"kind": {
+										"type": "string",
+										"const": "handoff"
+									},
+									"to": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "local"
+											},
+											{
+												"type": "string",
+												"const": "worktree"
+											}
+										]
+									},
+									"branch": {
+										"type": "string",
+										"maxLength": 200
+									},
+									"environment": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind"
+								],
+								"properties": {
+									"kind": {
+										"type": "string",
+										"const": "restore"
+									}
+								},
+								"additionalProperties": false
+							}
+						]
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"operation"
+				],
+				"properties": {
+					"operation": {
+						"type": "object",
+						"required": [
+							"id",
+							"kind",
+							"target",
+							"status",
+							"completed",
+							"recovery",
+							"outputs"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"kind": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "commitAndPush"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "createBranch"
+									},
+									{
+										"type": "string",
+										"const": "switchBranch"
+									},
+									{
+										"type": "string",
+										"const": "pullRequest"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"target": {
+								"type": "object",
+								"required": [
+									"threadId",
+									"cwd",
+									"projectCwd"
+								],
+								"properties": {
+									"threadId": {
+										"type": "string"
+									},
+									"cwd": {
+										"type": "string"
+									},
+									"projectCwd": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "running"
+									},
+									{
+										"type": "string",
+										"const": "completed"
+									},
+									{
+										"type": "string",
+										"const": "partial"
+									},
+									{
+										"type": "string",
+										"const": "refused"
+									},
+									{
+										"type": "string",
+										"const": "cancelled"
+									},
+									{
+										"type": "string",
+										"const": "outcome-unknown"
+									}
+								]
+							},
+							"stage": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "branch"
+									},
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "pr"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"completed": {
+								"type": "array",
+								"items": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "branch"
+										},
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "pr"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								}
+							},
+							"recovery": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "none"
+									},
+									{
+										"type": "string",
+										"const": "retry"
+									},
+									{
+										"type": "string",
+										"const": "reconcile"
+									},
+									{
+										"type": "string",
+										"const": "cancel"
+									}
+								]
+							},
+							"outputs": {
+								"type": "object",
+								"properties": {
+									"branch": {
+										"type": "string"
+									},
+									"commit": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"remote": {
+										"type": "string"
+									},
+									"url": {
+										"type": "string"
+									},
+									"warnings": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							},
+							"problem": {
+								"type": "object",
+								"required": [
+									"code",
+									"message"
+								],
+								"properties": {
+									"code": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"paths": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									},
+									"recoveryInstructions": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							}
+						},
+						"additionalProperties": false
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopOperation/recover": {
+			"params": {
+				"type": "object",
+				"required": [
+					"target",
+					"id",
+					"action"
+				],
+				"properties": {
+					"target": {
+						"type": "object",
+						"required": [
+							"threadId",
+							"cwd",
+							"projectCwd"
+						],
+						"properties": {
+							"threadId": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"projectCwd": {
+								"type": "string"
+							}
+						},
+						"additionalProperties": false
+					},
+					"id": {
+						"type": "string"
+					},
+					"action": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "retry"
+							},
+							{
+								"type": "string",
+								"const": "cancel"
+							},
+							{
+								"type": "string",
+								"const": "acknowledge"
+							}
+						]
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"accepted"
+				],
+				"properties": {
+					"operation": {
+						"type": "object",
+						"required": [
+							"id",
+							"kind",
+							"target",
+							"status",
+							"completed",
+							"recovery",
+							"outputs"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"kind": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "commitAndPush"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "createBranch"
+									},
+									{
+										"type": "string",
+										"const": "switchBranch"
+									},
+									{
+										"type": "string",
+										"const": "pullRequest"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"target": {
+								"type": "object",
+								"required": [
+									"threadId",
+									"cwd",
+									"projectCwd"
+								],
+								"properties": {
+									"threadId": {
+										"type": "string"
+									},
+									"cwd": {
+										"type": "string"
+									},
+									"projectCwd": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "running"
+									},
+									{
+										"type": "string",
+										"const": "completed"
+									},
+									{
+										"type": "string",
+										"const": "partial"
+									},
+									{
+										"type": "string",
+										"const": "refused"
+									},
+									{
+										"type": "string",
+										"const": "cancelled"
+									},
+									{
+										"type": "string",
+										"const": "outcome-unknown"
+									}
+								]
+							},
+							"stage": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "branch"
+									},
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "pr"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"completed": {
+								"type": "array",
+								"items": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "branch"
+										},
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "pr"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								}
+							},
+							"recovery": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "none"
+									},
+									{
+										"type": "string",
+										"const": "retry"
+									},
+									{
+										"type": "string",
+										"const": "reconcile"
+									},
+									{
+										"type": "string",
+										"const": "cancel"
+									}
+								]
+							},
+							"outputs": {
+								"type": "object",
+								"properties": {
+									"branch": {
+										"type": "string"
+									},
+									"commit": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"remote": {
+										"type": "string"
+									},
+									"url": {
+										"type": "string"
+									},
+									"warnings": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							},
+							"problem": {
+								"type": "object",
+								"required": [
+									"code",
+									"message"
+								],
+								"properties": {
+									"code": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"paths": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									},
+									"recoveryInstructions": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							}
+						},
+						"additionalProperties": false
+					},
+					"accepted": {
+						"type": "boolean"
 					}
 				},
 				"additionalProperties": false
@@ -15075,6 +16131,258 @@
 						}
 					},
 					"additionalProperties": false
+				}
+			},
+			"additionalProperties": false
+		},
+		"desktopOperation/changed": {
+			"type": "object",
+			"required": [
+				"threadId",
+				"operations"
+			],
+			"properties": {
+				"threadId": {
+					"type": "string"
+				},
+				"operations": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"required": [
+							"id",
+							"kind",
+							"target",
+							"status",
+							"completed",
+							"recovery",
+							"outputs"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"kind": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "commitAndPush"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "createBranch"
+									},
+									{
+										"type": "string",
+										"const": "switchBranch"
+									},
+									{
+										"type": "string",
+										"const": "pullRequest"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"target": {
+								"type": "object",
+								"required": [
+									"threadId",
+									"cwd",
+									"projectCwd"
+								],
+								"properties": {
+									"threadId": {
+										"type": "string"
+									},
+									"cwd": {
+										"type": "string"
+									},
+									"projectCwd": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "running"
+									},
+									{
+										"type": "string",
+										"const": "completed"
+									},
+									{
+										"type": "string",
+										"const": "partial"
+									},
+									{
+										"type": "string",
+										"const": "refused"
+									},
+									{
+										"type": "string",
+										"const": "cancelled"
+									},
+									{
+										"type": "string",
+										"const": "outcome-unknown"
+									}
+								]
+							},
+							"stage": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "branch"
+									},
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "pr"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"completed": {
+								"type": "array",
+								"items": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "branch"
+										},
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "pr"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								}
+							},
+							"recovery": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "none"
+									},
+									{
+										"type": "string",
+										"const": "retry"
+									},
+									{
+										"type": "string",
+										"const": "reconcile"
+									},
+									{
+										"type": "string",
+										"const": "cancel"
+									}
+								]
+							},
+							"outputs": {
+								"type": "object",
+								"properties": {
+									"branch": {
+										"type": "string"
+									},
+									"commit": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"remote": {
+										"type": "string"
+									},
+									"url": {
+										"type": "string"
+									},
+									"warnings": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							},
+							"problem": {
+								"type": "object",
+								"required": [
+									"code",
+									"message"
+								],
+								"properties": {
+									"code": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"paths": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									},
+									"recoveryInstructions": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							}
+						},
+						"additionalProperties": false
+					}
 				}
 			},
 			"additionalProperties": false

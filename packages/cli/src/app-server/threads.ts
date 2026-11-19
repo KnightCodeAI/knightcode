@@ -78,6 +78,7 @@ import {
 } from "./git-actions.ts";
 import type { AppServerContext } from "./context.ts";
 import { AppServerError } from "./errors.ts";
+import { type DesktopOperationRun, DesktopOperations } from "./desktop-operations.ts";
 import { positionOf } from "./config.ts";
 import { FileSearch } from "./file-search.ts";
 import { listFolder, readFile, writeText } from "./files.ts";
@@ -249,6 +250,9 @@ export class ThreadManager {
 	private readonly preparing = new Set<string>();
 	/** Threads with a thread/handoff in progress. */
 	private readonly handingOff = new Set<string>();
+	private readonly desktopOperations = new DesktopOperations((threadId, operations) =>
+		this.threads.get(threadId)?.notify("desktopOperation/changed", { threadId, operations }),
+	);
 	/** Queued inputs of a thread whose reload after a handoff failed, kept for its next load. */
 	private readonly strandedQueues = new Map<string, LoadedThread["queued"]>();
 	/** Manifest path → ids of threads loaded or loading in that worktree. */
@@ -477,13 +481,19 @@ export class ThreadManager {
 	}
 
 	/** `thread/worktree/restore`: rebuild the deleted worktree from its snapshot, then load the thread there. */
-	private restore(threadId: string, by: Subscriber): Promise<ResultOf<"thread/worktree/restore">> {
+	private restore(
+		threadId: string,
+		by: Subscriber,
+		expected?: ParamsOf<"desktopOperation/start">["target"],
+	): Promise<ResultOf<"thread/worktree/restore">> {
 		return this.track(async () => {
 			const file = await this.files.find(threadId);
 			if (!file) throw new AppServerError("threadNotFound", `no saved thread: ${threadId}`);
 			const headerCwd = readSessionHeaderForDiscovery(file)?.cwd ?? "";
 			const manifest = placeThread(this.worktrees(), threadId, headerCwd).manifest;
 			if (!manifest?.deleted) throw new AppServerError("invalidParams", "the worktree of this chat is not deleted");
+			if (expected && (!samePath(expected.cwd, manifest.path) || !samePath(expected.projectCwd, manifest.projectCwd)))
+				throw new AppServerError("invalidParams", "The workspace has changed. Reopen the thread and try again.");
 			await this.restoreManaged(manifest, threadId);
 			try {
 				const thread = await this.ensureLoaded(threadId, by.mode);
@@ -598,15 +608,19 @@ export class ThreadManager {
 	 * `thread/handoff` (§6.1) in three phases, so no phase waits on a lock or queue it holds: A prepares the
 	 * destination worktree, B moves the changes with both checkouts reserved, C reloads the thread where it now runs.
 	 */
-	handoff(params: ParamsOf<"thread/handoff">, by: Subscriber): Promise<ResultOf<"thread/handoff">> {
+	handoff(
+		params: ParamsOf<"thread/handoff">,
+		by: Subscriber,
+		expected?: ParamsOf<"desktopOperation/start">["target"],
+	): Promise<ResultOf<"thread/handoff">> {
 		// One handoff per thread at a time: a second would build a second worktree that the first's leaves orphaned.
 		if (this.handingOff.has(params.threadId))
 			return Promise.reject(new AppServerError("turnInProgress", "this thread is already being handed off"));
 		// A dry run takes nothing, so a real handoff confirmed while one is still answering is not refused.
-		if (params.dryRun) return this.track(() => this.checkHandoff(params, by));
+		if (params.dryRun) return this.track(() => this.checkHandoff(params, by, expected));
 		this.handingOff.add(params.threadId);
 		return this.track(async () => {
-			const { thread, warnings, settings, cwd, headerCwd, placed } = await this.handoffTarget(params, by);
+			const { thread, warnings, settings, cwd, headerCwd, placed } = await this.handoffTarget(params, by, expected);
 			let manifest = placed.manifest;
 			this.preparing.add(thread.id);
 			let restored: string | undefined;
@@ -743,8 +757,21 @@ export class ThreadManager {
 	}
 
 	/** What every handoff checks first: a saved thread, the direction, the environment. */
-	private async handoffTarget(params: ParamsOf<"thread/handoff">, by: Subscriber) {
+	private assertDesktopCheckout(thread: LoadedThread, expected: ParamsOf<"desktopOperation/start">["target"]): void {
+		if (
+			!samePath(expected.cwd, thread.session.sessionManager.getCwd()) ||
+			!samePath(expected.projectCwd, thread.projectCwd)
+		)
+			throw new AppServerError("invalidParams", "The workspace has changed. Reopen the thread and try again.");
+	}
+
+	private async handoffTarget(
+		params: ParamsOf<"thread/handoff">,
+		by: Subscriber,
+		expected?: ParamsOf<"desktopOperation/start">["target"],
+	) {
 		const thread = await this.ensureLoaded(params.threadId, by.mode);
+		if (expected) this.assertDesktopCheckout(thread, expected);
 		if (!thread.file || !existsSync(thread.file))
 			throw new AppServerError("invalidParams", "send a message before handing off");
 		const warnings: Warning[] = [];
@@ -767,8 +794,12 @@ export class ThreadManager {
 	 * written. A worktree the real call would still create or restore is not there to check: only what does not depend
 	 * on it is (a setup script that leaves files behind still fails the real call, after its own checks).
 	 */
-	private async checkHandoff(params: ParamsOf<"thread/handoff">, by: Subscriber): Promise<ResultOf<"thread/handoff">> {
-		const { thread, settings, cwd, placed } = await this.handoffTarget(params, by);
+	private async checkHandoff(
+		params: ParamsOf<"thread/handoff">,
+		by: Subscriber,
+		expected?: ParamsOf<"desktopOperation/start">["target"],
+	): Promise<ResultOf<"thread/handoff">> {
+		const { thread, settings, cwd, placed } = await this.handoffTarget(params, by, expected);
 		const manifest = placed.manifest?.deleted ? undefined : placed.manifest;
 		const main = await requireRepo(manifest?.mainRoot ?? cwd);
 		const worktree = manifest && (await requireRepo(manifest.path));
@@ -2312,6 +2343,93 @@ export class ThreadManager {
 		});
 	}
 
+	private runDesktopOperation(op: DesktopOperationRun, by: Subscriber): Promise<void> {
+		const { target } = op.snapshot;
+		const { threadId } = target;
+		const action = op.action;
+		if (action.kind === "handoff")
+			return op.step("handoff", async () => {
+				const { branch, warnings } = await this.handoff({ threadId, ...action }, by, target);
+				return { branch, warnings: warnings.map((warning) => warning.message) };
+			});
+		if (action.kind === "restore")
+			return op.step("restore", async () => {
+				await this.restore(threadId, by, target);
+				return {};
+			});
+		return this.onCheckout(threadId, by.mode, false, async (thread, repo, ctx) => {
+			this.assertDesktopCheckout(thread, target);
+			const held = <T>(name: string, step: () => Promise<T>) => this.holdingCheckout(repo, name, step);
+			if (action.kind === "createBranch" || action.kind === "switchBranch") {
+				await op.step("branch", () =>
+					held("branch", () =>
+						action.kind === "createBranch" ? gitBranchCreate(repo, action.name) : gitBranchSwitch(repo, action.name),
+					),
+				);
+				return;
+			}
+			const status = await gitStatus(repo);
+			const { branch, commit } = op.snapshot.outputs;
+			if ((branch && branch !== status.branch) || (commit && commit !== status.head))
+				throw new AppServerError("gitConflict", "The branch or commit changed. Review the checkout before continuing.");
+			if ("branch" in action && action.branch && !status.branch) {
+				const name = action.branch;
+				await op.step("branch", () => held("branch create", () => gitBranchCreate(repo, name)));
+			}
+			if (
+				action.kind === "commit" ||
+				action.kind === "commitAndPush" ||
+				(action.kind === "pullRequest" && action.commitFirst && action.hasChanges !== false)
+			) {
+				await op.step("commit", async () => {
+					try {
+						const committed = await gitCommit(
+							thread,
+							repo,
+							{
+								threadId,
+								message: "message" in action ? action.message : undefined,
+								includeUnstaged: "includeUnstaged" in action ? action.includeUnstaged : true,
+							},
+							ctx,
+							(step) => held("commit", step),
+						);
+						return { ...committed, branch: op.snapshot.outputs.branch ?? status.branch };
+					} catch (error) {
+						if (
+							action.kind === "pullRequest" &&
+							error instanceof AppServerError &&
+							error.code === "invalidParams" &&
+							error.message === "nothing to commit"
+						)
+							return;
+						throw error;
+					}
+				});
+			}
+			const verifyConfirmed = async () => {
+				this.assertDesktopCheckout(thread, target);
+				const latest = await gitStatus(repo);
+				const outputs = op.snapshot.outputs;
+				if ((outputs.branch && outputs.branch !== latest.branch) || (outputs.commit && outputs.commit !== latest.head))
+					throw new AppServerError(
+						"gitConflict",
+						"The branch or commit changed. Review the checkout before continuing.",
+					);
+			};
+			if (action.kind === "commitAndPush" || action.kind === "push" || action.kind === "pullRequest")
+				await op.step("push", async () => {
+					await verifyConfirmed();
+					return gitPush(repo, ctx);
+				});
+			if (action.kind === "pullRequest")
+				await op.step("pr", async () => {
+					await verifyConfirmed();
+					return gitPullRequest(repo, { threadId, title: action.title, body: action.body, draft: action.draft }, ctx);
+				});
+		});
+	}
+
 	handlers(): Handlers {
 		return {
 			"server/diagnostics": async () => this.diagnostics(),
@@ -2435,11 +2553,14 @@ export class ThreadManager {
 						listFolder(thread.session.sessionManager.getCwd(), path),
 					),
 				),
-			"file/write": ({ threadId, path, text, expectedMtimeMs }, connection) =>
+			"file/write": ({ threadId, path, text, expectedMtimeMs, expectedCwd }, connection) =>
 				this.track(() =>
-					this.withThread(threadId, connection.mode, (thread) =>
-						writeText(thread.session.sessionManager.getCwd(), path, text, expectedMtimeMs),
-					),
+					this.withThread(threadId, connection.mode, (thread) => {
+						const cwd = thread.session.sessionManager.getCwd();
+						if (expectedCwd && (!samePath(cwd, expectedCwd) || this.handingOff.has(threadId)))
+							throw new AppServerError("invalidParams", "The workspace has changed.");
+						return writeText(cwd, path, text, expectedMtimeMs);
+					}),
 				),
 			"mcp/app/readResource": (params, connection) =>
 				this.track(() =>
@@ -2451,6 +2572,34 @@ export class ThreadManager {
 						callAppTool(thread.mcpApps(), thread.approvalMode, params),
 					),
 				),
+			"desktopOperation/preflight": async ({ target, ...params }, connection) => {
+				const { branch } = await this.handoff(
+					{ ...params, threadId: target.threadId, dryRun: true },
+					connection,
+					target,
+				);
+				return { branch };
+			},
+			"desktopOperation/read": async ({ threadId }) => ({ operations: this.desktopOperations.list(threadId) }),
+			"desktopOperation/start": ({ target, action }, connection) =>
+				this.track(async () => ({
+					operation: await this.desktopOperations.start(
+						{ ...target, projectCwd: pathKey(canonicalizePath(resolvePath(target.projectCwd))) },
+						action,
+						(op) => this.runDesktopOperation(op, connection),
+					),
+				})),
+			"desktopOperation/recover": ({ target: original, id, action }, connection) =>
+				this.track(async () => {
+					const target = { ...original, projectCwd: pathKey(canonicalizePath(resolvePath(original.projectCwd))) };
+					if (action === "retry")
+						return this.desktopOperations.retry(target, id, (op) => this.runDesktopOperation(op, connection));
+					const accepted =
+						action === "cancel"
+							? this.desktopOperations.cancel(target, id)
+							: this.desktopOperations.acknowledge(target, id);
+					return { accepted, operation: this.desktopOperations.read(target.threadId) };
+				}),
 			"git/status": ({ threadId }, connection) =>
 				this.onCheckout(threadId, connection.mode, false, (_thread, repo) => gitStatus(repo)),
 			"git/origin": ({ threadId }, connection) =>
