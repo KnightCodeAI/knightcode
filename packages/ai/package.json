@@ -20,7 +20,7 @@
     "@smithy/types": "4.17.2",
     "http-proxy-agent": "9.1.0",
     "https-proxy-agent": "9.1.0",
-    "openai": "7.19.0",
+    "openai": "7.59.0",
     "partial-json": "0.1.7"
   },
   "scripts": {

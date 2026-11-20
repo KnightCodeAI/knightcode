@@ -31,7 +31,6 @@ describe("Together models", () => {
 		expect(model.cost.cacheWrite).toBe(0);
 		expect(model.compat).toEqual({
 			supportsStore: false,
-			supportsDeveloperRole: false,
 			supportsReasoningEffort: false,
 			maxTokensField: "max_tokens",
 			thinkingFormat: "together",
