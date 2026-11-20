@@ -33,6 +33,7 @@ function fixture(initial: ("frontend" | "backend")[]) {
 		if (method === "desktopExtension/list") {
 			return {
 				safeMode: false,
+				preview: true,
 				extensions: [
 					{
 						owner: "example",
@@ -48,7 +49,7 @@ function fixture(initial: ("frontend" | "backend")[]) {
 				],
 			};
 		}
-		if (method === "desktopExtension/set") return {};
+		if (method === "desktopExtension/set" || method === "desktopExtension/preview/set") return {};
 		throw new Error(`Unexpected request: ${method}`);
 	});
 	const services = {
@@ -131,4 +132,25 @@ test("the grant echoes the reviewed snapshot, not kinds added while the native d
 	});
 	expect(await approve()).not.toHaveProperty("error");
 	expect(request).toHaveBeenLastCalledWith("desktopExtension/set", expect.objectContaining({ kinds: ["frontend"] }));
+});
+
+test("turning the extensions preview on needs a native confirmation; turning it off does not", async () => {
+	const { request, services } = fixture(["frontend"]);
+	const preview = (enabled: boolean) =>
+		handleDesktopExtensions(
+			{ id: 3, host: "host/desktopExtension/preview/set", params: { enabled } },
+			{} as BrowserWindow,
+			1,
+			services,
+		);
+	electron.show.mockResolvedValueOnce({ response: 1 });
+	expect(await preview(true)).not.toHaveProperty("error");
+	expect(request).not.toHaveBeenCalledWith("desktopExtension/preview/set", expect.anything());
+	expect(await preview(true)).not.toHaveProperty("error");
+	expect(request).toHaveBeenLastCalledWith("desktopExtension/preview/set", { enabled: true });
+	expect((electron.show.mock.calls[1]![1] as { detail: string }).detail).toMatch(/not sandboxed/i);
+	electron.show.mockClear();
+	expect(await preview(false)).not.toHaveProperty("error");
+	expect(electron.show).not.toHaveBeenCalled();
+	expect(request).toHaveBeenLastCalledWith("desktopExtension/preview/set", { enabled: false });
 });

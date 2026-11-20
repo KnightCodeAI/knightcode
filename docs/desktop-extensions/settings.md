@@ -12,9 +12,17 @@ renders them with the same renderer as the built-in settings.json pages, and
 reads and writes them through the owner's epoch-bound backend app settings
 (`backend.md`, "Settings and storage"). Secret settings are not readable from
 the frontend. A section from an extension without a backend shows a notice.
-It never falls back to a second store. Project- and thread-scoped declarative
-fields are a later slice. Until then, use a custom section with the backend
-client.
+It never falls back to a second store.
+
+`scopes` (default `["app"]`) lists where a schema section can save values. With
+more than one, the host adds a Scope row: the app, each sidebar project, and
+each project's unarchived threads. The choice becomes an explicit backend
+selector (`{ scope: "project", cwd }` or `{ scope: "thread", cwd, threadId }`),
+never the window's selection. A thread is keyed by its project, also when it
+runs in a worktree. Rows show the inherited value (thread > project > app >
+default) and a write lands only in the chosen scope, on the same S6 store.
+Project and thread scopes need a trusted project, as every backend data
+context does; an untrusted one shows the server's refusal in the section.
 
 A custom section supplies `experimental_render`. Each section mounts at its own
 ownership root, so a crash stays inside its error boundary.

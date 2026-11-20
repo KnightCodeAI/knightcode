@@ -51,7 +51,7 @@ type Running = {
 
 async function packaged(info: TestInfo, run: (app: Running) => Promise<void>, safeMode = false): Promise<void> {
 	test.skip(process.platform !== "win32", "This proof requires the native Windows packaged layout.");
-	const f = createDesktopFixture({ theme: "light" });
+	const f = createDesktopFixture({ theme: "light", nativeExtensions: true });
 	const installed = join(f.root, "installed");
 	const source = join(f.agentDir, "desktop-extensions", "backend-proof");
 	const starts = join(f.root, "services.log");

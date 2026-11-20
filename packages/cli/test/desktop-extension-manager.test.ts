@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,10 +12,48 @@ function fixture() {
 	mkdirSync(source, { recursive: true });
 	writeFileSync(join(source, "package.json"), JSON.stringify({ knightcode: { desktop: { frontend: "./app.js" } } }));
 	writeFileSync(join(source, "app.js"), 'throw new Error("source must not execute in server"); export default {};');
+	// The preview switch is off by default; these cases exercise consent with it on.
+	new DesktopExtensionManager(agent).setPreview(true);
 	return { agent, source };
 }
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+describe("native desktop extensions preview switch", () => {
+	it("off: approved packages are listed but nothing is staged or admitted", async () => {
+		const { agent, source } = fixture();
+		const manager = new DesktopExtensionManager(agent);
+		const { owner } = (await manager.list()).extensions[0]!;
+		await manager.set({ owner, source, approve: true, kinds: ["frontend"], enabled: true });
+		const on = await manager.candidates();
+		expect(on.artifacts).toHaveLength(1);
+		manager.setPreview(false);
+		rmSync(join(agent, "desktop-artifacts"), { recursive: true, force: true });
+		const off = await new DesktopExtensionManager(agent).list();
+		expect(off.preview).toBe(false);
+		expect(off.extensions[0]).toMatchObject({ owner, approved: true, enabled: true });
+		expect(off.extensions[0]!.artifact).toBeUndefined();
+		const candidates = await manager.candidates();
+		expect(candidates.artifacts).toEqual([]);
+		expect(candidates.enabled.size).toBe(0);
+		expect(manager.admits(on.artifacts[0]!)).toBe(false);
+		expect(existsSync(join(agent, "desktop-artifacts"))).toBe(false);
+		manager.setPreview(true);
+		expect((await manager.list()).preview).toBe(true);
+		expect(manager.admits(on.artifacts[0]!)).toBe(true);
+	});
+	it("a malformed preview file leaves external code off instead of breaking the inventory", async () => {
+		const { agent } = fixture();
+		writeFileSync(join(agent, "desktop-extension-preview.json"), "{not json");
+		const list = await new DesktopExtensionManager(agent).list();
+		expect(list.preview).toBe(false);
+		expect(list.extensions).toHaveLength(1);
+	});
+	it("a fresh agent directory starts with the preview off", async () => {
+		const agent = mkdtempSync(join(tmpdir(), "kc-desktop-preview-"));
+		roots.push(agent);
+		expect((await new DesktopExtensionManager(agent).list()).preview).toBe(false);
+	});
 });
 describe("desktop native consent", () => {
 	it("requires fresh native-kind approval when a dev-approved frontend adds a backend", async () => {
@@ -146,5 +184,49 @@ describe("desktop native consent", () => {
 		const manager = new DesktopExtensionManager(agent);
 		const { owner } = (await manager.list()).extensions[0]!;
 		await expect(manager.set({ owner, source: "another-source", approve: true })).rejects.toThrow(/source/i);
+	});
+});
+describe("declared API and app version ranges", () => {
+	const declare = (source: string, desktop: Record<string, unknown>) =>
+		writeFileSync(
+			join(source, "package.json"),
+			JSON.stringify({ knightcode: { desktop: { frontend: "./app.js", ...desktop } } }),
+		);
+	it("refuses an app range that excludes the running desktop before staging either half", async () => {
+		const { agent, source } = fixture();
+		writeFileSync(join(source, "server.js"), 'throw new Error("backend must not execute"); export default {};');
+		declare(source, { backend: "./server.js", app: ">=0.2.0" });
+		const manager = new DesktopExtensionManager(agent, { appVersion: "0.1.2" });
+		const entry = (await manager.list()).extensions[0]!;
+		expect(entry.error).toBe(
+			"Requires KnightCode desktop >=0.2.0; this is 0.1.2. Update the app or install a compatible version.",
+		);
+		expect(entry.kinds).toBeUndefined();
+		await expect(
+			manager.set({ owner: entry.owner, source, approve: true, kinds: ["frontend", "backend"] }),
+		).rejects.toThrow(/Requires KnightCode desktop/);
+		expect((await manager.candidates()).artifacts).toEqual([]);
+		expect(existsSync(join(agent, "desktop-artifacts"))).toBe(false);
+		const compatible = new DesktopExtensionManager(agent, { appVersion: "0.2.1" });
+		expect((await compatible.list()).extensions[0]!.error).toBeUndefined();
+	});
+	it("refuses an unsupported declared API version and malformed ranges with clear diagnostics", async () => {
+		const { agent, source } = fixture();
+		const manager = new DesktopExtensionManager(agent, { appVersion: "0.1.2" });
+		declare(source, { apiVersion: 2 });
+		expect((await manager.list()).extensions[0]!.error).toBe(
+			"Requires desktop extension API 2; this app supports API 1.",
+		);
+		declare(source, { app: "not a range" });
+		expect((await manager.list()).extensions[0]!.error).toBe('desktop.app must be a semver range such as ">=0.2.0".');
+		declare(source, { apiVersion: "1" });
+		expect((await manager.list()).extensions[0]!.error).toBe("desktop.apiVersion must be an integer.");
+		declare(source, { apiVersion: 1, app: "^0.1.0" });
+		expect((await manager.list()).extensions[0]!.error).toBeUndefined();
+	});
+	it("checks only the declared range when no desktop app version is known (CLI validation)", async () => {
+		const { agent, source } = fixture();
+		declare(source, { app: ">=99.0.0" });
+		expect((await new DesktopExtensionManager(agent).list()).extensions[0]!.error).toBeUndefined();
 	});
 });

@@ -193,7 +193,7 @@ Windows 11 (10.0.26200), 2026-11-12, at `f4e10b2d3`:
   loaded its bundle but `#root` stayed empty and nothing reached the trace. Its
   cause is not established. Main's stdout/stderr and every renderer's console
   are now attached to each test (`electron-output-N`); retries stay disabled.
-- Native macOS/Linux: not executed. S1 verification follows; S2–S9 are not started.
+- Native macOS/Linux: not executed. Later slices follow.
 
 ### S1 — registry and built-in path
 

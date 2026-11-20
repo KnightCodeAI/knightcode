@@ -149,6 +149,7 @@ const requestParams: Record<string, unknown> = {
 		dev: false,
 	},
 	"desktopExtension/reload": {},
+	"desktopExtension/preview/set": { enabled: true },
 	"desktopExtension/diagnostic": {
 		owner: "external-example",
 		diagnostic: { windowId: 1, revision: "a".repeat(64), phase: "render", message: "Provider failed" },
@@ -302,6 +303,7 @@ const requestResults: Record<string, unknown> = {
 	"desktopExtension/unsubscribe": {},
 	"desktopExtension/list": {
 		safeMode: false,
+		preview: true,
 		extensions: [
 			{
 				owner: "external-example",
@@ -326,6 +328,7 @@ const requestResults: Record<string, unknown> = {
 	},
 	"desktopExtension/set": {},
 	"desktopExtension/reload": {},
+	"desktopExtension/preview/set": {},
 	"desktopExtension/diagnostic": {},
 	initialize: {
 		serverInfo: { name: "knightcode", version: "0.0.0" },

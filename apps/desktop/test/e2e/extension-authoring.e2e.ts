@@ -11,7 +11,7 @@ import { createDesktopFixture } from "../fixtures/desktop.ts";
 test("packaged agent creates, validates, breaks, diagnoses and fixes a frontend extension", async ({}, info) => {
 	test.skip(process.platform !== "win32", "Native packaged proof currently covers Windows only.");
 	test.setTimeout(180_000);
-	const fixture = createDesktopFixture({ theme: "light" });
+	const fixture = createDesktopFixture({ theme: "light", nativeExtensions: true });
 	const installed = join(fixture.root, "installed");
 	const distribution = resolve(__dirname, "../../out/KnightCode-win32-x64");
 	if (!existsSync(distribution)) throw new Error("Run stage-server.ts and desktop package first.");

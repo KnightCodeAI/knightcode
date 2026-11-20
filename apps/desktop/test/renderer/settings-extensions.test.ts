@@ -11,7 +11,9 @@ import { beforeAll, expect, test, vi } from "vitest";
 
 const hostEvents = vi.hoisted(() => {
 	const listeners = new Set<(event: { event: string; factor?: number }) => void>();
-	Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} } });
+	Object.assign(globalThis, {
+		window: { addEventListener() {}, removeEventListener() {}, knightcode: { platform: "win32" } },
+	});
 	return listeners;
 });
 const requests = vi.hoisted(() => [] as [string, unknown][]);
@@ -40,7 +42,7 @@ vi.mock("../../src/renderer/extensions/command-context.ts", () => ({
 import { FrontendActivation } from "../../src/renderer/extensions/activation.ts";
 import { initializeDesktopExtensions } from "../../src/renderer/extensions/host.tsx";
 import { desktopExtensions } from "../../src/renderer/extensions/runtime.ts";
-import { SettingsSections, ThemeScope } from "../../src/renderer/extensions/settings-host.tsx";
+import { SettingsSections, settingsScopeChoices, ThemeScope } from "../../src/renderer/extensions/settings-host.tsx";
 import { ThemeProvider, usePortalOwnership } from "../../src/renderer/extensions/surface.tsx";
 import { getState } from "../../src/renderer/store.ts";
 
@@ -290,6 +292,93 @@ test("keybinding writes need a known binding id and string keys", () => {
 		expect(services.experimental_setKeybinding("desktop.palette", ["Ctrl+Shift+K"])).toBe(true);
 		expect(getState().desktop?.preferences?.keybindings?.["desktop.palette"]).toEqual(["Ctrl+Shift+K"]);
 		expect(services.experimental_setKeybinding("desktop.palette", undefined)).toBe(true);
+	} finally {
+		dispose();
+	}
+});
+
+test("an external activation cannot grant project or plugin trust or full access through settings services", async () => {
+	const dispose = initializeDesktopExtensions();
+	try {
+		const activation = new FrontendActivation(
+			{ owner: "external-x", revision: "r1", epoch: "e1", window: "w", mount: "m" },
+			globalThis.__knightcodeDesktop!,
+			() => {},
+		);
+		activation.publish();
+		activation.ready();
+		const services = activation.sdk.experimental_settingsServices();
+		requests.length = 0;
+		await expect(services.experimental_request("project/trust/set", { cwd: "C:/p", trusted: true })).rejects.toThrow(
+			/trust/,
+		);
+		await expect(
+			services.experimental_request("plugin/set", { scope: "global", name: "p", trust: true }),
+		).rejects.toThrow(/trust/);
+		await expect(
+			services.experimental_request("plugin/install", { scope: "global", source: "s", trust: true }),
+		).rejects.toThrow(/trust/);
+		expect(requests).toEqual([]);
+		await services.experimental_request("plugin/set", { scope: "global", name: "p", enabled: false });
+		expect(requests.map(([method]) => method)).toEqual(["plugin/set"]);
+		const before = getState().desktop?.preferences?.allowFullAccess;
+		expect(services.experimental_setPreference("allowFullAccess", !before)).toBe(false);
+		expect(getState().desktop?.preferences?.allowFullAccess).toBe(before);
+		// The built-in pages keep the host's own decisions.
+		expect(experimental_settingsServices().experimental_setPreference("allowFullAccess", !before)).toBe(true);
+		experimental_settingsServices().experimental_setPreference("allowFullAccess", before!);
+		activation.dispose();
+	} finally {
+		dispose();
+	}
+});
+
+test("scoped schema sections offer app, each project and its live threads as explicit backend selectors", () => {
+	const projects = [{ path: "C:/work/a", name: "Alpha" }, { path: "C:/work/b" }];
+	const threads = [
+		{ id: "t1", name: "Fix login", cwd: "C:/wt/a-1", projectCwd: "C:/work/a", archived: false },
+		{ id: "t2", name: "Old", cwd: "C:/work/a", projectCwd: "C:/work/a", archived: true },
+		{ id: "t3", name: "Docs", cwd: "C:/work/b", projectCwd: "C:/work/b", archived: false },
+	];
+	expect(settingsScopeChoices(["app"], projects, threads)).toEqual([
+		{ value: "app", label: "App", selector: { scope: "app" } },
+	]);
+	expect(settingsScopeChoices(["app", "project"], projects, threads).map((choice) => choice.selector)).toEqual([
+		{ scope: "app" },
+		{ scope: "project", cwd: "C:/work/a" },
+		{ scope: "project", cwd: "C:/work/b" },
+	]);
+	const all = settingsScopeChoices(["app", "project", "thread"], projects, threads);
+	expect(all.map((choice) => choice.label)).toEqual(["App", "Alpha", "Alpha › Fix login", "b", "b › Docs"]);
+	// A thread's data belongs to its project, also when it runs in a worktree elsewhere.
+	expect(all[2]!.selector).toEqual({ scope: "thread", cwd: "C:/work/a", threadId: "t1" });
+	expect(new Set(all.map((choice) => choice.value)).size).toBe(all.length);
+});
+
+test("a scoped schema section draws the host's scope picker; an app-only one does not", () => {
+	const dispose = initializeDesktopExtensions();
+	try {
+		const handle = desktopExtensions.register(
+			"scoped",
+			defineDesktopExtension((app) => {
+				app.experimental_registerSettingsSection({
+					id: "scoped",
+					page: "archived",
+					title: "Scoped options",
+					scopes: ["app", "project"],
+					fields: [{ key: "enabled", title: "Enabled", kind: "switch" }],
+				});
+				app.experimental_registerSettingsSection({
+					id: "plain",
+					page: "archived",
+					title: "Plain options",
+					fields: [{ key: "enabled", title: "Enabled", kind: "switch" }],
+				});
+			}),
+		);
+		const html = renderToStaticMarkup(createElement(SettingsSections, { page: "archived" }));
+		expect(html.match(/aria-label="Settings scope"/g)).toHaveLength(1);
+		handle.dispose();
 	} finally {
 		dispose();
 	}

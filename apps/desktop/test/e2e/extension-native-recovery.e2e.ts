@@ -9,7 +9,7 @@ const desktop = resolve(__dirname, "../..");
 const faux = resolve(desktop, "../../packages/cli/test/fixtures/faux-app-server.ts");
 
 test("the native safe-mode action escapes a wedged external frontend", async () => {
-	const fixture = createDesktopFixture({ theme: "light" });
+	const fixture = createDesktopFixture({ theme: "light", nativeExtensions: true });
 	const application = await electron.launch({
 		args: [desktop, `--user-data-dir=${fixture.userData}`, ...(process.platform === "linux" ? ["--no-sandbox"] : [])],
 		env: { ...fixture.env, KNIGHTCODE_DESKTOP_SERVER: `bun ${faux}` },

@@ -4,6 +4,7 @@ import type { experimental_CommandContext } from "@knightcodeai/cli/desktop";
 import type { ResultOf } from "@knightcode/app-server-protocol";
 import { client } from "../client.ts";
 import { Button } from "../components/button.tsx";
+import { Switch } from "../components/switch.tsx";
 import { errorText, navigate, toast } from "../store.ts";
 import { externalState } from "./external.ts";
 import { desktopExtensions } from "./runtime.ts";
@@ -76,6 +77,22 @@ export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 				Native frontend code shares the app renderer; backend code runs with the app server's OS permissions. Session
 				extensions and Claude/Grok plugins do not grant native trust. Review each source before approving it.
 			</p>
+			<label className="flex items-center justify-between gap-4 text-sm">
+				<span className="flex flex-col gap-0.5">
+					<span className="font-medium">Run native desktop extensions</span>
+					<span className="text-xs text-secondary">
+						{list.preview
+							? "Approved extensions run in every window."
+							: "Off: no extension frontend or backend code runs, even if approved."}
+					</span>
+				</span>
+				<Switch
+					label="Run native desktop extensions"
+					checked={list.preview}
+					disabled={busy || list.safeMode}
+					onChange={(enabled) => run(client.host("host/desktopExtension/preview/set", { enabled }))}
+				/>
+			</label>
 			{list.extensions.map((entry) => (
 				<div key={entry.owner} className="rounded-2xl border border-line bg-section p-4" data-extension={entry.owner}>
 					<div className="flex flex-wrap items-center justify-between gap-3">

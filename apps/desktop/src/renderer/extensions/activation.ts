@@ -7,7 +7,7 @@ import { composerController, mountEditor, whenEditorsIdle } from "./composer-con
 import { useComposerEditor } from "./composer-root.tsx";
 import { panelServices } from "./panel.tsx";
 import { workspaceServices } from "./workspace.ts";
-import { appearance, settingsServices } from "./settings-host.tsx";
+import { appearance, extensionSettingsServices } from "./settings-host.tsx";
 import { followDrag } from "../drag.ts";
 
 type Phase = "prepared" | "published" | "live" | "quiescing" | "closed";
@@ -209,7 +209,7 @@ export class FrontendActivation {
 			experimental_backend: backend,
 			experimental_panelServices: panelServices(this.signal, () => this.admitted()),
 			experimental_workspaceServices: workspaceServices(this.signal, () => this.admitted()),
-			experimental_settingsServices: settingsServices(() => this.admitted()),
+			experimental_settingsServices: extensionSettingsServices(() => this.admitted()),
 			experimental_appearance: appearance(() => this.admitted()),
 			experimental_useBackend: () =>
 				useSyncExternalStore(

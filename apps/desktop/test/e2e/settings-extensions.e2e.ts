@@ -52,6 +52,33 @@ test("schema and custom settings sections, presets and theme previews work from 
 	expect(stored).toContain('"density":"compact"');
 	expect(stored).toContain('"limit":42');
 	await expect(page.getByText("server-only")).toHaveCount(0);
+
+	// The same section at project scope: the row shows the inherited app value, and a write lands in the project only.
+	// Project data needs a trusted project; the user trusts it on the host's own Configuration scope card.
+	await openSettings(page, "Configuration");
+	await page.getByRole("button", { name: "Scope", exact: true }).click();
+	await page.getByRole("menuitemradio", { name: "Parity project", exact: true }).click();
+	await page.getByRole("switch", { name: "Trust this project", exact: true }).click();
+	await expect(page.getByRole("switch", { name: "Trust this project", exact: true })).toBeChecked();
+	await openSettings(page, "General");
+	await section.getByRole("button", { name: "Settings scope", exact: true }).click();
+	await page.getByRole("menuitemradio", { name: "Parity project", exact: true }).click();
+	const projectLimit = section.getByRole("spinbutton", { name: "Item limit", exact: true });
+	await expect(projectLimit).toHaveValue("42");
+	await projectLimit.fill("7");
+	await projectLimit.press("Enter");
+	await expect(projectLimit).toHaveValue("7");
+	// The write is asynchronous; the field shows its own text at once.
+	const scoped = () =>
+		readdirSync(data, { recursive: true, withFileTypes: true })
+			.filter((entry) => /^project-[a-f0-9]{64}.json$/.test(entry.name))
+			.map((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8"));
+	await expect.poll(scoped).toEqual([expect.stringContaining('"limit":7')]);
+	expect(readFileSync(join(data, `${owner}.json`), "utf8")).toContain('"limit":42');
+	await section.getByRole("button", { name: "Settings scope", exact: true }).click();
+	await page.getByRole("menuitemradio", { name: "App", exact: true }).click();
+	await expect(section.getByRole("spinbutton", { name: "Item limit", exact: true })).toHaveValue("42");
+
 	await page.reload();
 	await openSettings(page, "General");
 	await expect(

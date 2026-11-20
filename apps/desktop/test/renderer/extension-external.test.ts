@@ -36,7 +36,7 @@ const bridge = vi.hoisted(() => {
 		scripts,
 		async host(method: string, params: Record<string, unknown>) {
 			if (method === "host/desktopExtension/list")
-				return { safeMode: false, extensions: [], providers: { app: {}, window: {} } };
+				return { safeMode: false, preview: true, extensions: [], providers: { app: {}, window: {} } };
 			if (method === "host/desktopExtension/acquire") {
 				if (typeof params.lease !== "string") throw new Error("Malformed lease at the test native boundary");
 				leases.add(params.lease);

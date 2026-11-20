@@ -139,8 +139,13 @@ export const DesktopExtensionRequests = {
 	...DesktopRuntimeRequests,
 	"desktopExtension/list": {
 		params: Obj({ cwd: Type.Optional(Str) }, strict),
-		result: Obj({ safeMode: Type.Boolean(), extensions: Type.Array(DesktopExtensionInfo) }, strict),
+		result: Obj(
+			{ safeMode: Type.Boolean(), preview: Type.Boolean(), extensions: Type.Array(DesktopExtensionInfo) },
+			strict,
+		),
 	},
+	/** The "Native desktop extensions (preview)" switch; off means no external frontend or backend code runs. */
+	"desktopExtension/preview/set": { params: Obj({ enabled: Type.Boolean() }, strict), result: Obj({}, strict) },
 	"desktopExtension/set": {
 		params: Obj(
 			{

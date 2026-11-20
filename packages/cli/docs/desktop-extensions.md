@@ -79,14 +79,36 @@ Project packages require both saved project trust and native approval.
   "knightcode": {
     "desktop": {
       "frontend": "./app.tsx",
-      "styles": ["./app.css"]
+      "styles": ["./app.css"],
+      "app": ">=0.1.0"
     }
   }
 }
 ```
 
+Two optional manifest fields state compatibility: `apiVersion` (an integer,
+default 1) and `app` (a semver range of desktop app versions, for example
+`">=0.2.0"`). A package that declares another API version, or whose range
+excludes the running app, is refused whole with a diagnostic such as
+"Requires KnightCode desktop >=0.2.0; this is 0.1.2". Neither its frontend nor
+its backend is staged, approved or loaded. If an earlier version is running,
+it stays live until you restart or remove it, like any failed update.
+`desktop-ext validate` checks both fields, but the app range only against a
+running desktop.
+
+Installed packages update through `knightcode update`. A trust-this-revision
+approval does not follow an update: the new version shows "Source changed" until
+you review it. Approving it, or a development approval that follows edits,
+switches every window to the new revision together. Handles bound to the old
+revision stop answering, and its backend stops before the new one starts.
+
 Open Settings → Extensions & skills. For a project package, select its scope.
-The native desktop section appears when a package is found. **Trust frontend**
+The native desktop section appears when a package is found. Its **Run native
+desktop extensions** switch is off by default: while off, no extension frontend
+or backend code runs, even an approved one, and reload and development watches
+do nothing. Turning it on asks for native confirmation; turning it off stops
+running extensions in every window without a restart. The choice is stored in
+the agent directory's `desktop-extension-preview.json`. **Trust frontend**
 opens a native confirmation showing the source and entry kind:
 
 - **Trust this revision** permits only the validated content revision. Source
@@ -176,8 +198,8 @@ The host owns thread state, toasts and provider preferences. Frontend component
 state belongs to that window/mount and resets on reload; it is not transcript
 storage. Cleanup cannot undo arbitrary side effects. Backend settings and
 storage use explicit scopes described below. File engines and workspace mutation
-controllers are described in the workspace section. Custom settings sections
-and appearance providers remain later APIs.
+controllers are described in the workspace section. Settings sections and the
+appearance API are described in the settings section.
 
 ## Backend RPC, settings and data
 
@@ -471,9 +493,14 @@ not a new bridge or sandbox. See examples `07-workspace` and `09-file-viewer`.
 
 `experimental_registerSettingsSection` adds a section to an existing Settings
 page. Most sections only declare a title and `fields`: switches, selects and
-numbers bound to the owner's backend app settings (see the backend guide's
+numbers bound to the owner's backend settings (see the backend guide's
 settings section). The host renders and saves them through the epoch-bound
-backend, so the frontend never sees secret settings. A section without a
+backend, so the frontend never sees secret settings. Add
+`scopes: ["app", "project", "thread"]` (any subset; the default is app only)
+to let the user pick where values are saved: the host adds a Scope row listing
+the app, each sidebar project and its threads. Rows show the inherited value
+and a write changes only the chosen scope. Project and thread scopes need a
+trusted project. A section without a
 backend shows that it needs one. For anything else, give
 `experimental_render` instead; lay it out with `experimental_settingsControls()`
 (Row, Card, Section, fields) so it matches the built-in pages. Sections are
@@ -531,8 +558,8 @@ font names carried in custom-property values are not supported.
 Published read-only tokens are `--kc-text`, `--kc-text-secondary`,
 `--kc-text-tertiary`, `--kc-font-ui`, `--kc-font-code`, `--kc-font-content`,
 `--kc-size-ui`, `--kc-focus` and `--kc-selection`. Extension CSS cannot redefine
-`--kc-*` tokens. Arbitrary host Tailwind classes are not an API. The utility
-compiler is deferred; use authored classes absent from the host bundle.
+`--kc-*` tokens. Arbitrary host Tailwind classes are not an API, and no utility
+compiler ships; use authored classes absent from the host bundle.
 
 ## Examples and diagnostics
 
@@ -543,7 +570,7 @@ local package directory above, review it, then approve it through Settings.
 
 Settings shows source, revision, consent, enabled state and per-window
 load/render diagnostics. The app-server methods `desktopExtension/list`,
-`desktopExtension/set`, `desktopExtension/reload` and
+`desktopExtension/set`, `desktopExtension/reload`, `desktopExtension/preview/set` and
 `desktopExtension/diagnostic` expose the same frontend-only inventory and
 bounded diagnostics. `desktopExtension/changed` tells connected windows to
 reread it. Renderer RPC uses only the epoch-bound SDK facade; raw runtime

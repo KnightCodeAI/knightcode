@@ -2,7 +2,9 @@
 
 S2 introduced explicit `knightcode.desktop.frontend` entries. S6 coordinates
 frontend/backend revisions across windows; see [backend.md](backend.md).
-Arbitrary Tailwind compilation remains S9 work. See
+An extension utility compiler is not shipped: S9 found no authoring need for
+it (see the S9 ledger), so authored CSS and the published tokens remain the
+styling contract. See
 `packages/cli/docs/desktop-extensions.md` for the shipped author contract.
 
 ## Loading and replacement
@@ -105,5 +107,26 @@ separately. It interleaves unscoped and scoped rounds and times 20 toggles per
 round. Native `@scope` adds about 1.1x to row selection, which must stay under
 1.5x. It roughly doubles a whole-list invalidation (about +1.7 to +2.1 ms on
 Windows), so that path is bounded at under 3x the unscoped cost and under
-10 ms; a `:has()` scope boundary measured 6.4x and fails. macOS/Linux native packaging and
-the complete S9 CSS/utility acceptance matrix have not been run in S2.
+10 ms; a `:has()` scope boundary measured 6.4x and fails. The S9 spec §11
+matrix is in the S9 ledger. The macOS/Linux workflow
+(`.github/workflows/desktop-extensions-native.yml`) is written but has not run.
+
+## Preview switch
+
+The **Run native desktop extensions** switch under Settings → Extensions &
+skills is off by default. The app server enforces it: while off it stages no
+artifact, prepares no backend, admits no activation, installs no development
+watch and ignores reloads. Turning it off retires every live owner through the
+coordinator in all windows; turning it on asks natively first. It is stored in
+the agent directory beside consent, not in repository or desktop state.
+
+## Compatibility and updates
+
+A manifest may declare `apiVersion` and an `app` semver range. Main passes
+its version to the app server (`KNIGHTCODE_DESKTOP_VERSION`). Discovery turns
+an incompatible manifest into the entry's error before staging, so neither
+half is approved or loaded. A running earlier revision stays live as for any
+failed candidate. A package-manager update changes the content revision:
+pinned consent asks again, and approval switches every window to a new epoch.
+External activations cannot set project or plugin trust or `allowFullAccess`
+through settings services; the built-in pages keep those decisions.

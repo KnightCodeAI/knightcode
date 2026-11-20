@@ -103,6 +103,7 @@ export const DesktopExtensionHostMethods = {
 	},
 	"host/desktopExtension/set": DesktopExtensionRequests["desktopExtension/set"],
 	"host/desktopExtension/reload": DesktopExtensionRequests["desktopExtension/reload"],
+	"host/desktopExtension/preview/set": DesktopExtensionRequests["desktopExtension/preview/set"],
 	"host/desktopExtension/diagnostic": {
 		params: Type.Object(
 			{ owner: Type.String(), diagnostic: Type.Omit(DesktopExtensionDiagnostic, ["windowId"]) },

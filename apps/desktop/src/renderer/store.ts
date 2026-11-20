@@ -261,12 +261,15 @@ function set(update: (draft: State) => State): void {
 }
 
 export function useStore<T>(select: (s: State) => T): T {
+	const read = () => select(state);
+	// The same snapshot serves server rendering (host tests render settings sections to markup).
 	return useSyncExternalStore(
 		(listener) => {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
-		() => select(state),
+		read,
+		read,
 	);
 }
 

@@ -39,6 +39,8 @@ export default defineDesktopExtension((app) => {
 		id: "options",
 		page: "general",
 		title: "Example extension",
+		// App values by default; a project or one of its threads can override them.
+		scopes: ["app", "project", "thread"],
 		fields: [
 			{ key: "greeting", title: "Show greeting", kind: "switch" },
 			{

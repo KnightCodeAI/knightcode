@@ -163,4 +163,22 @@ describe("desktop extension authoring", () => {
 		expect(JSON.parse(lines.pop()!).error).toMatch(/running desktop/i);
 		expect(await run(["reload", "unexpected"])).toBe(1);
 	});
+	it("validation refuses an unsupported declared API version and a malformed app range", async () => {
+		const { agentDir, lines, run } = fixture();
+		await run(["new", "notice"]);
+		const source = join(agentDir, "desktop-extensions", "notice");
+		const manifest = (desktop: object) =>
+			writeFileSync(
+				join(source, "package.json"),
+				JSON.stringify({ knightcode: { desktop: { frontend: "./app.tsx", styles: ["./app.css"], ...desktop } } }),
+			);
+		manifest({ apiVersion: 2 });
+		expect(await run(["validate", source, "--json"])).toBe(1);
+		expect(JSON.parse(lines.pop()!).error).toBe("Requires desktop extension API 2; this app supports API 1.");
+		manifest({ app: "soon" });
+		expect(await run(["validate", source, "--json"])).toBe(1);
+		expect(JSON.parse(lines.pop()!).error).toMatch(/desktop.app must be a semver range/);
+		manifest({ apiVersion: 1, app: ">=0.1.0" });
+		expect(await run(["validate", source, "--json"])).toBe(0);
+	});
 });

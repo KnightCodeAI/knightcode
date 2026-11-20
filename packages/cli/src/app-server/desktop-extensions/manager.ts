@@ -15,7 +15,12 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { SettingsManager } from "../../core/settings-manager.ts";
 import { getPathComparisonKey } from "../../utils/paths.ts";
 import { projectReadable } from "../workspaces.ts";
-import { readDesktopManifest, stageDesktopRevision, type DesktopArtifact } from "./artifacts.ts";
+import {
+	desktopIncompatibility,
+	readDesktopManifest,
+	stageDesktopRevision,
+	type DesktopArtifact,
+} from "./artifacts.ts";
 
 const Consent = Type.Object(
 	{
@@ -43,18 +48,46 @@ type Source = {
 export class DesktopExtensionManager {
 	private readonly agent: string;
 	private readonly safeMode: boolean;
+	private readonly appVersion: string | undefined;
 	private readonly diagnostics = new Map<string, DesktopExtensionDiagnostic[]>();
-	constructor(agentDir: string, options: { safeMode?: boolean } = {}) {
+	/** `appVersion` is the running desktop's; without it (CLI validation) only the declared range's syntax is checked. */
+	constructor(agentDir: string, options: { safeMode?: boolean; appVersion?: string } = {}) {
 		this.agent = agentDir;
 		this.safeMode = options.safeMode ?? false;
+		this.appVersion = options.appVersion;
 	}
 
 	async list(cwd?: string): Promise<ResultOf<"desktopExtension/list">> {
 		return (await this.inventory(cwd)).snapshot;
 	}
 
+	/** The user's preview switch, kept in the agent directory beside consent; never in repository settings. */
+	preview(): boolean {
+		const file = join(this.agent, "desktop-extension-preview.json");
+		if (!existsSync(file)) return false;
+		let value: unknown;
+		try {
+			value = JSON.parse(readFileSync(file, "utf8"));
+		} catch {
+			return false;
+		}
+		// Filesystem boundary: anything but an explicit opt-in, including a corrupt file, leaves external code off.
+		return !!value && typeof value === "object" && "enabled" in value && value.enabled === true;
+	}
+
+	setPreview(enabled: boolean): void {
+		mkdirSync(this.agent, { recursive: true });
+		const target = join(this.agent, "desktop-extension-preview.json");
+		const temporary = `${target}.${randomUUID()}.tmp`;
+		writeFileSync(temporary, JSON.stringify({ enabled }), { mode: 0o600 });
+		renameSync(temporary, target);
+	}
+
 	private async inventory(cwd?: string) {
 		const consents = this.readConsents();
+		// Off works like safe mode for execution, but keeps the inventory and consent visible for management.
+		const preview = this.preview();
+		const runs = preview && !this.safeMode;
 		const extensions: DesktopExtensionInfo[] = [];
 		const candidates = new Map<string, DesktopArtifact>();
 		const enabled = new Set<string>();
@@ -64,7 +97,7 @@ export class DesktopExtensionManager {
 				record?.source === entry.source &&
 				!!entry.kinds?.length &&
 				entry.kinds.every((kind) => record.kinds.includes(kind));
-			if (!this.safeMode && record?.enabled && record.source === entry.source && (approved || entry.error))
+			if (runs && record?.enabled && record.source === entry.source && (approved || entry.error))
 				enabled.add(entry.owner);
 			const info: DesktopExtensionInfo = {
 				owner: entry.owner,
@@ -78,7 +111,7 @@ export class DesktopExtensionManager {
 				diagnostics: this.diagnostics.get(entry.owner) ?? [],
 			};
 			if (entry.error) info.error = entry.error;
-			else if (approved && record.enabled && !this.safeMode) {
+			else if (approved && record.enabled && runs) {
 				try {
 					const artifact = await stageDesktopRevision(entry.source, join(this.agent, "desktop-artifacts"), entry.owner);
 					info.revision = artifact.revision;
@@ -99,7 +132,11 @@ export class DesktopExtensionManager {
 			}
 			extensions.push(info);
 		}
-		return { snapshot: { safeMode: this.safeMode, extensions }, artifacts: [...candidates.values()], enabled };
+		return {
+			snapshot: { safeMode: this.safeMode, preview, extensions },
+			artifacts: [...candidates.values()],
+			enabled,
+		};
 	}
 
 	/** Coordinator-only candidates recheck consent/trust/safe mode without publishing private server files. */
@@ -113,6 +150,7 @@ export class DesktopExtensionManager {
 		const record = this.readConsents()[artifact.owner];
 		return (
 			!this.safeMode &&
+			this.preview() &&
 			!!record?.enabled &&
 			artifact.kinds.every((kind) => record.kinds.includes(kind)) &&
 			(record.dev || record.revision === artifact.revision) &&
@@ -197,6 +235,8 @@ export class DesktopExtensionManager {
 			try {
 				const manifest = readDesktopManifest(source);
 				if (!manifest) return;
+				const incompatible = desktopIncompatibility(manifest, this.appVersion);
+				if (incompatible) throw new Error(incompatible);
 				const kinds: Static<typeof DesktopEntryKinds> = [
 					...(manifest.frontend ? ["frontend" as const] : []),
 					...(manifest.backend ? ["backend" as const] : []),

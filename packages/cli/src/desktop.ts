@@ -1373,6 +1373,9 @@ export interface experimental_Appearance {
 	experimental_localFonts(): Promise<{ family: string; style: string; postscriptName: string }[] | undefined>;
 }
 
+/** A scope a declarative settings section can write. */
+export type experimental_SettingsScope = "app" | "project" | "thread";
+
 /** A schema field bound to one setting key. */
 export type experimental_SettingsField = {
 	key: string;
@@ -1389,8 +1392,10 @@ export type experimental_SettingsField = {
 );
 
 /**
- * A settings section: a declarative schema over the owner's epoch-bound backend app settings (the usual case),
- * or a custom React body.
+ * A settings section: a declarative schema over the owner's epoch-bound backend settings (the usual case), or a custom
+ * React body. `scopes` (default `["app"]`) lists where a schema section's values may be set; with more than one, the
+ * host shows a scope picker of the app, the sidebar's projects and their threads, and reads and writes the chosen
+ * scope only. Reads still inherit thread > project > app > default.
  */
 export type experimental_SettingsSection = {
 	id: string;
@@ -1398,7 +1403,7 @@ export type experimental_SettingsSection = {
 	order?: number;
 	experimental_available?(context: experimental_CommandContext): boolean;
 } & (
-	| { title: string; fields: readonly experimental_SettingsField[] }
+	| { title: string; fields: readonly experimental_SettingsField[]; scopes?: readonly experimental_SettingsScope[] }
 	| {
 			title?: string;
 			experimental_render(props: { context: experimental_CommandContext; signal: AbortSignal }): ReactNode;

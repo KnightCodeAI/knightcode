@@ -8,12 +8,14 @@ import type {
 	experimental_SettingsField,
 	experimental_SettingsPage,
 	experimental_SettingsRequests,
+	experimental_SettingsScope,
 	experimental_SettingsServices,
 	experimental_ThemeCustomization,
 	experimental_ThemeName,
 	experimental_ThemePresetEntry,
 	experimental_Zoom,
 } from "@knightcodeai/cli/desktop";
+import type { experimental_BackendDataSelector } from "@knightcodeai/cli/desktop-backend";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Value } from "typebox/value";
 import { Preferences } from "../../shared/host-protocol.ts";
@@ -41,6 +43,7 @@ import {
 	logout,
 	refreshAccounts,
 	selectPreferences,
+	selectProjects,
 	setDefaultModel,
 	setKeybinding,
 	setPreference,
@@ -182,6 +185,29 @@ export function settingsServices(admitted: Gate = always): experimental_Settings
 			filterArchived(threads, filter, projects, samePath, basename),
 		experimental_noProject: NO_PROJECT,
 		experimental_NativeExtensions: NativeExtensionsSettings,
+	};
+}
+
+/**
+ * Settings services for an external activation: the same reads and writes, minus the host-owned decisions. Project and
+ * plugin trust and the full-access permission are granted only by the user in the built-in pages, never by extension
+ * code that shares the renderer.
+ */
+export function extensionSettingsServices(admitted: Gate): experimental_SettingsServices {
+	const services = settingsServices(admitted);
+	return {
+		...services,
+		experimental_request: (method, params) => {
+			// Wire boundary: extension params are not type-checked at runtime.
+			const grants =
+				method === "project/trust/set" ||
+				((method === "plugin/set" || method === "plugin/install") &&
+					(params as { trust?: unknown } | undefined)?.trust !== undefined);
+			if (grants) return Promise.reject(new Error(`Extensions cannot change trust: ${method}`));
+			return services.experimental_request(method, params);
+		},
+		experimental_setPreference: (key, value) =>
+			key !== "allowFullAccess" && services.experimental_setPreference(key, value),
 	};
 }
 
@@ -341,7 +367,12 @@ function SettingsSectionRoot({
 	return (
 		<ContributionRoot entry={entry}>
 			{"fields" in section ? (
-				<BackendSettingsSection entry={entry} title={section.title} fields={section.fields} />
+				<BackendSettingsSection
+					entry={entry}
+					title={section.title}
+					fields={section.fields}
+					scopes={section.scopes ?? APP_ONLY}
+				/>
 			) : (
 				<section.experimental_render context={context} signal={entry.signal} />
 			)}
@@ -349,15 +380,92 @@ function SettingsSectionRoot({
 	);
 }
 
-/** A schema section over the owner's S6 backend app settings; the frontend never sees secret values. */
+const APP_ONLY: readonly experimental_SettingsScope[] = ["app"];
+
+/** One entry of a scoped section's picker: an explicit backend data selector, never the window's selection. */
+export type SettingsScopeChoice = { value: string; label: string; selector: experimental_BackendDataSelector };
+
+/** The app, then each sidebar project followed by its live threads, limited to the section's declared scopes. */
+export function settingsScopeChoices(
+	scopes: readonly experimental_SettingsScope[],
+	projects: readonly { path: string; name?: string }[],
+	threads: readonly { id: string; name: string; projectCwd: string; archived: boolean }[],
+): SettingsScopeChoice[] {
+	const choices: SettingsScopeChoice[] = [];
+	if (scopes.includes("app")) choices.push({ value: "app", label: "App", selector: { scope: "app" } });
+	for (const project of projects) {
+		const name = project.name ?? basename(project.path);
+		if (scopes.includes("project"))
+			choices.push({
+				value: `project:${project.path}`,
+				label: name,
+				selector: { scope: "project", cwd: project.path },
+			});
+		if (scopes.includes("thread"))
+			for (const thread of threads)
+				// A thread's data is keyed by its project, also when the thread runs in a worktree elsewhere.
+				if (!thread.archived && samePath(thread.projectCwd, project.path))
+					choices.push({
+						value: `thread:${thread.id}`,
+						label: `${name} › ${thread.name}`,
+						selector: { scope: "thread", cwd: project.path, threadId: thread.id },
+					});
+	}
+	return choices;
+}
+
+/**
+ * A schema section over the owner's S6 backend settings at one explicit scope; the frontend never sees secret values.
+ * Rows show the inherited value (thread > project > app > default); a write lands in the chosen scope only.
+ */
 function BackendSettingsSection({
 	entry,
 	title,
 	fields,
+	scopes,
 }: {
 	entry: SettingsSectionRegistration;
 	title: string;
 	fields: readonly experimental_SettingsField[];
+	scopes: readonly experimental_SettingsScope[];
+}) {
+	const projects = useStore(selectProjects);
+	const threads = useStore((s) => s.threads);
+	const choices = useMemo(() => settingsScopeChoices(scopes, projects, threads), [scopes, projects, threads]);
+	const [chosen, setChosen] = useState<string>();
+	const choice = choices.find((c) => c.value === chosen) ?? choices[0];
+	const picker =
+		scopes.length > 1 ? (
+			<Row title="Scope" detail="Where these values are saved">
+				<SelectMenu
+					label="Settings scope"
+					value={choice?.value}
+					onChange={setChosen}
+					options={choices.map(({ value, label }) => ({ value, label }))}
+				/>
+			</Row>
+		) : null;
+	return (
+		<Card title={title}>
+			{picker}
+			{choice ? (
+				<BackendSettingsFields key={choice.value} entry={entry} fields={fields} selector={choice.selector} />
+			) : (
+				<Row title="Add a project to set these values." />
+			)}
+		</Card>
+	);
+}
+
+/** The fields at one selector; keyed by it, so a scope change never shows or writes another scope's values. */
+function BackendSettingsFields({
+	entry,
+	fields,
+	selector,
+}: {
+	entry: SettingsSectionRegistration;
+	fields: readonly experimental_SettingsField[];
+	selector: experimental_BackendDataSelector;
 }) {
 	const backendOf = () => (entry.activation?.admitted() ? entry.activation.backend : undefined);
 	const backend = useSyncExternalStore(
@@ -370,39 +478,35 @@ function BackendSettingsSection({
 	useEffect(() => {
 		if (!backend) return;
 		const lifetime = new AbortController();
-		void backend.experimental_settings(undefined, AbortSignal.any([lifetime.signal, entry.signal])).then((result) => {
+		void backend.experimental_settings(selector, AbortSignal.any([lifetime.signal, entry.signal])).then((result) => {
 			if (lifetime.signal.aborted) return;
 			if (result.status === "ok") setValues(result.value);
 			else setProblem(result.status === "error" ? result.message : result.status);
 		});
 		return () => lifetime.abort();
-	}, [backend, entry.signal]);
+	}, [backend, entry.signal, selector]);
 	const write = async (key: string, value: unknown) => {
 		if (!backend) return;
-		const result = await backend.experimental_setSetting(key, value, undefined, entry.signal);
+		const result = await backend.experimental_setSetting(key, value, selector, entry.signal);
 		if (entry.signal.aborted) return;
 		if (result.status === "ok") setValues(result.value);
 		else toast(result.status === "error" ? result.message : `Setting not saved: ${result.status}`, "error");
 	};
-	return (
-		<Card title={title}>
-			{!entry.activation ? (
-				<Row title="This section needs a desktop backend." />
-			) : problem ? (
-				<Row title={<span className="font-normal text-danger-text">{problem}</span>} />
-			) : values === undefined ? (
-				<Row title={<span className="kc-pulse font-normal text-tertiary">Loading…</span>} />
-			) : (
-				fields.map((field) => (
-					<FieldControl
-						key={field.key}
-						field={field}
-						value={values[field.key] ?? field.fallback}
-						write={(value) => void write(field.key, value)}
-					/>
-				))
-			)}
-		</Card>
+	return !entry.activation ? (
+		<Row title="This section needs a desktop backend." />
+	) : problem ? (
+		<Row title={<span className="font-normal text-danger-text">{problem}</span>} />
+	) : values === undefined ? (
+		<Row title={<span className="kc-pulse font-normal text-tertiary">Loading…</span>} />
+	) : (
+		fields.map((field) => (
+			<FieldControl
+				key={field.key}
+				field={field}
+				value={values[field.key] ?? field.fallback}
+				write={(value) => void write(field.key, value)}
+			/>
+		))
 	);
 }
 

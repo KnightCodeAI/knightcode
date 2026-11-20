@@ -14,6 +14,7 @@ export function desktopExtensionHandlers(ctx: AppServerContext): Handlers {
 	if (existing) return existing;
 	const manager = new DesktopExtensionManager(ctx.agentDir, {
 		safeMode: process.env.KNIGHTCODE_DESKTOP_SAFE_MODE === "1",
+		...(process.env.KNIGHTCODE_DESKTOP_VERSION ? { appVersion: process.env.KNIGHTCODE_DESKTOP_VERSION } : {}),
 	});
 	const runtime = new DesktopBackendRuntime(manager, ctx);
 	ctx.onDispose(() => runtime.dispose());
@@ -75,6 +76,14 @@ export function desktopExtensionHandlers(ctx: AppServerContext): Handlers {
 			watcher.update(await manager.list(params.cwd));
 			ctx.broadcast("desktopExtension/changed", {});
 			await runtime.reconcile(params.cwd);
+			return {};
+		},
+		// Off retires every live owner in every window through the coordinator; on activates approved ones again.
+		"desktopExtension/preview/set": async ({ enabled }) => {
+			manager.setPreview(enabled);
+			watcher.update(await manager.list());
+			ctx.broadcast("desktopExtension/changed", {});
+			await runtime.reconcile(undefined, enabled);
 			return {};
 		},
 		"desktopExtension/reload": async () => {

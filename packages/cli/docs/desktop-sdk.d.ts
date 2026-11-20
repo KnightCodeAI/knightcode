@@ -1219,6 +1219,8 @@ export interface experimental_Appearance {
 	experimental_localFonts(): Promise<{ family: string; style: string; postscriptName: string }[] | undefined>;
 }
 
+export type experimental_SettingsScope = "app" | "project" | "thread";
+
 export type experimental_SettingsField = {
 	key: string;
 	title: string;
@@ -1239,7 +1241,7 @@ export type experimental_SettingsSection = {
 	order?: number;
 	experimental_available?(context: experimental_CommandContext): boolean;
 } & (
-	| { title: string; fields: readonly experimental_SettingsField[] }
+	| { title: string; fields: readonly experimental_SettingsField[]; scopes?: readonly experimental_SettingsScope[] }
 	| {
 			title?: string;
 			experimental_render(props: { context: experimental_CommandContext; signal: AbortSignal }): ReactNode;

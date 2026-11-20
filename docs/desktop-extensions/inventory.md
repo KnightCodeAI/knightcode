@@ -103,8 +103,8 @@ The following remain explicit acceptance groups even if a screenshot exists:
 | Terminals/preview | Shell/resize/reattach/thread switch/reload/kill, background output, annotations | S7 |
 | MCP Apps | Isolation, tool approval and fullscreen preserved | S7 |
 | Settings | Every page/value/scope, trust, accounts, resources, plugins, keyboard and appearance persistence | S8 |
-| Native chrome | About/updates/window controls and quit with running threads | S9 |
-| Extension runtime | Real external loader, consent, CSS ownership/portals, provider choice/fallback, safe mode and binary-only authoring | S2/S3/S9 |
+| Native chrome | About/updates/window controls and quit with running threads | S9: quit-with-running covered by the existing E2E; native window controls and updates not executed |
+| Extension runtime | Real external loader, consent, CSS ownership/portals, provider choice/fallback, safe mode, binary-only authoring, preview switch, compatibility ranges and updates | S2/S3/S9 (matrix in the S9 ledger) |
 | Coordinated revisions | Incompatible two-window RPC, preparation failure, drain timeout, stale bindings, restart and post-commit recovery | S6 |
 
 S7's implementation boundaries are described in [workspace.md](workspace.md).

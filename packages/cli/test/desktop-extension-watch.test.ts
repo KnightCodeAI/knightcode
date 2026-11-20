@@ -20,6 +20,7 @@ describe("desktop development directory watch", () => {
 		writeFileSync(join(source, "app.js"), "export default {};");
 		let reloads = 0;
 		const manager = new DesktopExtensionManager(agent);
+		manager.setPreview(true);
 		const watcher = new DesktopDevelopmentWatcher(() => {
 			reloads++;
 		});
@@ -53,6 +54,7 @@ describe("desktop development directory watch", () => {
 		watchers.push(watcher);
 		watcher.update({
 			safeMode: true,
+			preview: true,
 			extensions: [
 				{
 					owner: "x",
@@ -66,6 +68,28 @@ describe("desktop development directory watch", () => {
 				},
 			],
 		});
+		expect(reloads).toBe(0);
+	});
+	it("the preview switch off installs no watches even for dev-approved sources", async () => {
+		const agent = mkdtempSync(join(tmpdir(), "kc-desktop-watch-"));
+		roots.push(agent);
+		const source = join(agent, "desktop-extensions", "notice");
+		mkdirSync(source, { recursive: true });
+		writeFileSync(join(source, "package.json"), JSON.stringify({ knightcode: { desktop: { frontend: "./app.js" } } }));
+		writeFileSync(join(source, "app.js"), "export default {};");
+		const manager = new DesktopExtensionManager(agent);
+		manager.setPreview(true);
+		const entry = (await manager.list()).extensions[0]!;
+		await manager.set({ owner: entry.owner, source, approve: true, kinds: ["frontend"], dev: true, enabled: true });
+		manager.setPreview(false);
+		let reloads = 0;
+		const watcher = new DesktopDevelopmentWatcher(() => {
+			reloads++;
+		});
+		watchers.push(watcher);
+		watcher.update(await manager.list());
+		writeFileSync(join(source, "app.js"), "export default {apiVersion:1};");
+		await new Promise((resolve) => setTimeout(resolve, 250));
 		expect(reloads).toBe(0);
 	});
 });

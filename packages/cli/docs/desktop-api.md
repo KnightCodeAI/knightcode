@@ -594,6 +594,7 @@ Do not edit by hand. See [the guide](desktop-extensions.md) and
 - `experimental_Appearance.experimental_themeString`
 - `experimental_Appearance.experimental_parseThemeString`
 - `experimental_Appearance.experimental_localFonts`
+- `experimental_SettingsScope`
 - `experimental_SettingsField`
 - `experimental_SettingsSection`
 - `experimental_SettingsRequests`

@@ -15,7 +15,7 @@ export class DesktopDevelopmentWatcher {
 	update(status: ResultOf<"desktopExtension/list">): void {
 		if (this.disposed) return;
 		const sources = new Set(
-			status.safeMode
+			status.safeMode || !status.preview
 				? []
 				: status.extensions
 						.filter((entry) => entry.approved && entry.enabled && entry.dev)

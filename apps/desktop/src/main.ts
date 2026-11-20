@@ -422,7 +422,8 @@ async function start(): Promise<void> {
 	});
 	server = new ServerConnection({
 		command: resolveServerCommand(app.isPackaged, app.getAppPath(), process.resourcesPath),
-		env: { ...env, KNIGHTCODE_DESKTOP_SAFE_MODE: safeMode ? "1" : "0" },
+		// The app server checks each extension's declared desktop range against this version.
+		env: { ...env, KNIGHTCODE_DESKTOP_SAFE_MODE: safeMode ? "1" : "0", KNIGHTCODE_DESKTOP_VERSION: app.getVersion() },
 		logsDir: app.getPath("logs"),
 		clientVersion: app.getVersion(),
 		onMessage: (message) => {

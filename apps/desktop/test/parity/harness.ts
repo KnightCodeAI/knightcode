@@ -18,15 +18,24 @@ export interface RunningDesktop extends DesktopFixture {
 
 type Extras = Pick<DesktopFixtureOptions, "counter" | "dialogs">;
 
-export const test = base.extend<{ desktop: RunningDesktop; untrustedProject: boolean; extras: Extras }>({
+/** Fixture options a Playwright config or `test.use` may set. */
+export type DesktopTestOptions = {
+	untrustedProject: boolean;
+	extras: Extras;
+	/** The native extensions preview switch; the e2e config turns it on, parity keeps the product default (off). */
+	nativeExtensions: boolean;
+};
+
+export const test = base.extend<DesktopTestOptions & { desktop: RunningDesktop }>({
 	untrustedProject: [false, { option: true }],
 	extras: [{}, { option: true }],
-	desktop: async ({ untrustedProject, extras }, use, info) => {
+	nativeExtensions: [false, { option: true }],
+	desktop: async ({ untrustedProject, extras, nativeExtensions }, use, info) => {
 		if (!existsSync(join(DESKTOP, ".vite/renderer/main_window/index.html")))
 			throw new Error("No production desktop build. Run stage-server.ts, then `bun run package` in apps/desktop.");
 		const theme = info.project.use.colorScheme === "dark" ? "dark" : "light";
 		const size = info.project.use.viewport ?? { width: 1280, height: 820 };
-		const fixture = createDesktopFixture({ theme, projectSettings: untrustedProject, ...extras });
+		const fixture = createDesktopFixture({ theme, projectSettings: untrustedProject, nativeExtensions, ...extras });
 		if (!fixture.fd)
 			throw new Error("Parity tests need fd for @ suggestions: set KNIGHTCODE_PARITY_FD or put fd on PATH.");
 		let launches = 0;

@@ -774,10 +774,14 @@
 				"type": "object",
 				"required": [
 					"safeMode",
+					"preview",
 					"extensions"
 				],
 				"properties": {
 					"safeMode": {
+						"type": "boolean"
+					},
+					"preview": {
 						"type": "boolean"
 					},
 					"extensions": {
@@ -971,6 +975,25 @@
 						}
 					}
 				},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/preview/set": {
+			"params": {
+				"type": "object",
+				"required": [
+					"enabled"
+				],
+				"properties": {
+					"enabled": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
 				"additionalProperties": false
 			}
 		},

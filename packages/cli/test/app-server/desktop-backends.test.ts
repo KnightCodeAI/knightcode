@@ -49,6 +49,8 @@ export default experimental_defineDesktopBackend(app => {
 });`,
 		);
 	version("Number");
+	// Users opt into the preview switch before approving native code (off by default).
+	new DesktopExtensionManager(agentDir).setPreview(true);
 	const ctx = await createAppServerContext({ agentDir, credentials: new InMemoryCredentialStore(), modelsPath: null });
 	cleanups.push(() => ctx.dispose());
 	const client = createInProcessClient({ handlers: desktopExtensionHandlers(ctx), version: "test", mode: "desktop" });
@@ -534,4 +536,33 @@ it("revokes only a failed publisher and refuses a closed window's late call", as
 			args: 1,
 		}),
 	).toEqual({ status: "disconnected" });
+});
+
+it("turning the preview off retires the live backend in every window; on activates a fresh epoch", async () => {
+	const { client, bindings, starts } = await fixture();
+	const old = bindings.get(1)!;
+	const call = (windowId: number, binding: DesktopActivationBinding, requestId: number) =>
+		client.request("desktopExtension/call", {
+			windowId,
+			lifetime: `window-${windowId}`,
+			binding,
+			requestId,
+			method: "echo",
+			args: 3,
+		});
+	expect(await call(1, old, 1)).toEqual({ status: "ok", value: 3 });
+	await client.request("desktopExtension/preview/set", { enabled: false });
+	expect(bindings.size).toBe(0);
+	expect(await call(1, old, 2)).toEqual({ status: "disconnected" });
+	const list = await client.request("desktopExtension/list", {});
+	expect(list.preview).toBe(false);
+	expect(list.extensions[0]!.artifact).toBeUndefined();
+	await client.request("desktopExtension/reload", {});
+	expect(bindings.size).toBe(0);
+	const before = readFileSync(starts, "utf8").trim().split("\n").length;
+	await client.request("desktopExtension/preview/set", { enabled: true });
+	await vi.waitFor(() => expect(bindings.size).toBe(2));
+	expect(bindings.get(1)!.epoch).not.toBe(old.epoch);
+	expect(readFileSync(starts, "utf8").trim().split("\n").length).toBe(before + 1);
+	expect(await call(1, bindings.get(1)!, 3)).toEqual({ status: "ok", value: 3 });
 });

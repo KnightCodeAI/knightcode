@@ -16,6 +16,7 @@ import { DESKTOP_ACTIVATION_MARKER } from "@knightcode/app-server-protocol";
 import { parse } from "@babel/parser";
 import { traverseFast, type StringLiteral } from "@babel/types";
 import postcss from "postcss";
+import { satisfies, validRange } from "semver";
 import { experimental_RUNTIME_IMPORTS as DESKTOP_RUNTIME_IMPORTS } from "../../desktop.ts";
 import { scopeDesktopCss } from "./css.ts";
 import { getPathComparisonKey } from "../../utils/paths.ts";
@@ -34,6 +35,26 @@ export interface DesktopManifest {
 	frontend?: string;
 	backend?: string;
 	styles: string[];
+	/** The desktop extension API the package was written for; absent means 1. */
+	apiVersion?: number;
+	/** A semver range of desktop app versions the package supports. */
+	app?: string;
+}
+
+/** The desktop extension API this build serves. */
+export const DESKTOP_EXTENSION_API_VERSION = 1;
+
+/**
+ * Why a declared manifest cannot run on this app, or undefined when it can. Checked before staging, so an
+ * out-of-range package is refused whole: neither half is staged, approved or loaded.
+ */
+export function desktopIncompatibility(manifest: DesktopManifest, appVersion: string | undefined): string | undefined {
+	const api = manifest.apiVersion ?? 1;
+	if (api !== DESKTOP_EXTENSION_API_VERSION)
+		return `Requires desktop extension API ${api}; this app supports API ${DESKTOP_EXTENSION_API_VERSION}.`;
+	if (manifest.app && appVersion && !satisfies(appVersion, manifest.app, { includePrerelease: true }))
+		return `Requires KnightCode desktop ${manifest.app}; this is ${appVersion}. Update the app or install a compatible version.`;
+	return undefined;
 }
 
 /** Read explicit native entries; session/plugin trust does not imply permission to execute them. */
@@ -55,12 +76,18 @@ export function readDesktopManifest(root: string): DesktopManifest | undefined {
 	const styles = "styles" in desktop ? desktop.styles : [];
 	if (!Array.isArray(styles) || !styles.every((file): file is string => typeof file === "string"))
 		throw new Error("desktop.styles must be an array of local CSS paths.");
-	if (Object.keys(desktop).some((key) => !["frontend", "backend", "styles"].includes(key)))
+	if ("apiVersion" in desktop && !Number.isInteger(desktop.apiVersion))
+		throw new Error("desktop.apiVersion must be an integer.");
+	if ("app" in desktop && (typeof desktop.app !== "string" || validRange(desktop.app) === null))
+		throw new Error('desktop.app must be a semver range such as ">=0.2.0".');
+	if (Object.keys(desktop).some((key) => !["frontend", "backend", "styles", "apiVersion", "app"].includes(key)))
 		throw new Error("Unsupported desktop entry kind.");
 	return {
 		...("frontend" in desktop ? { frontend: desktop.frontend as string } : {}),
 		...("backend" in desktop ? { backend: desktop.backend as string } : {}),
 		styles,
+		...("apiVersion" in desktop ? { apiVersion: desktop.apiVersion as number } : {}),
+		...("app" in desktop ? { app: desktop.app as string } : {}),
 	};
 }
 
@@ -94,6 +121,9 @@ export async function stageDesktopRevision(sourceRoot: string, cache: string, ow
 	const source = realpathSync(sourceRoot);
 	const manifest = readDesktopManifest(source);
 	if (!manifest) throw new Error("No explicit knightcode.desktop manifest.");
+	// The app range is checked by discovery, which knows the running app; staging alone refuses only the API.
+	const unsupported = desktopIncompatibility(manifest, undefined);
+	if (unsupported) throw new Error(unsupported);
 	const sourceText = new Map<string, string>();
 	const readModule = (file: string): string => {
 		const identity = getPathComparisonKey(realpathSync(file));

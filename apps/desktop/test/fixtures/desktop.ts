@@ -55,6 +55,11 @@ export interface DesktopFixtureOptions {
 	counter?: boolean;
 	/** PARITY_EXTENSION in the agent dir's extensions, and ask_user enabled. */
 	dialogs?: boolean;
+	/**
+	 * The "Run native desktop extensions" preview switch, as the user turns it on in Settings. Off by default in the
+	 * product; extension tests opt in, parity leaves it off.
+	 */
+	nativeExtensions?: boolean;
 }
 
 export interface DesktopFixture {
@@ -197,6 +202,7 @@ export function createDesktopFixture(options: DesktopFixtureOptions): DesktopFix
 		mkdirSync(join(project, ".knightcode"));
 		writeFileSync(join(project, ".knightcode", "settings.json"), "{}\n");
 	}
+	if (options.nativeExtensions) writeFileSync(join(agentDir, "desktop-extension-preview.json"), '{"enabled":true}');
 	if (options.counter) {
 		writeFileSync(
 			join(agentDir, "mcp.json"),

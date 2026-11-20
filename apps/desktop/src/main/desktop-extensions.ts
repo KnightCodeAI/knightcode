@@ -130,6 +130,25 @@ export async function handleDesktopExtensions(
 			case "host/desktopExtension/reload":
 				result = await server.request("desktopExtension/reload", {});
 				break;
+			case "host/desktopExtension/preview/set": {
+				const { enabled } = request.params as HostParams<"host/desktopExtension/preview/set">;
+				// Turning external code on is a native decision; the renderer request alone is not consent.
+				if (enabled) {
+					const { response } = await dialog.showMessageBox(window, {
+						type: "warning",
+						title: "Turn on native desktop extensions?",
+						message: "Turn on native desktop extensions (preview)?",
+						detail:
+							"Extensions you approved will run. Frontend code shares the app renderer; backend code runs with the app server's OS permissions. They are not sandboxed. Each extension still needs its own native consent.",
+						buttons: ["Turn on", "Cancel"],
+						defaultId: 1,
+						cancelId: 1,
+					});
+					if (response !== 0) break;
+				}
+				result = await server.request("desktopExtension/preview/set", { enabled });
+				break;
+			}
 			case "host/desktopExtension/diagnostic": {
 				const params = request.params as HostParams<"host/desktopExtension/diagnostic">;
 				result = await server.request("desktopExtension/diagnostic", {
