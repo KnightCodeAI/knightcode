@@ -1205,6 +1205,32 @@ describe("openai-completions tool_choice", () => {
 		}
 	});
 
+	it("sends the developer role only when the host is api.openai.com", async () => {
+		const embedded = {
+			...localOpenAICompletionsModel,
+			id: "qwen3.8-27b",
+			name: "Qwen3.8 27B",
+			baseUrl: "https://proxy.example/api.openai.com/v1",
+		};
+		const lookalike = {
+			...localOpenAICompletionsModel,
+			id: "qwen3.8-27b",
+			name: "Qwen3.8 27B",
+			baseUrl: "https://api.openai.com.evil.example/v1",
+		};
+		const openaiHost = {
+			...localOpenAICompletionsModel,
+			id: "gpt-5.5",
+			name: "GPT-5.5",
+			provider: "custom",
+			baseUrl: "https://api.openai.com/v1",
+		};
+
+		expect(await firstInstructionRole(embedded)).toBe("system");
+		expect(await firstInstructionRole(lookalike)).toBe("system");
+		expect(await firstInstructionRole(openaiHost)).toBe("developer");
+	});
+
 	it("stores OpenRouter Kimi K2.6 reasoning replay compat in built-in metadata", () => {
 		// `:free` variant delisted from the OpenRouter API; the generator override
 		// matches any `moonshotai/kimi-k2.6*` variant that is listed.

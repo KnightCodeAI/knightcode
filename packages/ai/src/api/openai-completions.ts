@@ -1631,7 +1631,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 	const isGrok = provider === "xai" || baseUrl.includes("api.x.ai");
 	// The developer role is OpenAI's. Other hosts' chat templates often reject it,
 	// and every host accepts system, so only OpenAI's own API gets developer by default.
-	const isOpenAI = provider === "openai" || baseUrl.includes("api.openai.com");
+	const isOpenAI = provider === "openai" || isOpenAIHost(baseUrl);
 	const cacheControlFormat = provider === "openrouter" && model.id.startsWith("anthropic/") ? "anthropic" : undefined;
 
 	return {
