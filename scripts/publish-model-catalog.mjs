@@ -48,7 +48,10 @@ import {
 // 0.17.4: kimi-coding models use openai-completions at /coding/v1; older
 // clients only implement anthropic-messages for kimi-coding and ignore a
 // model's api.
-const MINIMUM_KNIGHTCODE_VERSION = "0.17.4";
+// 0.24.4: Chat Completions models no longer carry supportsDeveloperRole: false.
+// Older clients default that flag to true and would send the developer role,
+// which most hosts reject. 0.24.3 ships without this default.
+const MINIMUM_KNIGHTCODE_VERSION = "0.24.4";
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const INDEX_CACHE_CONTROL = "no-store";
