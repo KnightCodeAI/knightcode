@@ -101,6 +101,14 @@ describe("google-shared image tool result routing", () => {
 		expect(imageResponse?.parts?.[0]?.inlineData).toBeTruthy();
 	});
 
+	it("nests image tool results for prefixed Gemini 3+ IDs", () => {
+		const model = makeModel("google-generative-ai", "google", "randomprefix-gemini-4-argon");
+		const contents = convertMessages(model, normalizeContext(makeContext(model)));
+
+		expect(contents).toHaveLength(3);
+		expect(contents[2].parts?.[1]?.functionResponse?.parts?.[0]?.inlineData).toBeTruthy();
+	});
+
 	// Whitespace-only tool result text is empty, so an image-only result still gets the image placeholder.
 	it("treats whitespace-only tool result text as no text", () => {
 		const model = makeModel("google-generative-ai", "google", "gemini-3-pro-preview");
