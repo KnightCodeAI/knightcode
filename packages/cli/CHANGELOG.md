@@ -1,5 +1,39 @@
 # @knightcodeai/cli
 
+## 0.24.3
+
+### Added
+
+- Added a transcript notice when OpenAI drops replayed reasoning items, naming the reason, the same way a dropped Anthropic thinking block is shown. Removals that only mark an earlier turn's reasoning are left out.
+
+- Added Qwen4 Max Preview to Qwen Token Plan Individual and Qwen Token Plan Individual (China).
+
+### Fixed
+
+- Fixed the resume command printed on exit so a triple-click selects only the command.
+
+- Fixed Codex prompt caching of the system prompt on GPT-6.2. The service appends a top-level instructions field after the input, so the system prompt changed on every turn and was never served from the cache. It is now the first developer input item.
+
+- Fixed a Codex thinking-level change invalidating the prompt cache, and forwarded max output tokens that the Codex request was dropping. Thinking-level changes on GPT-6 Codex models go out as configuration updates with a fixed effort, including switching to off.
+
+- Fixed Chat Completions requests to hosts other than OpenAI sending the developer role. Groq's Qwen template rejected that role on the first message. System messages now use the system role unless the endpoint is api.openai.com.
+
+- Fixed GitHub Copilot GPT, Grok and MAI-Code models filling optional tool arguments with empty strings or invented values. Their tools now carry an explicit strict flag, and Copilot's Claude models use strict tools the way direct Anthropic models do.
+
+- Fixed the terminal sometimes printing mouse, focus or key reports as text after quitting. KnightCode now waits for its terminal reset sequences to reach the terminal (for up to a second) before it exits.
+
+- Fixed llama.cpp decision models that accept images being registered as text-only classifiers. A decision model that reports image input now receives images in the format llama-server reads.
+
+- Fixed Left, Right, Home and End in a selector search box jumping the selection back to the first entry. /login, /logout, /model, /scoped-models, /resume, /settings, /thinking, `knightcode config` and searchable settings submenus now keep the highlighted entry while you move the text cursor.
+
+- Fixed searching in /login, /logout, /scoped-models and /resume after scrolling: typing a query now selects the best match instead of whatever row the highlight was on, so Enter no longer opens the wrong provider or session.
+
+- Fixed a suspend signal during terminal restore stopping KnightCode with the terminal only partly reset. The suspend listener stays until the restore finishes, and it is not installed before the terminal starts.
+
+- Fixed an external SIGTSTP (`kill -TSTP`) suspending KnightCode without restoring the terminal. It now suspends the same way Ctrl+Z does.
+
+- Fixed Enter on a Tab completion menu for an absolute path submitting the unfinished prompt. It now only completes the path; Enter on a slash command menu still runs the command.
+
 ## 0.24.2
 
 ### Added
