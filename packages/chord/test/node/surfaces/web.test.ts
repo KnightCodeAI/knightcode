@@ -205,6 +205,7 @@ describe("plugin scripts", () => {
 		expect(result.steps.map(({ name }) => name)).toEqual(["server", "web"]);
 		expect(result.steps[1]!.hosts).toEqual([
 			{
+				kind: "reloaded",
 				host: "web",
 				report: { plugins: { added: [], changed: ["@test/notes"], removed: [] }, failed: [], objects: [] },
 			},
