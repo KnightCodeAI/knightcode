@@ -293,7 +293,7 @@ describe("afterRun", () => {
 		);
 		// The task admits its result for the model in its own commit.
 		state.admit = (handle, tx) =>
-			handle.submit(tx, {
+			handle.admit(tx, {
 				type: "write",
 				entry: { kind: "test.result", model: [{ role: "user", content: "tests passed", timestamp: 1 }] },
 			});
@@ -371,7 +371,11 @@ describe("afterRun", () => {
 		setup.registry.install(
 			defineExtension({
 				name: "again",
-				hooks: [hook(GenerationTask, { onYield: async () => (++yields <= 2 ? { continue: "again" } : undefined) })],
+				hooks: [
+					hook(GenerationTask, {
+						onYield: async () => (++yields <= 2 ? { kind: "continue", continue: "again" } : undefined),
+					}),
+				],
 			}),
 		);
 		setup.faux.setResponses([fauxAssistantMessage("1"), fauxAssistantMessage("2"), fauxAssistantMessage("3")]);
@@ -402,7 +406,7 @@ describe("afterRun", () => {
 						onYield: async () => {
 							if (second.asked.length > 0) return undefined;
 							await root2!.submit({ type: "input", content: "steer", whenBusy: "steer" }, context);
-							return { continue: "again" };
+							return { kind: "continue", continue: "again" };
 						},
 					}),
 				],
@@ -700,7 +704,7 @@ describe("afterRun", () => {
 					}),
 				],
 				hooks: [
-					hook(CompactionTask, { beforeCompact: async () => ({ summary: "earlier work" }) }),
+					hook(CompactionTask, { beforeCompact: async () => ({ kind: "summary", summary: "earlier work" }) }),
 					hook(GenerationTask, {
 						afterRun: async (run, api, ctx) => {
 							const page = await api.entries(
@@ -816,7 +820,7 @@ describe("afterRun", () => {
 			}),
 		);
 		state.admit = (handle, tx) =>
-			handle.submit(tx, { type: "input", content: "fix the tests", requestId: "fix-1", whenBusy: "followUp" });
+			handle.admit(tx, { type: "input", content: "fix the tests", requestId: "fix-1", whenBusy: "followUp" });
 		setup.faux.setResponses([fauxAssistantMessage("done"), fauxAssistantMessage("fixed")]);
 		const { harness, root } = await openChat(new MemoryStorage(), setup);
 		await (await root.submit({ type: "input", content: "go" }, context)).wait(context);
@@ -852,7 +856,7 @@ describe("afterRun", () => {
 			first: user.id,
 		});
 		expect(state.asked).toEqual([]);
-		await harness.commit((tx) => root.submit(tx, { type: "continue" }), context);
+		await harness.commit((tx) => root.admit(tx, { type: "continue" }), context);
 		await root.waitForIdle(context);
 		const answer = kindOf(await allEntries(root), "knightcode.assistant").at(-1)!;
 		expect(state.asked).toEqual([{ reason: "answer", first: user.id, answer: answer.id, last: answer.id }]);
@@ -1088,7 +1092,7 @@ describe("afterRun", () => {
 						},
 					}),
 				],
-				hooks: [hook(CompactionTask, { beforeCompact: async () => ({ summary: "earlier work" }) })],
+				hooks: [hook(CompactionTask, { beforeCompact: async () => ({ kind: "summary", summary: "earlier work" }) })],
 			}),
 		);
 		setup.faux.setResponses([call("handoff", "a")]);
