@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DesktopArtifact } from "../src/app-server/desktop-extensions/artifacts.ts";
 
@@ -93,6 +93,23 @@ describe("desktop extension artifacts", () => {
 		writeFileSync(join(source, "app.tsx"), code);
 		await expect(stageDesktopExtension(source, cache, "example")).rejects.toThrow(/import|loading|outside/i);
 	});
+	for (const kind of ["module", "asset"])
+		it(`rejects an outside-root ${kind} reached through a junction`, async ({ skip }) => {
+			const { source, cache } = fixture();
+			const outside = join(dirname(source), "outside");
+			mkdirSync(outside);
+			writeFileSync(join(outside, "other.ts"), "export default {};");
+			writeFileSync(join(outside, "other.png"), "outside");
+			try {
+				symlinkSync(outside, join(source, "linked"), "junction");
+			} catch {
+				skip(true, "Directory junctions are unavailable");
+			}
+			if (kind === "module") writeFileSync(join(source, "app.tsx"), 'export { default } from "./linked/other.ts";');
+			else writeFileSync(join(source, "app.css"), '.external-only { background: url("./linked/other.png"); }');
+			await expect(stageDesktopExtension(source, cache, "example")).rejects.toThrow(/outside|escape/i);
+		});
+
 	it("stages a backend-only package with an inert frontend instead of inferring a source entry", async () => {
 		const { source, cache } = fixture();
 		writeFileSync(

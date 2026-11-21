@@ -445,8 +445,8 @@ async function start(): Promise<void> {
 			for (const open of windows.values()) sendEvent(open, { event: "server/state", state: next, message });
 		},
 		onExit: () => {
-			extensionRuntime.serverRestarted();
 			router.serverRestarted();
+			extensionRuntime.serverRestarted();
 		},
 	});
 	extensionRuntime = new DesktopExtensionWindows(server);

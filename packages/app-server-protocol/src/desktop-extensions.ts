@@ -138,7 +138,7 @@ export const DesktopRuntimeRequests = {
 export const DesktopExtensionRequests = {
 	...DesktopRuntimeRequests,
 	"desktopExtension/list": {
-		params: Obj({ cwd: Type.Optional(Str) }, strict),
+		params: Obj({ cwd: Type.Optional(Str), review: Type.Optional(Str) }, strict),
 		result: Obj(
 			{ safeMode: Type.Boolean(), preview: Type.Boolean(), extensions: Type.Array(DesktopExtensionInfo) },
 			strict,
@@ -157,6 +157,8 @@ export const DesktopExtensionRequests = {
 				revoke: Type.Optional(Type.Boolean()),
 				dev: Type.Optional(Type.Boolean()),
 				source: Type.Optional(Str),
+				/** Required with approve: the staged revision shown in the native confirmation. */
+				revision: Type.Optional(Str),
 			},
 			strict,
 		),

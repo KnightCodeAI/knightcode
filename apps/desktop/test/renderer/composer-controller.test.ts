@@ -419,6 +419,34 @@ describe("canonical composer editor transactions", () => {
 		});
 	});
 
+	test.each(["read", "apply", "focus", "caretAnchor"] as const)(
+		"a throwing %s retires the adapter without losing the draft",
+		(callback) => {
+			const t = target();
+			const c = composerController(t);
+			const e = editor("saved", 5);
+			setComposerDraft(`thread:${t.threadId}`, (d) => ({ ...d, text: "saved", images: ["/kept.png"] }));
+			const owner = new AbortController();
+			const failure = vi.fn();
+			const attached = attach(t, e.adapter, owner.signal, owner.signal, failure);
+			expect(attached.status).toBe("mounted");
+			const error = new Error("adapter failed");
+			vi.spyOn(e.adapter, `experimental_${callback}`).mockImplementation(() => {
+				throw error;
+			});
+			if (callback === "caretAnchor") expect(c.experimental_caretAnchor()).toBeUndefined();
+			else if (callback === "apply")
+				expect(c.experimental_insert(" new", c.experimental_getSnapshot().revision).status).toBe("unavailable");
+			else expect(c.experimental_focus().status).toBe("unavailable");
+			expect(failure).toHaveBeenCalledExactlyOnceWith(error);
+			expect(c.experimental_getSnapshot()).toMatchObject({ text: "saved", images: ["/kept.png"], composing: false });
+			const fallback = editor("", 0);
+			const fallbackMount = mountEditor(t, fallback.adapter);
+			expect(fallback.read().text).toBe("saved");
+			fallbackMount.dispose();
+		},
+	);
+
 	test("focus preserves selection, focus-end moves it, and caret anchors come from the active adapter", () => {
 		const t = target();
 		const c = composerController(t);

@@ -197,23 +197,30 @@ export class DesktopRevisionCoordinator {
 		}
 	}
 
-	/** Revoke now, drain real writes, and only then shut down services; failed draining requires restart. */
+	/** Revoke now, give admitted writes a bounded drain, and dispose even if pause or drain fails. */
 	shutdown(): Promise<{ status: "retired" } | { status: "disabled"; reason: string }> {
 		if (this.stopping) return this.stopping;
 		const active = this.active;
 		const serial = this.serial;
 		this.disconnect();
 		this.stopping = (async () => {
+			let paused = true;
 			try {
 				if (active) await this.deadline(active.backend.pause(), this.readinessMs, "pause-timeout");
-				await serial;
-				await this.waitForDrain();
+			} catch {
+				paused = false;
+			}
+			await serial;
+			await this.waitForDrain().catch(() => {});
+			try {
 				if (active) await this.deadline(active.backend.dispose(), this.readinessMs, "shutdown-timeout");
 				this.active = undefined;
-				return { status: "retired" };
-			} catch (error) {
-				return { status: "disabled", reason: message(error) };
+			} catch {
+				return { status: "disabled", reason: "restart-required" };
 			}
+			// Disposal revokes backend services, but cannot kill in-process code that ignores cancellation.
+			if (!paused || this.pending.size) return { status: "disabled", reason: "restart-required" };
+			return { status: "retired" };
 		})();
 		return this.stopping;
 	}

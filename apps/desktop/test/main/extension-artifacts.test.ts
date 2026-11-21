@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -62,6 +62,39 @@ test.each(["__backend", "__BACKEND", "__backend.", "__backend "])(
 		).toThrow(/backend|private/i);
 	},
 );
+
+for (const replace of [false, true])
+	test(`rejects a registered outside-root junction (replaced: ${replace})`, async ({ skip }) => {
+		const parent = mkdtempSync(join(tmpdir(), "kc-ext-serving-junction-"));
+		roots.push(parent);
+		const root = join(parent, "artifact");
+		const inside = join(root, "inside");
+		const outside = join(parent, "outside");
+		const linked = join(root, "linked");
+		mkdirSync(inside, { recursive: true });
+		mkdirSync(outside);
+		writeFileSync(join(inside, "app.js"), "export default 'inside';");
+		writeFileSync(join(outside, "app.js"), "export default 'outside';");
+		try {
+			symlinkSync(replace ? inside : outside, linked, "junction");
+		} catch {
+			skip(true, "Directory junctions are unavailable");
+		}
+		const server = new ExtensionArtifacts("app://desktop");
+		const revision = "a".repeat(64);
+		server.register(
+			{ owner: "example", revision, root, frontend: "linked/app.js", styles: [], files: ["linked/app.js"] },
+			1,
+			"lease",
+		);
+		const request = new Request(`app://ext/example/${revision}/linked/app.js`);
+		if (replace) {
+			expect((await server.serve(request)).status).toBe(200);
+			unlinkSync(linked);
+			symlinkSync(outside, linked, "junction");
+		}
+		expect((await server.serve(request)).status).toBe(403);
+	});
 
 test("a physical backend file cannot be served through a public directory junction", async () => {
 	const root = mkdtempSync(join(tmpdir(), "kc-ext-private-alias-"));

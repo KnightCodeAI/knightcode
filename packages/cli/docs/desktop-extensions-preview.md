@@ -3,14 +3,15 @@
 The authoritative, version-matched guide is now [Desktop extensions](desktop-extensions.md),
 including authoring commands, generated declarations, diagnostics and watching.
 
-Native frontend extensions add palette commands and feedback contributions.
-A user can explicitly select a feedback provider. Other application surfaces
-and backend entries are not exposed yet. The API is experimental.
+Native frontend extensions can add commands, slots, settings, and replacement
+providers for supported surfaces. Packages can also declare a coordinated
+backend with validated RPC. The API is experimental.
 
 These extensions share the app renderer, React, and the DOM. They can inspect
 conversations and change application UI. Error boundaries are not a security
 sandbox. Only approve code you trust. Session-extension trust, project trust,
-and Claude/Grok plugin trust do not grant native frontend consent.
+and Claude/Grok plugin trust do not grant native consent. An approved backend
+runs with the app server's operating-system permissions; it is not sandboxed.
 
 ## Load and manage
 
@@ -33,18 +34,21 @@ Project packages require both saved project trust and native approval.
 ```
 
 Open Settings → Extensions & skills. For a project package, select its scope.
-The native desktop section appears when a package is found. **Trust frontend**
-opens a native confirmation showing the source and entry kind:
+The native desktop section appears when a package is found. The preview must
+be on for approved frontend or backend code to run. Review can validate and
+stage an inert copy with the preview off, but does not run the code or grant
+a serving lease. The native confirmation shows the source, revision, and entry
+kinds:
 
 - **Trust this revision** permits only the validated content revision. Source
-  changes require review again.
+  changes before confirmation refuse approval, and later changes require review again.
 - **Trust development reloads** also permits future edits at that source.
   A repository cannot grant itself this permission.
 
 Consent is stored in the agent directory's `desktop-extension-consent.json`,
 not in project settings. **Reload extensions** rereads configured sources and
-updates every open window independently. A failed preparation keeps that
-window's previous working registration and stylesheet set. Disable and revoke
+coordinates one revision across open windows and the shared backend. A failed
+preparation keeps the previous working frontend, styles, and backend. Disable and revoke
 trust take effect without ending threads or terminals. Development-approved
 sources now reload on save; see the authoritative guide for the authoring CLI.
 
@@ -58,8 +62,8 @@ selected extension. That notice and its settings are host-owned.
 To recover when the renderer cannot respond, use the native View menu's
 **Restart without extensions**, or launch the desktop executable with
 `--safe-mode`. Restarting still asks before interrupting running threads.
-Safe-mode startup skips external frontend execution and artifact staging. It does
-not revoke saved trust. A normal restart enables approved extensions again.
+Safe-mode startup does not stage or run extensions for execution. It does not
+revoke saved trust. A normal restart enables approved extensions again.
 
 ## Imports and lifecycle
 
@@ -142,7 +146,7 @@ local package directory above, review it, then approve it through Settings.
 Settings shows source, revision, consent, enabled state and per-window
 load/render diagnostics. The app-server methods `desktopExtension/list`,
 `desktopExtension/set`, `desktopExtension/reload` and
-`desktopExtension/diagnostic` expose the same frontend-only inventory and
+`desktopExtension/diagnostic` expose the same native extension inventory and
 bounded diagnostics. `desktopExtension/changed` tells connected windows to
-reread it. Backend RPC remains unavailable. Use `knightcode desktop-ext --help`
+reread it. Approved backends expose declared RPC to their live frontends. Use `knightcode desktop-ext --help`
 for the authoring CLI and the current guide for automatic watching.

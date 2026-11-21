@@ -61,6 +61,7 @@ export default experimental_defineDesktopBackend(app => {
 		owner,
 		source,
 		approve: true,
+		revision: (await client.request("desktopExtension/list", { review: owner })).extensions[0]?.revision,
 		kinds: ["frontend", "backend"],
 		dev: true,
 	});

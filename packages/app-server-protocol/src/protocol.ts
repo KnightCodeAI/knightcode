@@ -302,6 +302,8 @@ export const DesktopOperation = Obj({
 		Type.Literal("pullRequest"),
 		Type.Literal("handoff"),
 		Type.Literal("restore"),
+		// Native restart journal: a retry may be lost before its operation kind was observed.
+		Type.Literal("unknown"),
 	]),
 	target: DesktopCheckout,
 	status: Type.Union([

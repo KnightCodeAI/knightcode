@@ -16,7 +16,16 @@ import type {
 	experimental_Zoom,
 } from "@knightcodeai/cli/desktop";
 import type { experimental_BackendDataSelector } from "@knightcodeai/cli/desktop-backend";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { Value } from "typebox/value";
 import { Preferences } from "../../shared/host-protocol.ts";
 import { comboFromEvent, DESKTOP_KEYBINDINGS, type KeybindingId } from "../../shared/keybindings.ts";
@@ -55,7 +64,7 @@ import {
 import { useCommandContext } from "./command-context.ts";
 import { desktopExtensions } from "./runtime.ts";
 import { NativeExtensionsSettings } from "./settings.tsx";
-import { ContributionRoot, ThemeProvider } from "./surface.tsx";
+import { ContributionRoot, ThemeProvider, useContributionOwner } from "./surface.tsx";
 import type { SettingsSectionRegistration } from "./registry.ts";
 
 declare global {
@@ -435,7 +444,7 @@ function BackendSettingsSection({
 	const [chosen, setChosen] = useState<string>();
 	const choice = choices.find((c) => c.value === chosen) ?? choices[0];
 	const picker =
-		scopes.length > 1 ? (
+		choices.length > 1 ? (
 			<Row title="Scope" detail="Where these values are saved">
 				<SelectMenu
 					label="Settings scope"
@@ -786,6 +795,31 @@ function SizeField({
 			{unit}
 		</span>
 	);
+}
+
+/** A retained config writer belongs to its original mounted hook and admitted activation. */
+export function extensionSettingsControls(admitted: () => boolean): experimental_SettingsControls {
+	return {
+		...settingsControls,
+		experimental_useConfigFile(cwd, trusted) {
+			const entry = useContributionOwner();
+			const file = useConfigFile(cwd, trusted);
+			const mount = useMemo(() => ({ active: false }), [cwd, entry]);
+			useLayoutEffect(() => {
+				mount.active = true;
+				return () => {
+					mount.active = false;
+				};
+			}, [mount]);
+			if (!file) return;
+			return {
+				...file,
+				write: async (key, value) => {
+					if (mount.active && !entry?.signal.aborted && admitted()) await file.write(key, value);
+				},
+			};
+		},
+	};
 }
 
 export const settingsControls: experimental_SettingsControls = {

@@ -108,6 +108,7 @@ export function OperationRecovery() {
 export function workspaceServices(
 	signal: AbortSignal,
 	admitted = () => !signal.aborted,
+	subscribeAdmission: (listener: () => void) => () => void = () => () => {},
 ): experimental_WorkspaceServices {
 	return {
 		experimental_git(target) {
@@ -205,6 +206,7 @@ export function workspaceServices(
 			const server = useStore((s) => s.server.state);
 			const version = useStore((s) => (reads.once ? undefined : (s.diffVersion[threadId] ?? 0)));
 			const op = useSyncExternalStore(subscribe, () => operations.get(threadId) ?? empty);
+			const ready = useSyncExternalStore(subscribeAdmission, admitted, admitted);
 			const key = JSON.stringify([threadId, cwd, projectCwd]);
 			const [data, setData] = useState<{ key: string; values: Partial<experimental_GitRead> }>();
 			useEffect(() => {
@@ -261,7 +263,7 @@ export function workspaceServices(
 				return () => {
 					mounted = false;
 				};
-			}, [key, threadId, version, status, totals, branches, server]);
+			}, [key, threadId, version, status, totals, branches, server, ready]);
 			const matching = op.filter((entry) => matches(target, entry.target));
 			return {
 				...(data?.key === key ? data.values : {}),

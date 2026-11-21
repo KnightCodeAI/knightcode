@@ -62,6 +62,7 @@ export class StartupLayout {
 
 	/** Persist only successful declarative presentation and explicit provider choices. */
 	update(providers: Record<string, string>, hidden: Hidden): void {
+		if (JSON.stringify([providers, hidden]) === JSON.stringify([this.snapshot.providers, this.snapshot.hidden])) return;
 		this.snapshot = { ...this.snapshot, providers, hidden };
 		try {
 			this.storage?.setItem(KEY, JSON.stringify({ version: 1, providers, hidden }));

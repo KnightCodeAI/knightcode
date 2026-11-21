@@ -99,7 +99,7 @@ describe("coordinated desktop revisions", () => {
 		await Promise.resolve();
 	});
 
-	it("revokes immediately on shutdown but never disposes a backend whose write cannot drain", async () => {
+	it("revokes immediately and disposes even when a write cannot drain", async () => {
 		const { coordinator, binding, old, trace } = await fixture();
 		const work = deferred<unknown>();
 		old.call = () => work.promise;
@@ -107,9 +107,27 @@ describe("coordinated desktop revisions", () => {
 		const stopping = coordinator.shutdown();
 		expect(coordinator.binding("a")).toBeUndefined();
 		expect(await pending).toEqual({ status: "outcome-unknown" });
-		expect(await stopping).toMatchObject({ status: "disabled" });
-		expect(trace).not.toContain("v1:dispose");
+		expect(await stopping).toEqual({ status: "disabled", reason: "restart-required" });
+		expect(trace).toContain("v1:dispose");
 		work.resolve("completed");
+	});
+
+	it("can retire a backend when forced disposal settles the outstanding write", async () => {
+		const { coordinator, binding, old } = await fixture();
+		const work = deferred<unknown>();
+		old.call = () => work.promise;
+		old.dispose = async () => work.resolve("disposed");
+		const pending = coordinator.call(binding, 1, "write", "increment", {});
+		expect(await coordinator.shutdown()).toEqual({ status: "retired" });
+		expect(await pending).toEqual({ status: "outcome-unknown" });
+	});
+
+	it.each(["pause", "dispose"] as const)("keeps restart-required when %s times out", async (method) => {
+		const { coordinator, old } = await fixture();
+		const dispose = vi.spyOn(old, "dispose");
+		vi.spyOn(old, method).mockReturnValue(deferred<void>().promise);
+		expect(await coordinator.shutdown()).toEqual({ status: "disabled", reason: "restart-required" });
+		expect(dispose).toHaveBeenCalled();
 	});
 
 	it("rejects owner/revision/epoch/window mismatches before invoking a handler", async () => {

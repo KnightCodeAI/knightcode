@@ -20,6 +20,7 @@ afterEach(() => {
 
 function fixture(initial: ("frontend" | "backend")[]) {
 	let kinds = initial;
+	let revision = "a".repeat(64);
 	const server = new ServerConnection({
 		command: { command: "not-started", args: [] },
 		env: {},
@@ -44,6 +45,7 @@ function fixture(initial: ("frontend" | "backend")[]) {
 						approved: false,
 						enabled: false,
 						dev: false,
+						revision,
 						diagnostics: [],
 					},
 				],
@@ -77,6 +79,9 @@ function fixture(initial: ("frontend" | "backend")[]) {
 		request,
 		services,
 		approve,
+		changeRevision: (next: string) => {
+			revision = next;
+		},
 		changeKinds: (next: ("frontend" | "backend")[]) => {
 			kinds = next;
 		},
@@ -115,13 +120,16 @@ test("the native backend warning describes OS permissions and forwards the revie
 	expect(await approve()).not.toHaveProperty("error");
 	const options = electron.show.mock.calls[0]![1] as { detail: string };
 	expect(options.detail).toMatch(/backend/i);
+	expect(options.detail).toContain("a".repeat(64));
 	expect(options.detail).toMatch(/OS permissions/i);
 	expect(request).toHaveBeenLastCalledWith(
 		"desktopExtension/set",
 		expect.objectContaining({
 			kinds: ["frontend", "backend"],
+			revision: "a".repeat(64),
 		}),
 	);
+	expect(request).toHaveBeenCalledWith("desktopExtension/list", { review: "example" });
 });
 
 test("the grant echoes the reviewed snapshot, not kinds added while the native dialog was open", async () => {
@@ -132,6 +140,16 @@ test("the grant echoes the reviewed snapshot, not kinds added while the native d
 	});
 	expect(await approve()).not.toHaveProperty("error");
 	expect(request).toHaveBeenLastCalledWith("desktopExtension/set", expect.objectContaining({ kinds: ["frontend"] }));
+});
+
+test("declines approval when the reviewed revision changes during the native dialog", async () => {
+	const { changeRevision, request, approve } = fixture(["frontend"]);
+	electron.show.mockImplementation(async () => {
+		changeRevision("b".repeat(64));
+		return { response: 1 };
+	});
+	expect(await approve()).toHaveProperty("error");
+	expect(request).not.toHaveBeenCalledWith("desktopExtension/set", expect.anything());
 });
 
 test("turning the extensions preview on needs a native confirmation; turning it off does not", async () => {

@@ -7,7 +7,7 @@ import { composerController, mountEditor, whenEditorsIdle } from "./composer-con
 import { useComposerEditor } from "./composer-root.tsx";
 import { panelServices } from "./panel.tsx";
 import { workspaceServices } from "./workspace.ts";
-import { appearance, extensionSettingsServices } from "./settings-host.tsx";
+import { appearance, extensionSettingsControls, extensionSettingsServices } from "./settings-host.tsx";
 import { followDrag } from "../drag.ts";
 
 type Phase = "prepared" | "published" | "live" | "quiescing" | "closed";
@@ -208,7 +208,8 @@ export class FrontendActivation {
 			experimental_signal: this.signal,
 			experimental_backend: backend,
 			experimental_panelServices: panelServices(this.signal, () => this.admitted()),
-			experimental_workspaceServices: workspaceServices(this.signal, () => this.admitted()),
+			experimental_workspaceServices: workspaceServices(this.signal, () => this.admitted(), this.subscribe),
+			experimental_settingsControls: extensionSettingsControls(() => this.admitted()),
 			experimental_settingsServices: extensionSettingsServices(() => this.admitted()),
 			experimental_appearance: appearance(() => this.admitted()),
 			experimental_useBackend: () =>
@@ -223,7 +224,7 @@ export class FrontendActivation {
 			experimental_composer: controller,
 			experimental_attachComposerEditor: (target, adapter) =>
 				this.mounted() && this.state.phase !== "quiescing"
-					? mountEditor(target, adapter, this.signal, this.signal)
+					? mountEditor(target, adapter, this.signal, this.signal, (error) => this.fail(error))
 					: { status: "unavailable" },
 			experimental_useComposerEditor: (adapter) => useComposerEditor(adapter, this.signal),
 			experimental_useComposer: () => {
@@ -324,8 +325,11 @@ export class FrontendActivation {
 
 	fail(error: unknown): void {
 		if (this.signal.aborted) return;
-		this.failure = error instanceof Error ? error.message : String(error);
+		const message = error instanceof Error ? error.message : String(error);
+		if (this.failure === message) return;
+		this.failure = message;
 		this.changed();
+		for (const listener of this.listeners) listener();
 	}
 
 	mounted(): boolean {

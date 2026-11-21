@@ -62,8 +62,9 @@ export function desktopExtensionHandlers(ctx: AppServerContext): Handlers {
 			runtime.unsubscribe(params, connection);
 			return {};
 		},
-		"desktopExtension/list": async ({ cwd }) => {
-			const status = await manager.list(cwd);
+		"desktopExtension/list": async ({ cwd, review }) => {
+			const status = await manager.list(cwd, review);
+			if (review !== undefined) return status;
 			watcher.update(status);
 			// A removed package folder emits no watch event on Windows; retire what the inventory no longer finds.
 			if (runtime.outlives(status)) {

@@ -5,7 +5,9 @@ import {
 	experimental_settingsServices,
 	experimental_useZoom,
 } from "@knightcodeai/cli/desktop";
-import { createElement } from "react";
+import type * as React from "react";
+import { createElement, type EffectCallback } from "react";
+import { DEFAULT_STATE } from "../../src/shared/host-protocol.ts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, expect, test, vi } from "vitest";
 
@@ -17,6 +19,22 @@ const hostEvents = vi.hoisted(() => {
 	return listeners;
 });
 const requests = vi.hoisted(() => [] as [string, unknown][]);
+const folder = vi.hoisted(() => ({ path: "" }));
+const configMount = vi.hoisted(() => ({ layout: undefined as EffectCallback | undefined, enabled: false }));
+vi.mock("react", async (original) => {
+	const react = await original<typeof React>();
+	return {
+		...react,
+		useLayoutEffect: (effect: EffectCallback, deps?: readonly unknown[]) => {
+			if (configMount.enabled) configMount.layout = effect;
+			else react.useLayoutEffect(effect, deps);
+		},
+		useState: (initial: unknown) =>
+			react.useState(
+				configMount.enabled ? { cwd: undefined, read: { settings: {}, defaults: {}, origins: {} } } : initial,
+			),
+	};
+});
 vi.mock("../../src/renderer/client.ts", () => ({
 	client: {
 		onNotification: () => () => {},
@@ -29,8 +47,11 @@ vi.mock("../../src/renderer/client.ts", () => ({
 			requests.push([method, params]);
 			return Promise.resolve({});
 		},
-		host: async (method: string) =>
-			method === "host/state/read" ? (await import("../../src/shared/host-protocol.ts")).DEFAULT_STATE : {},
+		host: async (method: string) => {
+			if (method === "host/state/read") return DEFAULT_STATE;
+			if (method === "host/dialog/openFolder") return { path: folder.path };
+			return {};
+		},
 	},
 	RequestError: class extends Error {},
 }));
@@ -44,7 +65,7 @@ import { initializeDesktopExtensions } from "../../src/renderer/extensions/host.
 import { desktopExtensions } from "../../src/renderer/extensions/runtime.ts";
 import { SettingsSections, settingsScopeChoices, ThemeScope } from "../../src/renderer/extensions/settings-host.tsx";
 import { ThemeProvider, usePortalOwnership } from "../../src/renderer/extensions/surface.tsx";
-import { getState } from "../../src/renderer/store.ts";
+import { addProject, getState, removeProject } from "../../src/renderer/store.ts";
 
 const context = { sidebarOpen: true };
 
@@ -333,6 +354,40 @@ test("an external activation cannot grant project or plugin trust or full access
 	}
 });
 
+test.each(["dispose", "unmount"])("a saved config writer cannot write after %s", async (retire) => {
+	const dispose = initializeDesktopExtensions();
+	const activation = new FrontendActivation(
+		{ owner: "writer", revision: "r", epoch: "e", window: "w", mount: "m" },
+		globalThis.__knightcodeDesktop!,
+		() => {},
+	);
+	try {
+		activation.publish();
+		activation.ready();
+		let saved: ((key: string, value: unknown) => Promise<void>) | undefined;
+		const Probe = () => {
+			saved = activation.sdk.experimental_settingsControls().experimental_useConfigFile(undefined)?.write;
+			return null;
+		};
+		configMount.enabled = true;
+		renderToStaticMarkup(createElement(Probe));
+		const unmount = configMount.layout?.();
+		const writes = () => requests.filter(([method]) => method === "config/write");
+		requests.length = 0;
+		await saved!("draft", "live");
+		expect(writes()).toHaveLength(1);
+		if (retire === "dispose") activation.dispose();
+		else if (typeof unmount === "function") unmount();
+		await saved!("draft", "retired");
+		expect(writes()).toHaveLength(1);
+	} finally {
+		configMount.enabled = false;
+		configMount.layout = undefined;
+		activation.dispose();
+		dispose();
+	}
+});
+
 test("scoped schema sections offer app, each project and its live threads as explicit backend selectors", () => {
 	const projects = [{ path: "C:/work/a", name: "Alpha" }, { path: "C:/work/b" }];
 	const threads = [
@@ -355,9 +410,14 @@ test("scoped schema sections offer app, each project and its live threads as exp
 	expect(new Set(all.map((choice) => choice.value)).size).toBe(all.length);
 });
 
-test("a scoped schema section draws the host's scope picker; an app-only one does not", () => {
+test("a project-only schema section with two projects draws a picker; an app-only one does not", async () => {
 	const dispose = initializeDesktopExtensions();
+	const paths = ["C:/settings-a", "C:/settings-b"];
 	try {
+		for (const path of paths) {
+			folder.path = path;
+			await addProject();
+		}
 		const handle = desktopExtensions.register(
 			"scoped",
 			defineDesktopExtension((app) => {
@@ -365,7 +425,7 @@ test("a scoped schema section draws the host's scope picker; an app-only one doe
 					id: "scoped",
 					page: "archived",
 					title: "Scoped options",
-					scopes: ["app", "project"],
+					scopes: ["project"],
 					fields: [{ key: "enabled", title: "Enabled", kind: "switch" }],
 				});
 				app.experimental_registerSettingsSection({
@@ -380,6 +440,7 @@ test("a scoped schema section draws the host's scope picker; an app-only one doe
 		expect(html.match(/aria-label="Settings scope"/g)).toHaveLength(1);
 		handle.dispose();
 	} finally {
+		for (const path of paths) removeProject(path);
 		dispose();
 	}
 });

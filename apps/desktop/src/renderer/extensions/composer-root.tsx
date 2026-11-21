@@ -34,7 +34,7 @@ import { composerKey, mountEditor, mountComposerActions, retainComposerLifetime 
 import { useComposerBehavior } from "./composer-behavior.tsx";
 import { desktopExtensions } from "./runtime.ts";
 import { externalState } from "./external.ts";
-import { SurfaceEntry } from "./surface.tsx";
+import { SurfaceEntry, useContributionOwner } from "./surface.tsx";
 import { startupLayout } from "./startup.ts";
 
 interface Binding {
@@ -81,14 +81,17 @@ export function useComposerEditor(
 	owner?: AbortSignal,
 ): experimental_EditorMount | undefined {
 	const root = useRoot();
+	const entry = useContributionOwner();
+	const epoch = entry?.activation?.signal ?? owner ?? entry?.signal ?? root.signal;
 	const target = root.state.current.target;
 	const key = composerKey(target);
 	const draft = useStore((s) => composerDraftOf(s, key));
 	const attached = useRef<Binding | undefined>(undefined);
 	const [handle, setHandle] = useState<experimental_EditorMount>();
 	useLayoutEffect(() => {
-		if (!adapter) return;
+		if (!adapter || epoch.aborted || owner?.aborted || entry?.signal.aborted) return;
 		if (root.binding.current) throw new Error("Composer provider must mount exactly one editor.");
+		const signal = AbortSignal.any([root.signal, epoch, ...(owner ? [owner] : []), ...(entry ? [entry.signal] : [])]);
 		const result = mountEditor(
 			target,
 			{
@@ -98,8 +101,13 @@ export function useComposerEditor(
 					return { ...state, composing: root.composing.current || state.composing };
 				},
 			},
-			owner ? AbortSignal.any([root.signal, owner]) : root.signal,
-			owner,
+			signal,
+			epoch,
+			(error) => {
+				bound.dispose();
+				if (entry) entry.quarantine(error, "fallback");
+				else console.error(error);
+			},
 		);
 		if (result.status !== "mounted") throw new Error(`Composer editor attachment ${result.status}`);
 		let revision = root.state.current.controller.experimental_getSnapshot().revision;
@@ -115,8 +123,13 @@ export function useComposerEditor(
 				return synced;
 			},
 			dispose: () => {
+				signal.removeEventListener("abort", bound.dispose);
+				document.removeEventListener("selectionchange", selection);
+				if (root.binding.current === binding) {
+					root.binding.current = undefined;
+					root.composing.current = false;
+				}
 				result.mount.dispose();
-				if (root.binding.current === binding) root.binding.current = undefined;
 				if (attached.current === binding) attached.current = undefined;
 			},
 		};
@@ -128,17 +141,15 @@ export function useComposerEditor(
 		};
 		attached.current = binding;
 		root.binding.current = binding;
+		const selection = () => binding.report();
+		document.addEventListener("selectionchange", selection);
+		signal.addEventListener("abort", bound.dispose, { once: true });
 		setHandle(bound);
 		if (!root.hadEditor || root.state.current.controller.experimental_getSnapshot().focused)
 			root.state.current.controller.experimental_focus();
 		root.hadEditor = true;
-		const selection = () => binding.report();
-		document.addEventListener("selectionchange", selection);
-		return () => {
-			document.removeEventListener("selectionchange", selection);
-			bound.dispose();
-		};
-	}, [adapter, root, key, owner]);
+		return bound.dispose;
+	}, [adapter, root, key, epoch, entry, owner]);
 	useLayoutEffect(() => {
 		attached.current?.handle.experimental_sync();
 	}, [draft.revision, root]);
@@ -262,7 +273,8 @@ export function ComposerRoot(props: experimental_ComposerProps) {
 		if (fromEditor(event.target)) root.binding.current?.report();
 	};
 	const builtIn = fallback ? <SurfaceEntry entry={fallback} context={context} /> : null;
-	const active = committed ?? selected;
+	const retained = committed && !committed.signal.aborted && desktopExtensions.getSnapshot().includes(committed);
+	const active = retained ? committed : selected;
 	const pending = boot.grace && !!preferred && preferred !== "builtin.composer/default" && selected?.id !== preferred;
 	const deferred = !!draft.composing && active !== selected;
 	return (

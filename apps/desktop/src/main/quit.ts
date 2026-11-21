@@ -11,17 +11,26 @@ type ClosableWindow = {
 	once(event: "closed", listener: () => void): unknown;
 };
 
-/** Close every window, destroying those that have not closed within `milliseconds`; resolves when all are gone. */
+/** Close every window, destroying those that have not closed within `milliseconds`; both graceful and forced close waits are bounded. */
 export async function closeAllWithin(windows: readonly ClosableWindow[], milliseconds: number): Promise<void> {
 	const open = windows.filter((window) => !window.isDestroyed());
 	const closed = open.map((window) => new Promise<void>((resolve) => window.once("closed", resolve)));
 	for (const window of open) window.close();
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	const deadline = new Promise<void>((resolve) => {
-		timer = setTimeout(resolve, milliseconds);
-	});
-	await Promise.race([Promise.all(closed), deadline]);
-	clearTimeout(timer);
+	const allClosed = Promise.all(closed);
+	const wait = async (duration: number) => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			await Promise.race([
+				allClosed,
+				new Promise<void>((resolve) => {
+					timer = setTimeout(resolve, duration);
+				}),
+			]);
+		} finally {
+			clearTimeout(timer);
+		}
+	};
+	await wait(milliseconds);
 	for (const window of open) if (!window.isDestroyed()) window.destroy();
-	await Promise.all(closed);
+	await wait(Math.min(250, milliseconds / 2));
 }

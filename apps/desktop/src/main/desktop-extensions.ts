@@ -94,13 +94,16 @@ export async function handleDesktopExtensions(
 			case "host/desktopExtension/set": {
 				const params = request.params as ParamsOf<"desktopExtension/set">;
 				if (params.approve) {
-					const snapshot = await server.request("desktopExtension/list", params.cwd ? { cwd: params.cwd } : {});
+					const review = { ...(params.cwd ? { cwd: params.cwd } : {}), review: params.owner };
+					const snapshot = await server.request("desktopExtension/list", review);
 					if (!checkList.Check(snapshot)) throw new Error("Malformed desktop extension list.");
 					const entry = snapshot.extensions.find((entry) => entry.owner === params.owner);
 					if (!entry || entry.source !== params.source)
 						throw new Error("The extension source changed. Review its source again.");
 					const kinds = entry.kinds;
 					if (!kinds?.length) throw new Error("The extension has no valid native entry kinds to review.");
+					const revision = entry.revision;
+					if (!revision) throw new Error(entry.error ?? "The extension has no validated revision to review.");
 					const risks = [
 						...(kinds.includes("frontend")
 							? [
@@ -117,13 +120,23 @@ export async function handleDesktopExtensions(
 						type: "warning",
 						title: "Trust native desktop code?",
 						message: `Trust ${entry.name}?`,
-						detail: `Source: ${entry.source}\nEntry kinds: ${kinds.map((kind) => `native ${kind}`).join(", ")}\n\n${risks}\n\nSession/plugin trust does not grant these permissions.\n\nTrusting development reloads also approves future edits at this source, but not new native entry kinds.`,
+						detail: `Source: ${entry.source}\nRevision: ${revision}\nEntry kinds: ${kinds.map((kind) => `native ${kind}`).join(", ")}\n\n${risks}\n\nSession/plugin trust does not grant these permissions.\n\nTrusting development reloads also approves future edits at this source, but not new native entry kinds.`,
 						buttons: ["Trust this revision", "Trust development reloads", "Cancel"],
 						defaultId: 2,
 						cancelId: 2,
 					});
 					if (response === 2) break;
-					result = await server.request("desktopExtension/set", { ...params, kinds, dev: response === 1 });
+					const current = await server.request("desktopExtension/list", review);
+					if (!checkList.Check(current)) throw new Error("Malformed desktop extension list.");
+					const latest = current.extensions.find((item) => item.owner === params.owner);
+					if (latest?.revision !== revision || latest.source !== entry.source)
+						throw new Error("The extension changed while its confirmation was open. Review it again.");
+					result = await server.request("desktopExtension/set", {
+						...params,
+						kinds,
+						revision,
+						dev: response === 1,
+					});
 				} else result = await server.request("desktopExtension/set", params);
 				break;
 			}

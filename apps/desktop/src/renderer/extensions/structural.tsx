@@ -55,7 +55,7 @@ export function StructuralSurface({ surface, builtinOnly }: { surface: ProviderS
 		builtinOnly || mounting.includes(surface)
 			? undefined
 			: (preferences.window[surface] ?? preferences.app[surface] ?? boot.providers[surface]);
-	const selected = desktopExtensions.resolveProvider(surface, builtin, preferred, context);
+	const selected = desktopExtensions.resolveProvider(surface, builtin, preferred, context, builtinOnly);
 	const pending = boot.grace && !!preferred && preferred !== builtin && selected?.id !== preferred;
 	return (
 		<Mounting.Provider value={[...mounting, surface]}>
@@ -66,6 +66,7 @@ export function StructuralSurface({ surface, builtinOnly }: { surface: ProviderS
 				preferred={preferred}
 				context={context}
 				pending={pending}
+				builtinOnly={builtinOnly}
 			/>
 			{surface === "home" && selected?.id !== builtin && !pending ? (
 				<div data-kc-owner="host.trust" className="absolute top-16 right-8 left-8 z-20">

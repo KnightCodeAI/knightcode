@@ -7,8 +7,9 @@ description: Use when the user asks to customize KnightCode Desktop UI or diagno
 
 Read `../desktop-extensions.md` first. Read `../desktop-api.md` and
 `../desktop-sdk.d.ts` for the installed API, not APIs from a different release.
-Only feedback contributions/providers and palette commands are available today.
-Tell the user when a requested surface is not yet supported.
+The preview supports commands, slots and providers, settings, composer and
+workspace controls, and coordinated backends. Check the installed guide and
+SDK before promising a specific surface or capability.
 
 ## Authoring loop
 

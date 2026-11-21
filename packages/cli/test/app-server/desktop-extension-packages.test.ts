@@ -111,7 +111,7 @@ async function connect(root: string, agentDir: string) {
 			method: "version",
 			args: null,
 		});
-	const entry = async () => (await client.request("desktopExtension/list", {})).extensions[0]!;
+	const entry = async (review?: string) => (await client.request("desktopExtension/list", { review })).extensions[0]!;
 	const starts = () => (existsSync(join(root, "starts.txt")) ? readFileSync(join(root, "starts.txt"), "utf8") : "");
 	const restart = async () => {
 		await ctx.dispose();
@@ -129,6 +129,7 @@ it("an npm update retires the old revision in every window and activates the new
 		owner: first.owner,
 		source: first.source,
 		approve: true,
+		revision: (await app.entry(first.owner)).revision,
 		kinds: ["frontend", "backend"],
 		enabled: true,
 	});
@@ -146,6 +147,7 @@ it("an npm update retires the old revision in every window and activates the new
 		owner: updated.owner,
 		source: updated.source,
 		approve: true,
+		revision: (await app.entry(updated.owner)).revision,
 		kinds: ["frontend", "backend"],
 	});
 	await vi.waitFor(() => expect(app.bindings.get(1)?.revision).not.toBe(old.revision));
@@ -167,6 +169,7 @@ it("an installed version whose desktop range excludes the app is refused whole, 
 		owner: first.owner,
 		source: first.source,
 		approve: true,
+		revision: (await app.entry(first.owner)).revision,
 		kinds: ["frontend", "backend"],
 		dev: true,
 		enabled: true,

@@ -145,6 +145,8 @@ const requestParams: Record<string, unknown> = {
 		owner: "external-example",
 		source: "/extensions/example",
 		approve: true,
+		revision: desktopBinding.revision,
+		kinds: ["frontend"],
 		enabled: true,
 		dev: false,
 	},

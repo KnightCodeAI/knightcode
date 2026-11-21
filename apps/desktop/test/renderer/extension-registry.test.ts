@@ -3,8 +3,113 @@ import {
 	type experimental_CommandContext,
 	type experimental_DesktopApp,
 } from "@knightcodeai/cli/desktop";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { SurfaceHost } from "../../src/renderer/extensions/surface.tsx";
 import { expect, test, vi } from "vitest";
 import { ExtensionRegistry } from "../../src/renderer/extensions/registry.ts";
+
+test("an unselected throwing provider is quarantined before diagnostics can reenter selection", async () => {
+	const context = { sidebarOpen: false };
+	const error = new Error("availability failed");
+	const report = vi.fn(() => registry.resolveProvider("layout", "builtin.layout/default", undefined, context));
+	const registry = new ExtensionRegistry(report);
+	const available = vi.fn(() => {
+		throw error;
+	});
+	registry
+		.prepare(
+			"external",
+			defineDesktopExtension((app) => {
+				app.experimental_registerProvider({
+					id: "unselected",
+					surface: "layout",
+					experimental_available: available,
+					experimental_render: () => null,
+				});
+			}),
+			"reviewed-revision",
+		)
+		.commit();
+	const declaration = registry.getSnapshot()[0]!;
+	registry.resolveProvider("layout", "builtin.layout/default", undefined, context);
+	await Promise.resolve();
+	expect(available).toHaveBeenCalledOnce();
+	expect(report).toHaveBeenCalledExactlyOnceWith("external", error, "reviewed-revision");
+	expect(registry.getSnapshot()).not.toContain(declaration);
+	expect(declaration.signal.aborted).toBe(true);
+});
+
+test("conditional hides use the current command context and never become startup hints", () => {
+	const registry = new ExtensionRegistry();
+	registry
+		.prepare(
+			"external",
+			defineDesktopExtension((app) => {
+				app.experimental_hideNavigation({
+					id: "home",
+					target: "home",
+					experimental_available: (context) => !!context.thread,
+				});
+			}),
+			"reviewed-revision",
+		)
+		.commit();
+	expect(registry.hiddenNavigation({ sidebarOpen: false })).toEqual([]);
+	expect(registry.hiddenNavigation({ sidebarOpen: false, thread: { id: "t", cwd: "/repo" } })).toMatchObject([
+		{ target: "home" },
+	]);
+	expect(registry.hiddenNavigation()).toEqual([]);
+});
+
+test.each(["layout", "settings", "settingsNav"] as const)(
+	"recovery mounts only built-in %s contributions",
+	(surface) => {
+		const registry = new ExtensionRegistry();
+		const render = vi.fn(() => null);
+		const available = vi.fn(() => true);
+		registry.register(
+			"builtin.recovery",
+			defineDesktopExtension((app) => {
+				app.experimental_registerProvider({
+					id: "default",
+					surface,
+					experimental_render: () => createElement("b", null, "Recovery"),
+				});
+			}),
+		);
+		registry.register(
+			"external",
+			defineDesktopExtension((app) => {
+				app.experimental_registerProvider({
+					id: "favorite",
+					surface,
+					experimental_available: available,
+					experimental_render: render,
+				});
+				app.experimental_registerSlot({
+					id: "slot",
+					surface,
+					experimental_available: available,
+					experimental_render: render,
+				});
+			}),
+		);
+		const html = renderToStaticMarkup(
+			createElement(SurfaceHost, {
+				registry,
+				surface,
+				builtin: "builtin.recovery/default",
+				preferred: "external/favorite",
+				context: { sidebarOpen: false },
+				builtinOnly: true,
+			}),
+		);
+		expect(html).toContain("Recovery");
+		expect(render).not.toHaveBeenCalled();
+		expect(available).not.toHaveBeenCalled();
+	},
+);
 
 test("a prepared revision stays inert until commit and a stale disposer cannot remove its replacement", () => {
 	const registry = new ExtensionRegistry();

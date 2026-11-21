@@ -57,8 +57,8 @@ export class DesktopExtensionManager {
 		this.appVersion = options.appVersion;
 	}
 
-	async list(cwd?: string): Promise<ResultOf<"desktopExtension/list">> {
-		return (await this.inventory(cwd)).snapshot;
+	async list(cwd?: string, reviewOwner?: string): Promise<ResultOf<"desktopExtension/list">> {
+		return (await this.inventory(cwd, reviewOwner)).snapshot;
 	}
 
 	/** The user's preview switch, kept in the agent directory beside consent; never in repository settings. */
@@ -83,7 +83,7 @@ export class DesktopExtensionManager {
 		renameSync(temporary, target);
 	}
 
-	private async inventory(cwd?: string) {
+	private async inventory(cwd?: string, reviewOwner?: string) {
 		const consents = this.readConsents();
 		// Off works like safe mode for execution, but keeps the inventory and consent visible for management.
 		const preview = this.preview();
@@ -111,20 +111,23 @@ export class DesktopExtensionManager {
 				diagnostics: this.diagnostics.get(entry.owner) ?? [],
 			};
 			if (entry.error) info.error = entry.error;
-			else if (approved && record.enabled && runs) {
+			else if (reviewOwner === entry.owner || (reviewOwner === undefined && approved && record.enabled && runs)) {
 				try {
 					const artifact = await stageDesktopRevision(entry.source, join(this.agent, "desktop-artifacts"), entry.owner);
+					// A confirmation must pin this hash. Staging it does not admit the package.
 					info.revision = artifact.revision;
 					info.kinds = artifact.kinds;
-					if (!artifact.kinds.every((kind) => record.kinds.includes(kind))) {
-						info.approved = info.enabled = info.dev = false;
-						info.error = "Native entry kinds changed. Review and grant native consent again.";
-					} else if (!record.dev && artifact.revision !== record.revision)
-						info.error =
-							"Source changed. Review and grant native consent again, or explicitly allow development reloads.";
-					else {
-						candidates.set(entry.owner, artifact);
-						info.artifact = artifact;
+					if (reviewOwner === undefined && approved && record.enabled && runs) {
+						if (!artifact.kinds.every((kind) => record.kinds.includes(kind))) {
+							info.approved = info.enabled = info.dev = false;
+							info.error = "Native entry kinds changed. Review and grant native consent again.";
+						} else if (!record.dev && artifact.revision !== record.revision)
+							info.error =
+								"Source changed. Review and grant native consent again, or explicitly allow development reloads.";
+						else {
+							candidates.set(entry.owner, artifact);
+							info.artifact = artifact;
+						}
 					}
 				} catch (error) {
 					info.error = error instanceof Error ? error.message : String(error);
@@ -169,6 +172,7 @@ export class DesktopExtensionManager {
 		if (params.approve) {
 			if (params.source !== entry.source) throw new Error("Desktop extension source changed; review its source again.");
 			if (entry.error) throw new Error(entry.error);
+			if (params.revision === undefined) throw new Error("Native approval requires the reviewed revision.");
 			artifact = await stageDesktopRevision(entry.source, join(this.agent, "desktop-artifacts"), entry.owner);
 			if (
 				!params.kinds ||
@@ -176,6 +180,8 @@ export class DesktopExtensionManager {
 				!artifact.kinds.every((kind) => params.kinds!.includes(kind))
 			)
 				throw new Error("Native entry kinds changed or were not reviewed. Review and grant native consent again.");
+			if (params.revision !== artifact.revision)
+				throw new Error("The extension changed while its confirmation was open. Review it again.");
 		}
 		const records = this.readConsents();
 		const previous = records[entry.owner];

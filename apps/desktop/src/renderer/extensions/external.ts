@@ -38,6 +38,7 @@ const callbacks = new Map<string, (extension: unknown) => void>();
 let activeLoader: FrontendExtensions | undefined;
 const listeners = new Set<() => void>();
 let failures: ReadonlyMap<string, string> = new Map();
+const lastDiagnostic = new Map<string, string>();
 const windowKey = `knightcode.desktop.providers.window.${window.knightcode?.windowId ?? 0}`;
 const providerCheck = Compile(DesktopProviderPreferences);
 let providers: DesktopProviderPreferences = { app: startupLayout.getSnapshot().providers, window: {} };
@@ -79,6 +80,9 @@ export function reportExternal(
 	message: string,
 	binding?: DesktopActivationBinding,
 ): void {
+	const diagnostic = JSON.stringify([revision, phase, message, binding?.epoch, binding?.mount]);
+	if (lastDiagnostic.get(owner) === diagnostic) return;
+	lastDiagnostic.set(owner, diagnostic);
 	if (binding && phase === "render")
 		queueMicrotask(() => {
 			activeLoader?.revoke(owner, binding);
@@ -90,8 +94,10 @@ export function reportExternal(
 		next.set(owner, message);
 		startupLayout.invalidateOwner(owner);
 	}
-	failures = next;
-	for (const listener of listeners) listener();
+	if (next.get(owner) !== failures.get(owner)) {
+		failures = next;
+		for (const listener of listeners) listener();
+	}
 	void client
 		.host("host/desktopExtension/diagnostic", {
 			owner,
@@ -158,6 +164,8 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 			providers = next.providers;
 			startupLayout.reconcile(next.providers.app, next.extensions);
 			rememberProviders();
+			for (const owner of lastDiagnostic.keys())
+				if (!next.extensions.some((entry) => entry.owner === owner && entry.enabled)) lastDiagnostic.delete(owner);
 			failures = new Map(
 				[...failures].filter(([owner]) => next.extensions.some((entry) => entry.owner === owner && entry.enabled)),
 			);

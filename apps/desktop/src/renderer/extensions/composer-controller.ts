@@ -14,6 +14,16 @@ interface ActiveEditor {
 	adapter: experimental_EditorAdapter;
 	revision: number;
 	baseText: string;
+	fail(error: unknown): void;
+}
+
+/** DOM events and imperative commands run outside the contribution's React error boundary. */
+function invoke<T>(mount: ActiveEditor, run: (adapter: experimental_EditorAdapter) => T): { value: T } | undefined {
+	try {
+		return { value: run(mount.adapter) };
+	} catch (error) {
+		mount.fail(error);
+	}
 }
 
 interface EditorSession {
@@ -29,7 +39,9 @@ export function whenEditorsIdle(owner: AbortSignal, transaction: AbortSignal): P
 	const signal = AbortSignal.any([owner, transaction]);
 	const composing = () =>
 		[...sessions.values()].some(
-			(session) => session.mount?.owner === owner && session.mount.adapter.experimental_read().composing,
+			(session) =>
+				session.mount?.owner === owner &&
+				invoke(session.mount, (adapter) => adapter.experimental_read())?.value.composing,
 		);
 	if (signal.aborted) return Promise.reject(new Error("Editor readiness revoked."));
 	if (!composing()) return Promise.resolve();
@@ -100,14 +112,18 @@ export function composerController(
 ): experimental_ComposerController {
 	const key = composerKey(target);
 	const snapshot = () => composerDraftOf(getState(), key);
-	const ready = (): { status: "ready"; mount: ActiveEditor } | experimental_EditorResult => {
+	const ready = ():
+		| { status: "ready"; mount: ActiveEditor; read: ReturnType<experimental_EditorAdapter["experimental_read"]> }
+		| experimental_EditorResult => {
 		if (signal.aborted || !admitted()) return { status: "unavailable" };
 		const session = sessions.get(key);
 		if (!session?.mount) return { status: "unavailable" };
-		if (session.mount.adapter.experimental_read().composing) return { status: "busy" };
+		const read = invoke(session.mount, (adapter) => adapter.experimental_read());
+		if (!read) return { status: "unavailable" };
+		if (read.value.composing) return { status: "busy" };
 		if (session.locks.size) return { status: "locked" };
 		if (session.mount.revision !== snapshot().revision) return { status: "stale", revision: snapshot().revision };
-		return { status: "ready", mount: session.mount };
+		return { status: "ready", mount: session.mount, read: read.value };
 	};
 	const apply = (range: experimental_EditorSelection, text: string, revision: number): experimental_EditorResult => {
 		const active = ready();
@@ -119,8 +135,9 @@ export function composerController(
 		const next = before.text.slice(0, range.start) + inserted + before.text.slice(range.end);
 		const pos = range.start + inserted.length;
 		const selection: experimental_EditorSelection = { start: pos, end: pos, direction: "none" };
+		if (!invoke(active.mount, (adapter) => adapter.experimental_apply({ text: next, selection })))
+			return { status: "unavailable" };
 		setComposerDraft(key, (d) => ({ ...d, text: next, selection }));
-		active.mount.adapter.experimental_apply({ text: next, selection });
 		active.mount.revision = snapshot().revision;
 		active.mount.baseText = next;
 		return { status: "applied", revision: active.mount.revision };
@@ -131,8 +148,9 @@ export function composerController(
 		const draft = snapshot();
 		if (draft.revision !== revision) return { status: "stale", revision: draft.revision };
 		if (!validRange(range, draft.text)) return { status: "unavailable" };
+		if (!invoke(active.mount, (adapter) => adapter.experimental_apply({ text: draft.text, selection: range })))
+			return { status: "unavailable" };
 		setComposerDraft(key, (d) => ({ ...d, selection: range }));
-		active.mount.adapter.experimental_apply({ text: draft.text, selection: range });
 		return { status: "applied", revision };
 	};
 	return {
@@ -157,18 +175,22 @@ export function composerController(
 		experimental_insert: (text, revision) => {
 			const active = ready();
 			if (active.status !== "ready") return active;
-			const selection = active.mount.adapter.experimental_read().selection;
+			const selection = active.read.selection;
 			return selection ? apply(selection, text, revision) : { status: "unavailable" };
 		},
 		experimental_select: select,
 		experimental_focus: () => {
 			const active = ready();
 			if (active.status !== "ready") return active;
-			const adapter = active.mount.adapter;
-			const selection = adapter.experimental_read().selection;
+			const selection = active.read.selection;
 			if (!selection) return { status: "unavailable" };
-			adapter.experimental_focus();
-			adapter.experimental_apply({ text: snapshot().text, selection });
+			if (
+				!invoke(active.mount, (adapter) => {
+					adapter.experimental_focus();
+					adapter.experimental_apply({ text: snapshot().text, selection });
+				})
+			)
+				return { status: "unavailable" };
 			setComposerDraft(key, (d) => ({ ...d, selection, focused: true }));
 			return { status: "applied", revision: snapshot().revision };
 		},
@@ -178,13 +200,16 @@ export function composerController(
 			const draft = snapshot();
 			const result = select({ start: draft.text.length, end: draft.text.length, direction: "none" }, draft.revision);
 			if (result.status === "applied") {
-				active.mount.adapter.experimental_focus();
+				if (!invoke(active.mount, (adapter) => adapter.experimental_focus())) return { status: "unavailable" };
 				setComposerDraft(key, (d) => ({ ...d, focused: true }));
 			}
 			return result;
 		},
-		experimental_caretAnchor: () =>
-			signal.aborted || !admitted() ? undefined : sessions.get(key)?.mount?.adapter.experimental_caretAnchor(),
+		experimental_caretAnchor: () => {
+			const mount = sessions.get(key)?.mount;
+			if (mount && !signal.aborted && admitted())
+				return invoke(mount, (adapter) => adapter.experimental_caretAnchor())?.value;
+		},
 		experimental_lock: (owner) => {
 			if (signal.aborted || owner.aborted || !admitted()) return { dispose() {} };
 			const session = sessions.get(key) ?? { locks: new Set<object>() };
@@ -212,13 +237,25 @@ export function mountEditor(
 	adapter: experimental_EditorAdapter,
 	signal: AbortSignal,
 	owner: AbortSignal = signal,
+	onError: (error: unknown) => void = (error) => console.error(error),
 ): experimental_EditorAttachment {
 	if (signal.aborted) return { status: "unavailable" };
 	const key = composerKey(target);
 	const session = sessions.get(key) ?? { locks: new Set<object>() };
-	if (session.mount?.adapter.experimental_read().composing) return { status: "busy" };
+	const previous = session.mount;
+	if (previous && invoke(previous, (adapter) => adapter.experimental_read())?.value.composing)
+		return { status: "busy" };
 	const initialDraft = composerDraftOf(getState(), key);
-	const mount: ActiveEditor = { owner, adapter, revision: initialDraft.revision, baseText: initialDraft.text };
+	const mount: ActiveEditor = {
+		owner,
+		adapter,
+		revision: initialDraft.revision,
+		baseText: initialDraft.text,
+		fail(error) {
+			dispose();
+			onError(error);
+		},
+	};
 	session.mount = mount;
 	sessions.set(key, session);
 	const dispose = () => {
@@ -255,9 +292,12 @@ export function mountEditor(
 		mount: {
 			experimental_sync: () => {
 				if (sessions.get(key)?.mount !== mount) return { status: "unavailable" };
-				if (adapter.experimental_read().composing) return { status: "busy" };
+				const read = invoke(mount, (adapter) => adapter.experimental_read());
+				if (!read) return { status: "unavailable" };
+				if (read.value.composing) return { status: "busy" };
 				const latest = composerDraftOf(getState(), key);
-				adapter.experimental_apply({ text: latest.text, selection: latest.selection });
+				if (!invoke(mount, (adapter) => adapter.experimental_apply({ text: latest.text, selection: latest.selection })))
+					return { status: "unavailable" };
 				mount.revision = latest.revision;
 				mount.baseText = latest.text;
 				return { status: "applied", revision: latest.revision };
@@ -268,11 +308,17 @@ export function mountEditor(
 				// Native typing may merge attachment changes, but never a different canonical text or an unapplied revision.
 				if (revision !== mount.revision || (before.revision !== revision && before.text !== mount.baseText))
 					return { status: "stale", revision: before.revision };
-				const state = adapter.experimental_read();
+				const read = invoke(mount, (adapter) => adapter.experimental_read());
+				if (!read) return { status: "unavailable" };
+				const state = read.value;
 				if (session.locks.size) {
 					setComposerDraft(key, (d) => ({ ...d, focused: state.focused, composing: state.composing }));
 					editorActivity();
-					if (!state.composing) adapter.experimental_apply({ text: before.text, selection: before.selection });
+					if (
+						!state.composing &&
+						!invoke(mount, (adapter) => adapter.experimental_apply({ text: before.text, selection: before.selection }))
+					)
+						return { status: "unavailable" };
 					return { status: "locked" };
 				}
 				if (state.selection && !validRange(state.selection, state.text)) return { status: "unavailable" };

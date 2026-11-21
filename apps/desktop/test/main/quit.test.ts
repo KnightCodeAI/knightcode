@@ -61,6 +61,20 @@ test("a wedged window is destroyed after the deadline, a responsive one is not f
 	vi.useRealTimers();
 });
 
+test("quit is bounded even when destroy does not emit closed", async () => {
+	vi.useFakeTimers();
+	try {
+		const wedged = fakeWindow(false);
+		wedged.destroy.mockImplementation(() => {});
+		const done = closeAllWithin([wedged], 3000);
+		await vi.advanceTimersByTimeAsync(3250);
+		expect(wedged.destroy).toHaveBeenCalledOnce();
+		await done;
+	} finally {
+		vi.useRealTimers();
+	}
+});
+
 test("already destroyed windows are skipped", async () => {
 	const gone = fakeWindow(true);
 	gone.destroy();

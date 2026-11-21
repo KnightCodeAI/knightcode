@@ -26,6 +26,7 @@ export type Registration = {
 	activation?: FrontendActivation;
 	sequence: number;
 	signal: AbortSignal;
+	quarantine(error: unknown, recovery?: "fallback"): void;
 	reportError(error: unknown, recovery?: "fallback"): void;
 } & (
 	| { kind: "command"; contribution: experimental_Command }
@@ -45,6 +46,7 @@ export type ThemePresetRegistration = Extract<Registration, { kind: "themePreset
 
 export class ExtensionRegistry {
 	private entries: readonly Registration[] = [];
+	private quarantined = new WeakSet<Registration>();
 	private owners = new Map<string, () => void>();
 	private preparing = new Set<string>();
 	private listeners = new Set<() => void>();
@@ -124,6 +126,17 @@ export class ExtensionRegistry {
 		const add = (entry: Registration): experimental_Disposable => {
 			if (phase !== "preparing") throw new Error("The registration set is closed.");
 			staged.push(entry);
+			entry.quarantine = (error, recovery) => {
+				if (this.quarantined.has(entry) || entry.signal.aborted) return;
+				this.quarantined.add(entry);
+				// Availability can run during render. Fence it immediately, then notify outside render.
+				queueMicrotask(() => {
+					entry.reportError(error, recovery);
+					this.publish(this.entries.filter((other) => other !== entry));
+					signals.get(entry.signal)?.abort();
+					signals.delete(entry.signal);
+				});
+			};
 			let disposed = false;
 			return {
 				dispose: () => {
@@ -150,6 +163,7 @@ export class ExtensionRegistry {
 				activation,
 				sequence: this.sequence++,
 				signal,
+				quarantine: (_error: unknown, _recovery?: "fallback") => {},
 				reportError: (error: unknown, recovery?: "fallback") => {
 					if (phase !== "published" || signal.aborted) return;
 					// A ready host-owned fallback is not a failed activation; preserve S5 sibling controls and their epoch.
@@ -298,12 +312,21 @@ export class ExtensionRegistry {
 	}
 
 	isAdmitted(entry: Registration): boolean {
-		return this.entries.includes(entry) && !entry.signal.aborted && (entry.activation?.admitted() ?? true);
+		return (
+			this.entries.includes(entry) &&
+			!this.quarantined.has(entry) &&
+			!entry.signal.aborted &&
+			(entry.activation?.admitted() ?? true)
+		);
 	}
 
-	hiddenNavigation(): { owner: string; revision?: string; target: "home" | "profile" }[] {
+	hiddenNavigation(
+		context?: experimental_CommandContext,
+	): { owner: string; revision?: string; target: "home" | "profile" }[] {
 		return this.entries.flatMap((entry) =>
-			entry.kind === "navigationVisibility"
+			entry.kind === "navigationVisibility" &&
+			this.isAdmitted(entry) &&
+			(context ? this.available(entry, context) : !entry.contribution.experimental_available)
 				? [{ owner: entry.owner, revision: entry.revision, target: entry.contribution.target }]
 				: [],
 		);
@@ -346,10 +369,17 @@ export class ExtensionRegistry {
 		}
 	}
 
-	slots(surface: experimental_Surface, context: experimental_CommandContext): SurfaceRegistration[] {
+	slots(
+		surface: experimental_Surface,
+		context: experimental_CommandContext,
+		builtinOnly = false,
+	): SurfaceRegistration[] {
 		return this.entries.filter(
 			(entry): entry is SurfaceRegistration =>
-				entry.kind === "slot" && entry.contribution.surface === surface && this.available(entry, context),
+				entry.kind === "slot" &&
+				entry.contribution.surface === surface &&
+				(!builtinOnly || entry.owner.startsWith("builtin.")) &&
+				this.available(entry, context),
 		);
 	}
 
@@ -359,16 +389,20 @@ export class ExtensionRegistry {
 		builtin: string,
 		preferred: string | undefined,
 		context: experimental_CommandContext,
+		builtinOnly = false,
 	): SurfaceRegistration | undefined {
 		const providers = this.entries.filter(
 			(entry): entry is SurfaceRegistration =>
-				entry.kind === "provider" && entry.contribution.surface === surface && this.available(entry, context),
+				entry.kind === "provider" &&
+				entry.contribution.surface === surface &&
+				(!builtinOnly || entry.owner.startsWith("builtin.")) &&
+				this.available(entry, context),
 		);
 		return providers.find((entry) => entry.id === preferred) ?? providers.find((entry) => entry.id === builtin);
 	}
 
 	private available(entry: Registration, context: experimental_CommandContext): boolean {
-		if (entry.signal.aborted) return false;
+		if (entry.signal.aborted || this.quarantined.has(entry)) return false;
 		try {
 			return (
 				(entry.kind === "fileOpener" || entry.kind === "themePreset"
@@ -376,7 +410,7 @@ export class ExtensionRegistry {
 					: entry.contribution.experimental_available?.(context)) ?? true
 			);
 		} catch (error) {
-			this.report(entry.owner, error);
+			entry.quarantine(error);
 			return false;
 		}
 	}

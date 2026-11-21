@@ -1,6 +1,21 @@
+import type { EffectCallback } from "react";
 import type { experimental_Operation } from "@knightcodeai/cli/desktop";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const hooks = vi.hoisted(() => ({
+	effects: [] as { effect: EffectCallback; deps: readonly unknown[] }[],
+	updates: vi.fn(),
+	admissionChanged: undefined as (() => void) | undefined,
+}));
+vi.mock("react", async (original) => ({
+	...(await original<object>()),
+	useEffect: (effect: EffectCallback, deps: readonly unknown[]) => hooks.effects.push({ effect, deps }),
+	useState: () => [undefined, hooks.updates],
+	useSyncExternalStore: (subscribe: (listener: () => void) => () => void, read: () => unknown) => {
+		subscribe(() => hooks.admissionChanged?.());
+		return read();
+	},
+}));
 const fixture = vi.hoisted(() => ({
 	thread: { id: "A", cwd: "/A", projectCwd: "/A" },
 	request: vi.fn(),
@@ -25,13 +40,58 @@ vi.mock("../../src/renderer/store.ts", () => ({
 	toast: fixture.notify,
 	openThread() {},
 	refreshDiff() {},
-	useStore() {},
+	useStore: (read: (state: { server: { state: string }; diffVersion: Record<string, number> }) => unknown) =>
+		read({ server: { state: "ready" }, diffVersion: {} }),
 }));
 import { RequestError } from "../../src/renderer/client.ts";
 import { workspaceServices } from "../../src/renderer/extensions/workspace.ts";
 
 const target = { threadId: "A", cwd: "/A", projectCwd: "/A" };
+
+it("reissues Git reads whose replies arrive before activation readiness", async () => {
+	let ready = false;
+	let notify = () => {};
+	const activation = new AbortController();
+	const services = workspaceServices(
+		activation.signal,
+		() => ready,
+		(listener) => {
+			notify = listener;
+			return () => {};
+		},
+	);
+	fixture.request.mockResolvedValueOnce({ branch: "before-ready" }).mockResolvedValueOnce({ branch: "live" });
+	const render = () => {
+		hooks.effects.length = 0;
+		services.experimental_useGit(target, { status: true });
+		return hooks.effects[1]!;
+	};
+	const initial = render();
+	const cleanup = initial.effect();
+	await Promise.resolve();
+	expect(hooks.updates).not.toHaveBeenCalled();
+	let live: ReturnType<typeof render> | undefined;
+	hooks.admissionChanged = () => {
+		live = render();
+	};
+	ready = true;
+	notify();
+	expect(live?.deps).not.toEqual(initial.deps);
+	if (typeof cleanup === "function") cleanup();
+	const dispose = live?.effect();
+	await Promise.resolve();
+	expect(fixture.request.mock.calls).toEqual([
+		["git/status", { threadId: "A" }],
+		["git/status", { threadId: "A" }],
+	]);
+	const update = hooks.updates.mock.calls[0]?.[0] as (previous: undefined) => unknown;
+	expect(update(undefined)).toMatchObject({ values: { status: { branch: "live" } } });
+	if (typeof dispose === "function") dispose();
+});
 afterEach(() => {
+	hooks.effects.length = 0;
+	hooks.updates.mockReset();
+	hooks.admissionChanged = undefined;
 	fixture.request.mockReset();
 	fixture.notify.mockReset();
 	fixture.thread = { id: "A", cwd: "/A", projectCwd: "/A" };

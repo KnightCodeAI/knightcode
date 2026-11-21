@@ -14,7 +14,10 @@ const sameTarget = (a: Target, b: Target) =>
 export class DesktopOperationJournal {
 	private readonly latest = new Map<string, Operation[]>();
 	private readonly uncertain = new Map<string, Operation>();
-	private readonly pending = new Map<string, { target: Target; action?: Action }>();
+	private readonly pending = new Map<
+		string,
+		{ target: Target; action?: Action; operationId?: string; before: Operation[] }
+	>();
 
 	/** Renderer params are wire input; the app server remains the authority for admitting each action. */
 	intercept(
@@ -36,9 +39,10 @@ export class DesktopOperationJournal {
 	track(id: string, method: string, params: Record<string, unknown>): void {
 		if (method === "desktopOperation/start") {
 			const { target, action } = params as ParamsOf<"desktopOperation/start">;
-			this.pending.set(id, { target, action });
+			this.pending.set(id, { target, action, before: this.latest.get(target.threadId) ?? [] });
 		} else if (method === "desktopOperation/recover" && params.action === "retry") {
-			this.pending.set(id, { target: params.target as Target });
+			const { target, id: operationId } = params as ParamsOf<"desktopOperation/recover">;
+			this.pending.set(id, { target, operationId, before: this.latest.get(target.threadId) ?? [] });
 		}
 	}
 
@@ -79,18 +83,24 @@ export class DesktopOperationJournal {
 		for (const list of this.latest.values())
 			for (const operation of list)
 				if (operation.status === "running" || operation.status === "outcome-unknown") mark(operation);
-		for (const [id, { target, action }] of this.pending) {
-			if ([...this.uncertain.values()].some((op) => sameTarget(op.target, target))) continue;
-			const latest = this.latest.get(target.threadId)?.at(-1);
-			if (latest && sameTarget(latest.target, target)) {
-				mark(latest);
+		for (const [id, { target, action, operationId, before }] of this.pending) {
+			if (this.unknownAt(target)) continue;
+			const match = this.latest
+				.get(target.threadId)
+				?.find(
+					(op) =>
+						sameTarget(op.target, target) &&
+						(operationId ? op.id === operationId : op.kind === action?.kind && !before.some((old) => old.id === op.id)),
+				);
+			// A terminal observation can beat the reply. An older completion is not proof about a new request.
+			if (match?.status === "completed" && !before.some((old) => old.id === match.id && old.status === "completed"))
 				continue;
-			}
-			if (action)
+			if (operationId && match && match.status !== "completed") mark(match);
+			else
 				mark({
 					id: `unknown:${id}`,
 					target,
-					kind: action.kind,
+					kind: action?.kind ?? "unknown",
 					status: "outcome-unknown",
 					recovery: "reconcile",
 					outputs: {},

@@ -38,6 +38,9 @@ export class ContributionBoundary extends Component<
 
 const Ownership = createContext<Registration | undefined>(undefined);
 
+/** Read the contribution whose lifetime owns the current render. */
+export const useContributionOwner = () => useContext(Ownership);
+
 /** The nearest theme preview; undefined follows the window theme. */
 export type ThemeOverride = { theme: "light" | "dark"; tokens: Record<string, string> };
 const ThemeContext = createContext<ThemeOverride | undefined>(undefined);
@@ -206,6 +209,7 @@ export function SurfaceHost({
 	preferred,
 	context,
 	pending,
+	builtinOnly,
 }: {
 	registry: ExtensionRegistry;
 	surface: experimental_Surface;
@@ -213,6 +217,7 @@ export function SurfaceHost({
 	preferred?: string;
 	context: experimental_CommandContext;
 	pending?: boolean;
+	builtinOnly?: boolean;
 }) {
 	useSyncExternalStore(registry.subscribe, registry.getSnapshot, registry.getSnapshot);
 	if (pending)
@@ -231,8 +236,9 @@ export function SurfaceHost({
 				}
 			/>
 		);
-	const fallback = registry.resolveProvider(surface, builtin, undefined, context);
-	const selected = registry.resolveProvider(surface, builtin, preferred, context);
+	const fallback = registry.resolveProvider(surface, builtin, undefined, context, builtinOnly);
+	const selected =
+		builtinOnly || !preferred ? fallback : registry.resolveProvider(surface, builtin, preferred, context);
 	const unavailable = <div role="status">The built-in {surface} view is unavailable.</div>;
 	const builtInView = fallback ? (
 		<SurfaceEntry entry={fallback} context={context} fallback={unavailable} />
@@ -251,7 +257,7 @@ export function SurfaceHost({
 			) : (
 				unavailable
 			)}
-			{registry.slots(surface, context).map((entry) => (
+			{registry.slots(surface, context, builtinOnly).map((entry) => (
 				<SurfaceEntry key={entry.sequence} entry={entry} context={context} />
 			))}
 		</>

@@ -30,7 +30,15 @@ describe("desktop development directory watch", () => {
 		await new Promise((resolve) => setTimeout(resolve, 250));
 		expect(reloads).toBe(0);
 		const entry = (await manager.list()).extensions[0]!;
-		await manager.set({ owner: entry.owner, source, approve: true, kinds: ["frontend"], dev: true });
+		const reviewed = (await manager.list(undefined, entry.owner)).extensions[0]!;
+		await manager.set({
+			owner: entry.owner,
+			source,
+			approve: true,
+			kinds: ["frontend"],
+			revision: reviewed.revision,
+			dev: true,
+		});
 		watcher.update(await manager.list());
 		writeFileSync(join(source, "nested", "file.css"), ".notice {color:red}");
 		await expect.poll(() => reloads).toBe(1);
@@ -80,7 +88,16 @@ describe("desktop development directory watch", () => {
 		const manager = new DesktopExtensionManager(agent);
 		manager.setPreview(true);
 		const entry = (await manager.list()).extensions[0]!;
-		await manager.set({ owner: entry.owner, source, approve: true, kinds: ["frontend"], dev: true, enabled: true });
+		const reviewed = (await manager.list(undefined, entry.owner)).extensions[0]!;
+		await manager.set({
+			owner: entry.owner,
+			source,
+			approve: true,
+			kinds: ["frontend"],
+			revision: reviewed.revision,
+			dev: true,
+			enabled: true,
+		});
 		manager.setPreview(false);
 		let reloads = 0;
 		const watcher = new DesktopDevelopmentWatcher(() => {

@@ -47,6 +47,7 @@ import {
 } from "../store.ts";
 import { HomeSetup } from "./home-support.tsx";
 import { desktopExtensions } from "./runtime.ts";
+import { useCommandContext } from "./command-context.ts";
 import { startupLayout } from "./startup.ts";
 
 const EMPTY: string[] = [];
@@ -190,9 +191,10 @@ export const shellServices: experimental_ShellServices = {
 	experimental_useHiddenNavigation: () => {
 		useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot);
 		const cached = useSyncExternalStore(startupLayout.subscribe, startupLayout.getSnapshot);
+		const context = useCommandContext();
 		return [
 			...new Set([
-				...desktopExtensions.hiddenNavigation().map((entry) => entry.target),
+				...desktopExtensions.hiddenNavigation(context).map((entry) => entry.target),
 				...cached.hidden.map((entry) => entry.target),
 			]),
 		];

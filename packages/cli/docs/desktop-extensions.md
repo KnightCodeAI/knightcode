@@ -108,12 +108,17 @@ The native desktop section appears when a package is found. Its **Run native
 desktop extensions** switch is off by default: while off, no extension frontend
 or backend code runs, even an approved one, and reload and development watches
 do nothing. Turning it on asks for native confirmation; turning it off stops
-running extensions in every window without a restart. The choice is stored in
-the agent directory's `desktop-extension-preview.json`. **Trust frontend**
-opens a native confirmation showing the source and entry kind:
+external extensions in every window. If a backend cannot finish shutdown, the
+app server must restart before that package can run again. The choice is stored in
+the agent directory's `desktop-extension-preview.json`. Review can validate
+and stage an inert copy even while the preview is off. It does not load code
+or grant a serving lease. The native confirmation shows the source, revision,
+and entry kinds:
 
-- **Trust this revision** permits only the validated content revision. Source
-  changes require review again.
+- **Trust this revision** permits only the validated content revision staged
+  when the confirmation opened. If the package changes before you confirm,
+  approval is refused and nothing is trusted. A later source change requires
+  review again.
 - **Trust development reloads** also permits future edits at that source.
   A repository cannot grant itself this permission.
 
@@ -141,8 +146,8 @@ in the title bar), or launch the desktop executable with
 `--safe-mode`. Restarting still asks before interrupting running threads.
 A window that does not close within a few seconds is closed forcibly, so a
 wedged extension cannot block the restart.
-Safe-mode startup skips external frontend/backend execution and artifact staging. It does
-not revoke saved trust. A normal restart enables approved extensions again.
+Safe-mode startup does not stage or run extensions for execution. It does not
+revoke saved trust. A normal restart enables approved extensions again.
 
 ## Imports and lifecycle
 

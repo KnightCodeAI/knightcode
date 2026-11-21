@@ -766,6 +766,10 @@
 					"cwd": {
 						"type": "string",
 						"maxLength": 4096
+					},
+					"review": {
+						"type": "string",
+						"maxLength": 4096
 					}
 				},
 				"additionalProperties": false
@@ -1043,6 +1047,10 @@
 						"type": "boolean"
 					},
 					"source": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"revision": {
 						"type": "string",
 						"maxLength": 4096
 					}
@@ -7546,6 +7554,10 @@
 										{
 											"type": "string",
 											"const": "restore"
+										},
+										{
+											"type": "string",
+											"const": "unknown"
 										}
 									]
 								},
@@ -7978,6 +7990,10 @@
 									{
 										"type": "string",
 										"const": "restore"
+									},
+									{
+										"type": "string",
+										"const": "unknown"
 									}
 								]
 							},
@@ -8275,6 +8291,10 @@
 									{
 										"type": "string",
 										"const": "restore"
+									},
+									{
+										"type": "string",
+										"const": "unknown"
 									}
 								]
 							},
@@ -16218,6 +16238,10 @@
 									{
 										"type": "string",
 										"const": "restore"
+									},
+									{
+										"type": "string",
+										"const": "unknown"
 									}
 								]
 							},
