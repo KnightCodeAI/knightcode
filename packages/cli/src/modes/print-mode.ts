@@ -54,10 +54,8 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 
 	const registerSignalHandlers = (): void => {
 		// SIGINT too: the commands run detached, so Ctrl+C reaches only this process and they would outlive it.
-		const signals: NodeJS.Signals[] = ["SIGTERM", "SIGINT"];
-		if (process.platform !== "win32") {
-			signals.push("SIGHUP");
-		}
+		// SIGHUP on Windows is the console window or terminal tab closing.
+		const signals: NodeJS.Signals[] = ["SIGTERM", "SIGINT", "SIGHUP"];
 		const exitCodes: Partial<Record<NodeJS.Signals, number>> = { SIGHUP: 129, SIGINT: 130 };
 
 		for (const signal of signals) {
