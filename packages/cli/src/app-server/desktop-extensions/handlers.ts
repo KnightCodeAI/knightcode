@@ -65,6 +65,13 @@ export function desktopExtensionHandlers(ctx: AppServerContext): Handlers {
 		"desktopExtension/list": async ({ cwd }) => {
 			const status = await manager.list(cwd);
 			watcher.update(status);
+			// A removed package folder emits no watch event on Windows; retire what the inventory no longer finds.
+			if (runtime.outlives(status)) {
+				ctx.broadcast("desktopExtension/changed", {});
+				void runtime
+					.reconcile(cwd)
+					.catch((error: unknown) => process.stderr.write(`Desktop extension removal: ${String(error)}\n`));
+			}
 			return status;
 		},
 		"desktopExtension/set": async (params) => {

@@ -30,7 +30,7 @@ import {
 	toast,
 	useStore,
 } from "../store.ts";
-import { composerKey, mountEditor, mountComposerActions } from "./composer-controller.ts";
+import { composerKey, mountEditor, mountComposerActions, retainComposerLifetime } from "./composer-controller.ts";
 import { useComposerBehavior } from "./composer-behavior.tsx";
 import { desktopExtensions } from "./runtime.ts";
 import { externalState } from "./external.ts";
@@ -246,7 +246,8 @@ export function ComposerRoot(props: experimental_ComposerProps) {
 			).dispose,
 		[key, lifetime],
 	);
-	useLayoutEffect(() => () => lifetime.abort(), [lifetime]);
+	const activeLifetime = useRef<AbortController | undefined>(undefined);
+	useLayoutEffect(() => retainComposerLifetime(activeLifetime, lifetime), [lifetime]);
 	useBinding(
 		"desktop.turn.interrupt",
 		() => {

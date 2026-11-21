@@ -71,6 +71,23 @@ export function mountComposerActions(
 	return { dispose };
 }
 
+/**
+ * Layout-effect body for a composer root's lifetime. Abort is deferred one microtask so React's dev
+ * StrictMode cleanup + synchronous remount keeps the same live controller; unmount or replacement aborts.
+ */
+export function retainComposerLifetime(
+	active: { current: AbortController | undefined },
+	lifetime: AbortController,
+): () => void {
+	active.current = lifetime;
+	return () => {
+		if (active.current === lifetime) active.current = undefined;
+		queueMicrotask(() => {
+			if (active.current !== lifetime) lifetime.abort();
+		});
+	};
+}
+
 /** Use the same explicit draft identity as the host store's composer. */
 export const composerKey = (target: experimental_ComposerTarget): string =>
 	"threadId" in target ? `thread:${target.threadId}` : `new:${target.cwd ?? ""}`;

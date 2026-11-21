@@ -538,6 +538,29 @@ it("revokes only a failed publisher and refuses a closed window's late call", as
 	).toEqual({ status: "disconnected" });
 });
 
+// Windows fs.watch reports nothing when the watched source folder itself is renamed or deleted, so the next
+// inventory read is the first sign the package is gone.
+it("an inventory refresh that no longer finds a running source retires it in every window", async () => {
+	const { client, agentDir, bindings, starts } = await fixture();
+	const old = bindings.get(1)!;
+	const before = readFileSync(starts, "utf8");
+	rmSync(join(agentDir, "desktop-extensions", "example"), { recursive: true, force: true });
+	const list = await client.request("desktopExtension/list", {});
+	expect(list.extensions).toEqual([]);
+	await vi.waitFor(() => expect(bindings.size).toBe(0));
+	expect(
+		await client.request("desktopExtension/call", {
+			windowId: 1,
+			lifetime: "window-1",
+			binding: old,
+			requestId: 1,
+			method: "echo",
+			args: 3,
+		}),
+	).toEqual({ status: "disconnected" });
+	expect(readFileSync(starts, "utf8")).toBe(before);
+});
+
 it("turning the preview off retires the live backend in every window; on activates a fresh epoch", async () => {
 	const { client, bindings, starts } = await fixture();
 	const old = bindings.get(1)!;

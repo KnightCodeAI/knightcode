@@ -126,6 +126,7 @@ function appMenus(sidebarOpen: boolean, inThread: boolean): { label: string; ite
 				},
 				"-",
 				{ label: "Reload", run: () => runAppCommand("reload") },
+				{ label: "Restart without extensions", run: () => runAppCommand("restartSafe") },
 				{ label: "Developer Tools", run: () => runAppCommand("toggleDevTools") },
 			],
 		},

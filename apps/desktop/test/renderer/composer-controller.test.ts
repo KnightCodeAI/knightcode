@@ -433,3 +433,30 @@ describe("canonical composer editor transactions", () => {
 		mount.dispose();
 	});
 });
+import { retainComposerLifetime } from "../../src/renderer/extensions/composer-controller.ts";
+
+describe("composer root lifetime", () => {
+	const tick = () => new Promise<void>((resolve) => queueMicrotask(resolve));
+
+	test("survives a dev StrictMode cleanup and immediate remount", async () => {
+		const active = { current: undefined as AbortController | undefined };
+		const lifetime = new AbortController();
+		retainComposerLifetime(active, lifetime)();
+		retainComposerLifetime(active, lifetime);
+		await tick();
+		expect(lifetime.signal.aborted).toBe(false);
+	});
+
+	test("aborts on unmount and when a new target replaces it", async () => {
+		const active = { current: undefined as AbortController | undefined };
+		const first = new AbortController();
+		const second = new AbortController();
+		retainComposerLifetime(active, first)();
+		retainComposerLifetime(active, second);
+		await tick();
+		expect(first.signal.aborted).toBe(true);
+		retainComposerLifetime(active, second)();
+		await tick();
+		expect(second.signal.aborted).toBe(true);
+	});
+});

@@ -93,8 +93,9 @@ excludes the running app, is refused whole with a diagnostic such as
 "Requires KnightCode desktop >=0.2.0; this is 0.1.2". Neither its frontend nor
 its backend is staged, approved or loaded. If an earlier version is running,
 it stays live until you restart or remove it, like any failed update.
-`desktop-ext validate` checks both fields, but the app range only against a
-running desktop.
+`desktop-ext validate` checks `apiVersion`. It cannot check the `app` range,
+because it does not know which desktop will load the package; the running
+desktop checks it when it lists the package, and Settings shows the refusal.
 
 Installed packages update through `knightcode update`. A trust-this-revision
 approval does not follow an update: the new version shows "Source changed" until
@@ -118,7 +119,9 @@ opens a native confirmation showing the source and entry kind:
 
 Consent is stored in the agent directory's `desktop-extension-consent.json`,
 not in project settings. **Reload extensions** rereads configured sources and
-coordinates one revision/epoch decision across every open window. A failed
+coordinates one revision/epoch decision across every open window. Removing a
+package folder stops its frontend and backend the next time a window reads the
+inventory (opening Settings → Extensions & skills, or Reload extensions). A failed
 preparation retains the old matching frontend/CSS/backend pair everywhere. Disable and revoke
 trust take effect without ending threads or terminals. Development-approved
 sources are watched; other sources require an explicit reload and new consent
@@ -128,12 +131,16 @@ Installing or reloading a provider never selects it. **Feedback provider**
 sets the app default, stored in `desktop-state.json`. A separate window choice
 survives renderer reloads but ends when that window closes. Missing or failed
 providers fall back to the built-in without deleting the selected preference.
-The recovery notice offers management, switching back, and disabling the
-selected extension. That notice and its settings are host-owned.
+The recovery notice offers management, switching back, disabling the
+selected extension, and **Dismiss**, which hides it until another failure
+occurs. That notice and its settings are host-owned.
 
-To recover when the renderer cannot respond, use the native View menu's
-**Restart without extensions**, or launch the desktop executable with
+To recover when the renderer cannot respond, use the View menu's
+**Restart without extensions** (on Windows it is in the app's own View menu
+in the title bar), or launch the desktop executable with
 `--safe-mode`. Restarting still asks before interrupting running threads.
+A window that does not close within a few seconds is closed forcibly, so a
+wedged extension cannot block the restart.
 Safe-mode startup skips external frontend/backend execution and artifact staging. It does
 not revoke saved trust. A normal restart enables approved extensions again.
 
@@ -179,7 +186,10 @@ A stale callback cannot invoke a disposed command or publish late registrations.
 availability receive a captured window/thread context, and its action receives
 an abort signal. `experimental_registerSlot` adds an ordered feedback node.
 `experimental_registerProvider` offers a named feedback replacement, selected
-only by the user. IDs are owner/local; duplicate IDs reject the candidate set.
+only by the user. IDs are owner/local and must be unique across every
+registration kind: a slot and a command, or a panel tab and a settings section,
+cannot share an ID. A duplicate rejects the whole candidate set at activation;
+`validate` does not detect it.
 `defineDesktopExtension` defaults to API version 1; unsupported versions reject
 activation. `experimental_onDispose` cleanup is idempotent and continues after
 a throwing callback. Individual handles expose `dispose()`.

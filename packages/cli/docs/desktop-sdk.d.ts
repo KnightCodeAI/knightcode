@@ -440,7 +440,8 @@ export type experimental_WindowCommand =
 	| "toggleMaximize"
 	| "toggleFullScreen"
 	| "close"
-	| "focus";
+	| "focus"
+	| "restartSafe";
 
 export interface experimental_Controllers {
 	experimental_showNew(cwd?: string): void;

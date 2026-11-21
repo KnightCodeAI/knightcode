@@ -7,7 +7,7 @@ import { stageDesktopExtension } from "../app-server/desktop-extensions/artifact
 import { desktopControls } from "../app-server/desktop-extensions/control.ts";
 
 export const DESKTOP_EXT_HELP = `Usage: knightcode desktop-ext <command> [--json]
-  new <name>       Create ~/.knightcode/agent/desktop-extensions/<name>
+  new <name>       Create <agent dir>/desktop-extensions/<name> (default ~/.knightcode/agent)
   validate <dir>   Validate local TSX/ESM and CSS without executing setup
   reload           Request reload in every running desktop window
   status           Read consent, revisions and per-window diagnostics

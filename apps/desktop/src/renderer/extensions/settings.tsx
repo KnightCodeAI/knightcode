@@ -261,9 +261,14 @@ export function NativeExtensionsSettings({ cwd }: { cwd?: string }) {
 
 /** Fallback notices remain outside the replaceable feedback surface and keep recovery reachable. */
 export function NativeExtensionRecovery({ context }: { context: experimental_CommandContext }) {
-	const failures = useSyncExternalStore(externalState.subscribe, externalState.getFailures);
-	const preferences = useSyncExternalStore(externalState.subscribe, externalState.getProviders);
-	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot);
+	const failures = useSyncExternalStore(externalState.subscribe, externalState.getFailures, externalState.getFailures);
+	const preferences = useSyncExternalStore(
+		externalState.subscribe,
+		externalState.getProviders,
+		externalState.getProviders,
+	);
+	const dismissed = useSyncExternalStore(dismissal.subscribe, dismissal.get, dismissal.get);
+	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot, desktopExtensions.getSnapshot);
 	const chosen = Object.entries(STRUCTURAL_BUILTINS).flatMap(([surface, builtin]) => {
 		const preferred = preferences.window[surface] ?? preferences.app[surface];
 		return preferred &&
@@ -276,11 +281,16 @@ export function NativeExtensionRecovery({ context }: { context: experimental_Com
 	const preferred = chosen?.preferred;
 	const unavailable = !!chosen;
 	if (failures.size === 0 && !chosen) return null;
+	// Dismissal covers exactly what was showing; a new failure or provider fallback shows the notice again.
+	const shown = noticeKey(failures, chosen?.surface);
+	lastShown = shown;
+	if (dismissed === shown) return null;
 	return (
 		<aside
 			role="alert"
 			aria-label="Desktop extension recovery"
-			className="fixed top-14 right-4 z-50 flex max-w-sm flex-col gap-2 rounded-xl border border-line bg-surface p-4 text-sm shadow-lg"
+			// Below the title bar and the thread header row (56px), so header actions stay clickable.
+			className="fixed top-28 right-4 z-50 flex max-w-sm flex-col gap-2 rounded-xl border border-line bg-surface p-4 text-sm shadow-lg"
 		>
 			<p>
 				{unavailable
@@ -319,7 +329,34 @@ export function NativeExtensionRecovery({ context }: { context: experimental_Com
 						Disable extension
 					</Button>
 				) : null}
+				<Button variant="ghost" color="secondary" toolbar onClick={dismissRecovery}>
+					Dismiss
+				</Button>
 			</div>
 		</aside>
 	);
+}
+
+// What the notice last drew and what the user dismissed; both window-local, never persisted.
+let lastShown: string | undefined;
+let dismissedKey: string | undefined;
+const dismissalListeners = new Set<() => void>();
+const dismissal = {
+	subscribe: (listener: () => void) => {
+		dismissalListeners.add(listener);
+		return () => {
+			dismissalListeners.delete(listener);
+		};
+	},
+	get: () => dismissedKey,
+};
+
+/** Hide the recovery notice until the set of failures or the unavailable provider changes. */
+export function dismissRecovery(): void {
+	dismissedKey = lastShown;
+	for (const listener of dismissalListeners) listener();
+}
+
+function noticeKey(failures: ReadonlyMap<string, string>, surface: string | undefined): string {
+	return JSON.stringify([surface ?? null, [...failures].toSorted(([a], [b]) => a.localeCompare(b))]);
 }

@@ -154,6 +154,8 @@ export const APP_COMMANDS = [
 	"close",
 	/** Bring the window forward (a clicked notification). */
 	"focus",
+	/** Quit and relaunch with --safe-mode (View › Restart without extensions); main still asks over running threads. */
+	"restartSafe",
 ] as const;
 export type AppCommandName = (typeof APP_COMMANDS)[number];
 export const AppCommand = Type.Unsafe<AppCommandName>(Type.Union(APP_COMMANDS.map((c) => Type.Literal(c))));

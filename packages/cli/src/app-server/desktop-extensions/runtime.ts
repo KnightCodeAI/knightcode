@@ -6,6 +6,7 @@ import type {
 	DesktopBackendContracts,
 	DesktopExtensionPhase,
 	ParamsOf,
+	ResultOf,
 } from "@knightcode/app-server-protocol";
 import type { AppServer } from "../server.ts";
 import type { AppServerContext } from "../context.ts";
@@ -220,6 +221,12 @@ export class DesktopBackendRuntime {
 		const key = `${params.binding.owner}/${params.id}`;
 		const previous = peer?.subscriptions.get(key);
 		if (previous && sameBinding(previous.binding, params.binding)) peer!.subscriptions.delete(key);
+	}
+
+	/** Whether a live owner is missing from this inventory, as when its package folder was removed. */
+	outlives(status: ResultOf<"desktopExtension/list">): boolean {
+		const listed = new Set(status.extensions.map((entry) => entry.owner));
+		return [...this.owners.keys()].some((owner) => !listed.has(owner));
 	}
 
 	/** Host/process teardown clears authority immediately; shutdown still accounts for admitted backend work. */

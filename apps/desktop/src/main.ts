@@ -22,6 +22,7 @@ import {
 } from "electron";
 import { type HostEvent, type HostRequest, WINDOW_CHROME } from "./shared/host-protocol.ts";
 import { markQuitting, onWindowClose } from "./main/close.ts";
+import { closeAllWithin } from "./main/quit.ts";
 import { handleHost, openInService } from "./main/host.ts";
 import type { OpenIn } from "./main/open-in.ts";
 import { MCP_APP_SCHEME, McpApps } from "./main/mcp-apps.ts";
@@ -73,6 +74,14 @@ let serverState: { state: ServerState; message?: string } = { state: "starting" 
 let quitting = false;
 const safeMode = process.argv.includes("--safe-mode");
 let restartSafe = false;
+/** How long quitting waits for each window's graceful close before destroying a wedged renderer. */
+const QUIT_CLOSE_DEADLINE_MS = 3000;
+
+/** View › Restart without extensions: quit (asking over running threads), then relaunch with --safe-mode. */
+function restartSafeMode(): void {
+	restartSafe = true;
+	app.quit();
+}
 const extensionArtifacts = new ExtensionArtifacts(ORIGIN);
 
 /** host/window/role: the focused window, else the one focused last, acts for all; and what the others hold. */
@@ -184,6 +193,7 @@ function connectPort(id: number, open: OpenWindow): void {
 				role: () => roleOf(id),
 				updates,
 				installUpdate,
+				restartSafe: restartSafeMode,
 			}).then((response) => port1.postMessage(response));
 			return;
 		}
@@ -377,10 +387,7 @@ function buildMenu(): void {
 				{ role: "reload" },
 				{
 					label: "Restart without extensions",
-					click: () => {
-						restartSafe = true;
-						app.quit();
-					},
+					click: restartSafeMode,
 				},
 				...(app.isPackaged ? [] : [{ role: "toggleDevTools" as const }]),
 				{ type: "separator" },
@@ -531,10 +538,12 @@ if (squirrelEvent()) {
 		}
 		quitting = true;
 		markQuitting();
-		void server.stop().finally(() => {
+		void server.stop().finally(async () => {
 			terminals.killAll();
 			if (restartSafe)
 				app.relaunch({ args: [...process.argv.slice(1).filter((arg) => arg !== "--safe-mode"), "--safe-mode"] });
+			// A wedged renderer never answers the graceful close that app.quit() starts.
+			await closeAllWithin(BrowserWindow.getAllWindows(), QUIT_CLOSE_DEADLINE_MS);
 			app.quit();
 		});
 	});
