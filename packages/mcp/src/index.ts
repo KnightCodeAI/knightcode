@@ -11,6 +11,7 @@ export {
 	validateMcpServerConfig,
 } from "./config.ts";
 export { normalizeMcpInputSchema } from "./input-schema.ts";
+export { type McpModelContentOptions, toMcpModelContent } from "./model-content.ts";
 export { createMcpToolName, mcpNamespace, mcpServerSummary } from "./naming.ts";
 export { type LimitedMcpContent, limitMcpContent, MCP_OUTPUT_MAX_BYTES, type McpOutputSaver } from "./output-limit.ts";
 export {
@@ -68,6 +69,7 @@ export {
 	type ToolAnnotations,
 	type ToolExecution,
 } from "./protocol/types.ts";
+export { createMcpResultSchema } from "./result-schema.ts";
 export { type McpPipe, type McpPipeHandlers, PipeTransport, type PipeTransportOptions } from "./transports/pipe.ts";
 export { StdioTransport, type StdioTransportOptions } from "./transports/stdio.ts";
 export {
