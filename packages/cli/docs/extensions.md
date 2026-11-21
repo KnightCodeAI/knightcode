@@ -600,7 +600,7 @@ knightcode.on("session_tree", async (event, ctx) => {
 
 #### session_shutdown
 
-Fired before a started session runtime is torn down. Use this to clean up resources opened from `session_start` or other session-scoped hooks.
+Fired before a started session runtime is torn down. Use this to clean up resources opened from `session_start` or other session-scoped hooks. On Windows, closing the console window or the terminal tab is SIGHUP, and Windows ends the process about 5 seconds later, so this handler has to finish inside that.
 
 ```typescript
 knightcode.on("session_shutdown", async (event, ctx) => {
