@@ -7,6 +7,29 @@ import { sh, write } from "./fixtures/git-repo.ts";
 
 afterEach(cleanupServers);
 
+test("a PR retry refuses a newer HEAD even when its own commit was skipped", async () => {
+	const s = await repoServer();
+	const { thread } = await worktreeThread(s);
+	const target = { threadId: thread.id, cwd: thread.cwd, projectCwd: thread.projectCwd };
+	const first = await s.a.client.request("desktopOperation/start", {
+		target,
+		action: { kind: "pullRequest", branch: "test/pr-head", commitFirst: false },
+	});
+	expect(first.operation).toMatchObject({ status: "partial", recovery: "retry" });
+	write(thread.cwd, "a.txt", "new HEAD\n");
+	sh(thread.cwd, "add", "a.txt");
+	sh(thread.cwd, "commit", "-m", "outside workflow");
+	const remote = join(tempDir("s7-pr-head-origin-"), "remote.git");
+	sh(s.cwd, "init", "--bare", remote);
+	sh(s.cwd, "remote", "add", "origin", remote);
+	const retry = await s.a.client.request("desktopOperation/recover", {
+		target,
+		id: first.operation.id,
+		action: "retry",
+	});
+	expect(retry.operation).toMatchObject({ status: "partial", problem: { code: "gitConflict" } });
+});
+
 test("two clients retain branch and commit outputs and resume only push after partial success", async () => {
 	const s = await repoServer();
 	const { thread } = await worktreeThread(s);

@@ -25,7 +25,17 @@ knightcode desktop-ext status --json
 locates the installed guide and examples. Edit those files, then validate.
 `validate` checks the complete declared module/CSS graph, supported imports,
 retired or unsupported SDK aliases and asset containment without running setup.
-It writes no consent and cleans its temporary validation artifacts.
+It writes no consent and cleans its temporary validation artifacts. The JSON
+revision uses the same canonical source identity as Desktop review and status;
+unchanged files therefore report the same revision.
+
+Optional TypeScript checks are separate from validation. The shipped examples'
+`tsconfig.json` maps both SDK imports to `docs/desktop-sdk.d.ts` and
+`docs/desktop-backend-sdk.d.ts`, not checkout source. When copying an example,
+adjust those two `paths` entries to the installed CLI's `docs/` directory. An
+external type checker also needs React's types, TypeBox, and declarations for
+any UI libraries the example imports.
+Loading or validating the extension does not require that type checker.
 
 Approve the source through Settings before it can execute. With explicit
 **Trust development reloads**, saving any file in that package (including a
@@ -166,7 +176,10 @@ are unsupported, including private type imports. The shared runtime provides:
 
 Do not bundle a second React or these host singletons. Staged scripts and
 assets are served from registered `app://ext/<owner>/<revision>/` paths, not
-arbitrary files or remote URLs.
+arbitrary files or remote URLs. The artifact cache keeps three unleased
+historical revisions per owner. Live review, preparation, backend and native
+serving leases protect their revisions across processes; a later staging pass
+prunes older unleased files.
 
 ```tsx
 import { defineDesktopExtension } from "@knightcodeai/cli/desktop";
@@ -481,7 +494,11 @@ the window's later selection. A retired activation cannot start new work.
 
 Use `experimental_useGit` for status, totals, branches and operation state.
 Read the operation's completed steps and outputs before offering recovery.
-Retry resumes the same operation; it does not repeat confirmed steps. An
+Retry resumes the same operation; it does not repeat confirmed steps. The
+built-in dialogs label that retry explicitly and use its saved options, not
+newly edited fields. Dismiss the incomplete action before requesting a new
+local-only commit or a different PR mode. A retry refuses a changed branch or
+HEAD, including workflows that skipped committing. An
 unknown outcome requires checking the repository and remote first. The
 server keeps operation state across renderer and provider reloads during its
 lifetime. These workflows do not roll back completed Git writes.

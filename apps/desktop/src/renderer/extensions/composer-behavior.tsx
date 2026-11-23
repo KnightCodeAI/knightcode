@@ -60,7 +60,7 @@ export function useComposerBehavior(
 	const target = useMemo(() => (threadId ? { threadId } : { cwd }), [threadId, cwd]);
 	const draftKey = composerKey(target);
 	const controller = useMemo(() => experimental_composer(target), [target]);
-	const { text, images, composing, locked, restorations } = useStore((s) => composerDraftOf(s, draftKey));
+	const { text, images, composing, locked, restorations, revision } = useStore((s) => composerDraftOf(s, draftKey));
 	const setText = (value: string | ((current: string) => string)) =>
 		setComposerDraft(draftKey, (draft) => ({
 			...draft,
@@ -84,6 +84,7 @@ export function useComposerBehavior(
 	const [suggestions, setSuggestions] = useState<
 		{ items: Suggestion[]; truncated: boolean; start: number; revision: number } | undefined
 	>();
+	const liveSuggestions = suggestions?.revision === revision ? suggestions : undefined;
 	const [selected, setSelected] = useState(0);
 	const [dragging, setDragging] = useState(false);
 	const ref = useMemo(
@@ -232,7 +233,7 @@ export function useComposerBehavior(
 		if (signal.aborted) return;
 		if (controller.experimental_getSnapshot().composing || controller.experimental_getSnapshot().locked) return;
 		const draft = controller.experimental_getSnapshot();
-		if (suggestions && suggestions.revision !== draft.revision) return;
+		if (suggestions && suggestions.revision !== draft.revision) return setSuggestions(undefined);
 		if (suggestion.run) {
 			setSuggestions(undefined);
 			suggestion.run();
@@ -480,7 +481,7 @@ export function useComposerBehavior(
 			),
 		},
 		queued,
-		suggestions,
+		suggestions: liveSuggestions,
 		selected,
 		dragging,
 		boxRef,
@@ -535,18 +536,20 @@ export function useComposerBehavior(
 			if (controller.experimental_getSnapshot().composing || controller.experimental_getSnapshot().locked) return;
 
 			if (event.nativeEvent.isComposing) return;
-			if (suggestions) {
+			if (suggestions && suggestions.revision !== controller.experimental_getSnapshot().revision)
+				setSuggestions(undefined);
+			if (liveSuggestions && liveSuggestions.revision === controller.experimental_getSnapshot().revision) {
 				if (matches(event, "desktop.picker.next")) {
 					event.preventDefault();
-					return setSelected((selected + 1) % suggestions.items.length);
+					return setSelected((selected + 1) % liveSuggestions.items.length);
 				}
 				if (matches(event, "desktop.picker.previous")) {
 					event.preventDefault();
-					return setSelected((selected - 1 + suggestions.items.length) % suggestions.items.length);
+					return setSelected((selected - 1 + liveSuggestions.items.length) % liveSuggestions.items.length);
 				}
 				if (matches(event, "desktop.picker.accept")) {
 					event.preventDefault();
-					return accept(suggestions.items[selected]!);
+					return accept(liveSuggestions.items[selected]!);
 				}
 				if (matches(event, "desktop.picker.dismiss")) {
 					event.preventDefault();

@@ -1,4 +1,8 @@
 /** The app://ext protocol serves registered immutable artifacts, never arbitrary filesystem paths. */
+import {
+	retainDesktopArtifact,
+	type ArtifactLease,
+} from "@knightcodeai/cli/app-server/desktop-extensions/artifact-cache";
 import { readFileSync, realpathSync } from "node:fs";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { DESKTOP_ACTIVATION_MARKER, type DesktopArtifact } from "@knightcode/app-server-protocol";
@@ -22,7 +26,7 @@ export class ExtensionArtifacts {
 	private readonly origin: string;
 	private readonly artifacts = new Map<
 		string,
-		{ root: string; files: ReadonlySet<string>; windows: Map<number, Set<string>> }
+		{ root: string; files: ReadonlySet<string>; windows: Map<number, Set<string>>; retention: ArtifactLease }
 	>();
 	private readonly shims = new Map<string, string>();
 	constructor(origin: string) {
@@ -57,6 +61,7 @@ export class ExtensionArtifacts {
 		} else
 			this.artifacts.set(key, {
 				root: realpathSync(artifact.root),
+				retention: retainDesktopArtifact(artifact.root),
 				files: new Set(artifact.files),
 				windows: new Map([[windowId, new Set([lease])]]),
 			});
@@ -95,17 +100,24 @@ export class ExtensionArtifacts {
 		const leases = entry.windows.get(windowId);
 		leases?.delete(lease);
 		if (leases?.size === 0) entry.windows.delete(windowId);
-		if (entry.windows.size === 0) this.artifacts.delete(key);
+		if (entry.windows.size === 0) {
+			this.artifacts.delete(key);
+			entry.retention.release();
+		}
 	}
 
 	releaseWindow(windowId: number): void {
 		for (const [key, entry] of this.artifacts) {
 			entry.windows.delete(windowId);
-			if (entry.windows.size === 0) this.artifacts.delete(key);
+			if (entry.windows.size === 0) {
+				this.artifacts.delete(key);
+				entry.retention.release();
+			}
 		}
 	}
 
 	clear(): void {
+		for (const entry of this.artifacts.values()) entry.retention.release();
 		this.artifacts.clear();
 	}
 

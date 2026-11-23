@@ -40,6 +40,8 @@ test("packaged agent creates, validates, breaks, diagnoses and fixes a frontend 
 	commands.set("author status", invoke("status --json"));
 	commands.set("author reload", invoke("reload --json"));
 	const outputs: string[] = [];
+	const stepOutputs = new Map<string, string[]>();
+	let initialSystem = "";
 	const requests: string[] = [];
 	const model = createServer(async (request, response) => {
 		let body = "";
@@ -47,6 +49,10 @@ test("packaged agent creates, validates, breaks, diagnoses and fixes a frontend 
 		const payload = JSON.parse(body) as {
 			messages: { role: string; content: string | { type: string; text?: string }[] }[];
 		};
+		if (!requests.length) {
+			const system = payload.messages.find((message) => message.role === "system")?.content;
+			initialSystem = typeof system === "string" ? system : (system ?? []).map((part) => part.text ?? "").join("");
+		}
 		requests.push(body);
 		const user = [...payload.messages].reverse().find((message) => message.role === "user")!;
 		const prompt =
@@ -55,7 +61,9 @@ test("packaged agent creates, validates, breaks, diagnoses and fixes a frontend 
 		const afterTool = payload.messages.at(-1)?.role === "tool";
 		if (afterTool) {
 			const content = payload.messages.at(-1)!.content;
-			outputs.push(typeof content === "string" ? content : content.map((part) => part.text ?? "").join(""));
+			const output = typeof content === "string" ? content : content.map((part) => part.text ?? "").join("");
+			outputs.push(output);
+			if (step) stepOutputs.set(step, [...(stepOutputs.get(step) ?? []), output]);
 		}
 		response.writeHead(200, { "Content-Type": "text/event-stream" });
 		const chunk = (delta: object, finish_reason: string | null) =>
@@ -213,11 +221,20 @@ test("packaged agent creates, validates, breaks, diagnoses and fixes a frontend 
 		await expect(page.getByText("Packaged extension fixed", { exact: true })).toBeVisible();
 		await step("author validate");
 		await step("author status");
-		expect(requests.some((request) => request.includes("desktop-customization"))).toBe(true);
+		expect(initialSystem).toContain("<name>desktop-customization</name>");
+		const stepResults = (prompt: string) =>
+			(stepOutputs.get(prompt) ?? []).map(
+				(output) => JSON.parse(output.slice(output.indexOf("{"), output.lastIndexOf("}") + 1)) as unknown,
+			);
+		expect(stepResults("author validate")).toHaveLength(2);
+		for (const result of stepResults("author validate")) expect(result).toMatchObject({ valid: true, source });
+		expect(stepResults("author reload")).toHaveLength(2);
+		for (const result of stepResults("author reload"))
+			expect(result).toMatchObject({ servers: [expect.anything()], unavailable: [] });
 		expect(outputs.join("\n")).toContain("desktop-extensions.md");
 		expect(outputs.join("\n")).toContain("# Desktop API inventory");
 		expect(outputs.join("\n")).toContain("export declare function defineDesktopExtension");
-		expect(outputs.join("\n")).toContain('"valid":true');
+
 		expect(outputs.at(-1)).toContain('"phase":"active"');
 		const screenshot = info.outputPath("packaged-authoring.png");
 		await page.screenshot({ path: screenshot });

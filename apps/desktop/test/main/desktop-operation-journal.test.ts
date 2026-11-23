@@ -14,6 +14,15 @@ const done: ResultOf<"desktopOperation/start">["operation"] = {
 	outputs: { remote: "origin" },
 };
 
+test("one completion cannot settle two same-kind starts", () => {
+	const journal = new DesktopOperationJournal();
+	journal.track("first", "desktopOperation/start", { target, action: { kind: "push" } });
+	journal.track("second", "desktopOperation/start", { target, action: { kind: "push" } });
+	journal.observe("t", [{ ...done, attemptId: "first" }]);
+	journal.lost();
+	expect(journal.read("t", [])).toEqual([expect.objectContaining({ id: "unknown:second" })]);
+});
+
 test("a crash before observing a start retains a fence", () => {
 	const journal = new DesktopOperationJournal();
 	journal.track("start", "desktopOperation/start", { target, action: { kind: "push" } });
@@ -38,7 +47,7 @@ test.each(["start", "retry"])("the final completed observation settles a pending
 		journal.observe("t", [{ ...done, status: "partial", recovery: "retry" }]);
 		journal.track("req", "desktopOperation/recover", { target, id: done.id, action: "retry" });
 	}
-	journal.observe("t", [done]);
+	journal.observe("t", [{ ...done, attemptId: "req" }]);
 	journal.lost();
 	expect(journal.read("t", [])).toEqual([]);
 });

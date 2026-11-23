@@ -32,7 +32,7 @@ export interface DesktopWindowParticipant {
 	publish(binding: DesktopActivationBinding, signal: AbortSignal): Promise<void>;
 	resume(binding: DesktopActivationBinding, signal: AbortSignal): Promise<void>;
 	discard(binding: DesktopActivationBinding): Promise<void>;
-	revoke(): void;
+	revoke(binding?: DesktopActivationBinding): void;
 }
 
 export type DesktopRevisionResult =
@@ -117,7 +117,7 @@ export class DesktopRevisionCoordinator {
 			if (this.windows.get(participant.id) === window && this.active === active) window.binding = binding;
 		} catch {
 			lifetime.abort();
-			participant.revoke();
+			participant.revoke(binding);
 			await participant.discard(binding).catch(() => {});
 		}
 	}
@@ -148,7 +148,7 @@ export class DesktopRevisionCoordinator {
 			return false;
 		window.binding = undefined;
 		for (const pending of this.pending) if (pending.window === window) pending.disconnect();
-		window.participant.revoke();
+		window.participant.revoke(binding);
 		return true;
 	}
 
@@ -161,8 +161,9 @@ export class DesktopRevisionCoordinator {
 	update(
 		revision: string,
 		prepare: (signal: AbortSignal) => Promise<DesktopBackendActivation>,
+		admitted: () => boolean = () => true,
 	): Promise<DesktopRevisionResult> {
-		const update = this.serial.then(() => this.switchRevision(revision, prepare));
+		const update = this.serial.then(() => this.switchRevision(revision, prepare, admitted));
 		this.serial = update.catch(() => {});
 		return update;
 	}
@@ -290,6 +291,7 @@ export class DesktopRevisionCoordinator {
 	private async switchRevision(
 		revision: string,
 		prepare: (signal: AbortSignal) => Promise<DesktopBackendActivation>,
+		admitted: () => boolean,
 	): Promise<DesktopRevisionResult> {
 		if (this.isDisconnected() || this.disabled) return { status: "disabled", reason: "restart-required" };
 		const lifetime = new AbortController();
@@ -339,6 +341,8 @@ export class DesktopRevisionCoordinator {
 				window.lastRequest = 0;
 			}
 			if (old) await this.deadline(old.backend.dispose(), this.readinessMs, "shutdown-timeout");
+			this.assertTransaction(lifetime);
+			if (!admitted()) throw new Error("Activation revoked.");
 			this.active = { revision, epoch, backend: backend! };
 			await this.deadline(backend!.activate(), this.readinessMs, "activation-timeout");
 			this.assertTransaction(lifetime);
@@ -365,7 +369,7 @@ export class DesktopRevisionCoordinator {
 					} catch {
 						publication.abort();
 						failedWindows.push(window.participant.id);
-						window.participant.revoke();
+						window.participant.revoke(binding);
 					} finally {
 						lifetime.signal.removeEventListener("abort", abort);
 					}
@@ -375,7 +379,7 @@ export class DesktopRevisionCoordinator {
 		} catch (error) {
 			lifetime.abort();
 			if (backend) await this.deadline(backend.dispose(), this.readinessMs, "cleanup-timeout").catch(() => {});
-			if (committed || this.isDisconnected()) return this.disable(message(error));
+			if (committed || this.isDisconnected()) return await this.disable(message(error));
 			try {
 				await this.deadline(
 					Promise.all(windows.map((window) => window.participant.discard(this.identify(candidate, window)))),
@@ -396,7 +400,7 @@ export class DesktopRevisionCoordinator {
 				}
 				return { status: "retained", reason: message(error) };
 			} catch (recoveryError) {
-				return this.disable(message(recoveryError));
+				return await this.disable(message(recoveryError));
 			}
 		} finally {
 			this.transaction = undefined;
@@ -404,12 +408,18 @@ export class DesktopRevisionCoordinator {
 		}
 	}
 
-	private disable(reason: string): DesktopRevisionResult {
+	private async disable(reason: string): Promise<DesktopRevisionResult> {
 		this.disabled = true;
-		this.active = undefined;
 		for (const window of this.windows.values()) window.binding = undefined;
 		for (const pending of this.pending) pending.disconnect();
 		for (const window of this.windows.values()) window.participant.revoke();
+		try {
+			if (this.active) await this.deadline(this.active.backend.dispose(), this.readinessMs, "cleanup-timeout");
+			this.active = undefined;
+		} catch {
+			// Retain the handle so process shutdown can still account for the failed cleanup.
+			return { status: "disabled", reason: "restart-required" };
+		}
 		return { status: "disabled", reason };
 	}
 

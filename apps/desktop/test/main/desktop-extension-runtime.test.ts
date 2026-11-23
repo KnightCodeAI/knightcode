@@ -65,6 +65,40 @@ async function fixture() {
 	return { server, request, gateway, first, second, identity, binding };
 }
 
+test("retiring an old binding keeps the prepared artifact until its publication", async () => {
+	const { gateway, identity, binding } = await fixture();
+	const next = { ...binding, epoch: "epoch-2", revision: "b".repeat(64) };
+	const artifact = {
+		owner: next.owner,
+		revision: next.revision,
+		root: "unused",
+		frontend: "app.js",
+		styles: [],
+		files: ["app.js"],
+	};
+	gateway.receive({
+		method: "desktopExtension/phase",
+		params: {
+			...identity,
+			id: "prepare",
+			phase: "prepare",
+			binding: next,
+			artifact,
+			contracts: { methods: {}, events: {} },
+		},
+	});
+	gateway.receive({
+		method: "desktopExtension/phase",
+		params: { ...identity, id: "revoke", phase: "revoke", binding },
+	});
+	expect(gateway.artifact(1, next.owner, next.revision)).toEqual(artifact);
+	gateway.receive({
+		method: "desktopExtension/phase",
+		params: { ...identity, id: "retire", phase: "retire", binding },
+	});
+	expect(gateway.artifact(1, next.owner, next.revision)).toBeUndefined();
+});
+
 test("phase delivery is targeted, and an old port cannot grant a replacement port's binding", async () => {
 	const { gateway, first, second, identity, binding } = await fixture();
 	expect(first).toHaveBeenCalledOnce();

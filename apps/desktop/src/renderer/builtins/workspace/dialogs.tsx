@@ -41,6 +41,37 @@ function showOperationProblem(operation?: experimental_Operation) {
 
 function Recovery({ target, operation }: { target: experimental_Checkout; operation?: experimental_Operation }) {
 	const git = experimental_workspaceServices().experimental_git(target);
+	const [busy, setBusy] = useState(false);
+	if (operation?.recovery === "retry") {
+		const label =
+			operation.kind === "pullRequest"
+				? "Retry original PR request"
+				: operation.kind === "commit"
+					? "Retry commit"
+					: operation.kind === "commitAndPush" && !operation.completed.includes("commit")
+						? "Retry commit and push"
+						: "Retry push";
+		const retry = async () => {
+			if (busy) return;
+			setBusy(true);
+			try {
+				showOperationProblem(await git.experimental_recover(operation.id, "retry"));
+			} finally {
+				setBusy(false);
+			}
+		};
+		return (
+			<div role="alert" className="px-3 py-2 text-ink">
+				The previous action is incomplete. Retry uses its saved options, not the fields above.
+				<Button disabled={busy} onClick={() => void retry()}>
+					{label}
+				</Button>
+				<Button disabled={busy} onClick={() => void git.experimental_recover(operation.id, "acknowledge")}>
+					Dismiss previous action
+				</Button>
+			</div>
+		);
+	}
 	if (operation?.recovery !== "reconcile") return null;
 	return (
 		<div role="alert" className="px-3 py-2 text-danger-text">
@@ -351,7 +382,7 @@ export function CommitSheet({ thread, onClose }: { thread: Thread; onClose: () =
 	const onBranch = status?.branch ?? recover?.outputs.branch;
 	const detached = status !== undefined && !onBranch;
 	const run = async (push: boolean, commit: boolean) => {
-		if (busy || operation?.recovery === "reconcile") return;
+		if (busy || operation?.recovery === "reconcile" || operation?.recovery === "retry") return;
 		setSending(true);
 		try {
 			const action: experimental_GitAction = commit
@@ -362,10 +393,7 @@ export function CommitSheet({ thread, onClose }: { thread: Thread; onClose: () =
 						includeUnstaged,
 					}
 				: { kind: "push" };
-			const result =
-				recover?.recovery === "retry"
-					? await git.experimental_recover(recover.id, "retry")
-					: await git.experimental_run(action);
+			const result = await git.experimental_run(action);
 			if (result?.status === "completed") onClose();
 			else showOperationProblem(result);
 		} finally {
@@ -428,20 +456,22 @@ export function CommitSheet({ thread, onClose }: { thread: Thread; onClose: () =
 			<ActionRow
 				icon={<GitCommitHorizontal size={15} />}
 				label={busy ? "Committing…" : "Commit"}
-				disabled={busy}
+				disabled={busy || operation?.recovery === "retry"}
 				hint={<Kbd>{mod}+⏎</Kbd>}
 				onClick={() => void run(false, true)}
 			/>
 			<ActionRow
 				icon={<CloudUpload size={15} />}
 				label="Commit and push"
-				disabled={busy}
+				disabled={busy || operation?.recovery === "retry"}
 				onClick={() => void run(true, true)}
 			/>
 			<ActionRow
 				icon={<CloudUpload size={15} />}
 				label="Push"
-				disabled={busy || !onBranch || (status?.ahead === 0 && Boolean(status.upstream))}
+				disabled={
+					busy || operation?.recovery === "retry" || !onBranch || (status?.ahead === 0 && Boolean(status.upstream))
+				}
 				onClick={() => void run(true, false)}
 			/>
 			<Recovery target={target} operation={operation} />
@@ -599,21 +629,18 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
 	const onBranch = status?.branch ?? pr?.outputs.branch;
 	const detached = status !== undefined && !onBranch;
 	const create = async (draft: boolean) => {
-		if (busy || operation?.recovery === "reconcile") return;
+		if (busy || operation?.recovery === "reconcile" || operation?.recovery === "retry") return;
 		setSending(true);
 		try {
-			const result =
-				pr?.recovery === "retry"
-					? await git.experimental_recover(pr.id, "retry")
-					: await git.experimental_run({
-							kind: "pullRequest",
-							branch: detached ? branch : undefined,
-							commitFirst,
-							hasChanges: totals && totals.additions + totals.deletions > 0,
-							title: title.trim() ? title : undefined,
-							body: body.trim() ? body : undefined,
-							draft,
-						});
+			const result = await git.experimental_run({
+				kind: "pullRequest",
+				branch: detached ? branch : undefined,
+				commitFirst,
+				hasChanges: totals && totals.additions + totals.deletions > 0,
+				title: title.trim() ? title : undefined,
+				body: body.trim() ? body : undefined,
+				draft,
+			});
 			showOperationProblem(result);
 		} finally {
 			setSending(false);
@@ -661,13 +688,13 @@ export function PullRequestSheet({ thread, onClose }: { thread: Thread; onClose:
 			<ActionRow
 				icon={<GitPullRequestDraft size={15} />}
 				label="Create draft PR"
-				disabled={busy}
+				disabled={busy || operation?.recovery === "retry"}
 				onClick={() => void create(true)}
 			/>
 			<ActionRow
 				icon={<GitPullRequest size={15} />}
 				label={busy ? "Creating…" : "Create PR"}
-				disabled={busy}
+				disabled={busy || operation?.recovery === "retry"}
 				hint={<Kbd>{mod}+⏎</Kbd>}
 				onClick={() => void create(false)}
 			/>

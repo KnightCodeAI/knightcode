@@ -8,6 +8,36 @@ import { generateDesktopModels } from "../scripts/desktop-models.ts";
 import { generateDesktopApi, checkDesktopDocumentation } from "../scripts/desktop-api.ts";
 import { getDocsPath } from "../src/config.ts";
 describe("desktop API publication contract", () => {
+	it("type-checks the unchanged shipped examples without workspace source resolution", () => {
+		const root = mkdtempSync(join(tmpdir(), "kc-desktop-installed-examples-"));
+		try {
+			const cli = new URL("../", import.meta.url);
+			cpSync(new URL("package.json", cli), join(root, "package.json"));
+			cpSync(new URL("docs", cli), join(root, "docs"), { recursive: true });
+			cpSync(new URL("examples/desktop-extensions", cli), join(root, "examples/desktop-extensions"), {
+				recursive: true,
+			});
+			for (const dependency of ["react", "@types/react", "@types/react-dom", "csstype", "typebox"]) {
+				const source =
+					dependency === "typebox"
+						? dirname(dirname(fileURLToPath(import.meta.resolve("typebox"))))
+						: dirname(fileURLToPath(import.meta.resolve(`${dependency}/package.json`)));
+				cpSync(source, join(root, "node_modules", dependency), { recursive: true });
+			}
+			const compiler = join(dirname(fileURLToPath(import.meta.resolve("typescript/package.json"))), "bin/tsc");
+			const result = spawnSync(
+				process.execPath,
+				[compiler, "-p", join(root, "examples/desktop-extensions/tsconfig.json")],
+				{ encoding: "utf8", timeout: 30_000 },
+			);
+			expect(result.error).toBeUndefined();
+			expect(result.stdout + result.stderr).toBe("");
+			expect(result.status).toBe(0);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	it("generates portable declarations and inventories every public export and member", () => {
 		const source =
 			'import type { ReactNode } from "react";\nexport type experimental_Surface = "feedback" | "new-surface";\nexport interface App { register(): void; }\nexport function make(value: number = 1): App { return {} as App; }\nexport function defineDesktopExtension(options: { apiVersion: number } = { apiVersion: 2 }): App { return {} as App; }';

@@ -123,7 +123,14 @@ export class FrontendExtensions {
 
 	revoke(owner: string, binding?: DesktopActivationBinding): void {
 		const live = this.live.get(owner);
-		if (binding && (!live || !sameBinding(live.binding, binding))) return;
+		if (binding) {
+			this.discard(binding);
+			if (live && sameBinding(live.binding, binding)) {
+				this.live.delete(owner);
+				this.close(live);
+			}
+			return;
+		}
 		const candidate = this.candidates.get(owner);
 		this.candidates.delete(owner);
 		this.live.delete(owner);

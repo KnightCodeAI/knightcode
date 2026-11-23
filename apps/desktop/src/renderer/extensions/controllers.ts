@@ -2,6 +2,7 @@
 import type { experimental_Controllers } from "@knightcodeai/cli/desktop";
 import { client } from "../client.ts";
 import { desktopExtensions } from "./runtime.ts";
+import { readCommandContext } from "./command-context.ts";
 import {
 	addProject,
 	archive,
@@ -41,7 +42,7 @@ export const controllers: experimental_Controllers = {
 		return true;
 	},
 	experimental_openPage: (id) => {
-		const page = desktopExtensions.pages({ sidebarOpen: getState().sidebarOpen }).find((entry) => entry.id === id);
+		const page = desktopExtensions.pages(readCommandContext()).find((entry) => entry.id === id);
 		if (!page || (page.activation && !page.activation.admitted())) return false;
 		navigate({ kind: "page", id });
 		return true;

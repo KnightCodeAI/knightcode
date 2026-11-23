@@ -1,5 +1,6 @@
 /** Activation authority adds epoch revocation without replacing the window, editor or lock lifetimes. */
 import {
+	defineDesktopExtension,
 	experimental_controllers,
 	type experimental_EditorAdapter,
 	type experimental_EditorState,
@@ -14,6 +15,7 @@ vi.mock("../../src/renderer/client.ts", () => ({
 	RequestError: class extends Error {},
 }));
 
+import { ExtensionRegistry } from "../../src/renderer/extensions/registry.ts";
 import { FrontendActivation } from "../../src/renderer/extensions/activation.ts";
 import { initializeDesktopExtensions } from "../../src/renderer/extensions/host.tsx";
 import { getState, navigate } from "../../src/renderer/store.ts";
@@ -47,6 +49,40 @@ function adapter(): experimental_EditorAdapter {
 		experimental_caretAnchor: () => undefined,
 	};
 }
+
+test("an unused throwing provider cannot fail a live activation or remove sibling commands", async () => {
+	const { activation, binding } = fixture("unused");
+	const registry = new ExtensionRegistry();
+	const available = vi.fn(() => {
+		throw new Error("unused");
+	});
+	const run = vi.fn();
+	registry
+		.prepare(
+			binding.owner,
+			defineDesktopExtension((app) => {
+				app.experimental_registerProvider({
+					id: "unused",
+					surface: "layout",
+					experimental_available: available,
+					experimental_render: () => null,
+				});
+				app.experimental_registerCommand({ id: "working", label: () => "working", experimental_run: run });
+			}),
+			binding.revision,
+			activation,
+		)
+		.commit();
+	activation.publish();
+	activation.ready();
+	registry.resolveProvider("layout", "builtin.layout/default", undefined, { sidebarOpen: false });
+	await Promise.resolve();
+	expect(available).not.toHaveBeenCalled();
+	expect(activation.admitted()).toBe(true);
+	const command = registry.commands({ sidebarOpen: false })[0]!;
+	registry.runCommand(command, { sidebarOpen: false });
+	expect(run).toHaveBeenCalledOnce();
+});
 
 test("prepared and published-but-gated helpers cannot act, while revocation leaves the window host alive", () => {
 	const { activation } = fixture("one");

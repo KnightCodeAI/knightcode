@@ -72,6 +72,51 @@ afterEach(() => {
 });
 
 describe("coordinated desktop revisions", () => {
+	it("rechecks admission after old cleanup before activating a candidate", async () => {
+		const { coordinator, trace } = await fixture();
+		expect(
+			(
+				await coordinator.update(
+					"v2",
+					async () => backend("v2", trace),
+					() => false,
+				)
+			).status,
+		).toBe("disabled");
+		expect(trace).not.toContain("v2:activate");
+		expect(trace).toContain("v2:dispose");
+	});
+
+	it("does not activate a replacement after shutdown during old cleanup", async () => {
+		const { coordinator, old, trace } = await fixture();
+		const started = deferred<void>();
+		const cleanup = deferred<void>();
+		old.dispose = async () => {
+			started.resolve();
+			await cleanup.promise;
+		};
+		const update = coordinator.update("v2", async () => backend("v2", trace));
+		await started.promise;
+		const stopping = coordinator.shutdown();
+		cleanup.resolve();
+		expect((await update).status).toBe("disabled");
+		await stopping;
+		expect(trace).not.toContain("v2:activate");
+		expect(trace).toContain("v2:dispose");
+	});
+
+	it("disposes the old backend when resuming after a failed quiesce fails", async () => {
+		const { coordinator, old, a, trace } = await fixture();
+		a.quiesce = async () => {
+			throw new Error("cannot quiesce");
+		};
+		old.resume = async () => {
+			throw new Error("cannot resume");
+		};
+		expect((await coordinator.update("v2", async () => backend("v2", trace))).status).toBe("disabled");
+		expect(trace).toContain("v1:dispose");
+	});
+
 	it("rejects reordered host request sequences without retaining every completed request ID", async () => {
 		const { coordinator, binding, old } = await fixture();
 		let writes = 0;

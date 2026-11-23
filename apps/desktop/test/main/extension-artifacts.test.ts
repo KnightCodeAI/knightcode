@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
@@ -143,11 +143,15 @@ test("an old lease cannot release a later acquisition of the same window and rev
 	const request = new Request(`app://ext/example/${artifact.revision}/app.js`);
 	server.register(artifact, 1, "old");
 	server.register(artifact, 1, "new");
+	const retained = () => readdirSync(root).filter((name) => name.startsWith(".lease-"));
+	expect(retained()).toHaveLength(1);
 	server.release(1, artifact.owner, artifact.revision, "old");
 	expect((await server.serve(request)).status).toBe(200);
 	server.register(artifact, 2, "other");
 	server.releaseWindow(1);
+	expect(retained()).toHaveLength(1);
 	expect((await server.serve(request)).status).toBe(200);
 	server.release(2, artifact.owner, artifact.revision, "other");
+	expect(retained()).toHaveLength(0);
 	expect((await server.serve(request)).status).toBe(404);
 });

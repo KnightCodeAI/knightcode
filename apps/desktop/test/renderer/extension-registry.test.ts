@@ -9,7 +9,7 @@ import { SurfaceHost } from "../../src/renderer/extensions/surface.tsx";
 import { expect, test, vi } from "vitest";
 import { ExtensionRegistry } from "../../src/renderer/extensions/registry.ts";
 
-test("an unselected throwing provider is quarantined before diagnostics can reenter selection", async () => {
+test("a selected throwing provider is quarantined before diagnostics can reenter selection", async () => {
 	const context = { sidebarOpen: false };
 	const error = new Error("availability failed");
 	const report = vi.fn(() => registry.resolveProvider("layout", "builtin.layout/default", undefined, context));
@@ -32,7 +32,7 @@ test("an unselected throwing provider is quarantined before diagnostics can reen
 		)
 		.commit();
 	const declaration = registry.getSnapshot()[0]!;
-	registry.resolveProvider("layout", "builtin.layout/default", undefined, context);
+	registry.resolveProvider("layout", "builtin.layout/default", "external/unselected", context);
 	await Promise.resolve();
 	expect(available).toHaveBeenCalledOnce();
 	expect(report).toHaveBeenCalledExactlyOnceWith("external", error, "reviewed-revision");
@@ -110,6 +110,27 @@ test.each(["layout", "settings", "settingsNav"] as const)(
 		expect(available).not.toHaveBeenCalled();
 	},
 );
+
+test("a prepared candidate stays stale even if a newer publication is disposed", () => {
+	const registry = new ExtensionRegistry();
+	registry.register(
+		"owner",
+		defineDesktopExtension((app) => app.experimental_registerCommand(command("A"))),
+	);
+	const stale = registry.prepare(
+		"owner",
+		defineDesktopExtension((app) => app.experimental_registerCommand(command("B"))),
+	);
+	const current = registry
+		.prepare(
+			"owner",
+			defineDesktopExtension((app) => app.experimental_registerCommand(command("C"))),
+		)
+		.commit();
+	current.dispose();
+	expect(() => stale.commit()).toThrow(/newer registration/);
+	expect(registry.getSnapshot()).toEqual([]);
+});
 
 test("a prepared revision stays inert until commit and a stale disposer cannot remove its replacement", () => {
 	const registry = new ExtensionRegistry();

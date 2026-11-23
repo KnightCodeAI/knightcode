@@ -92,7 +92,8 @@ jobs:
         working-directory: apps/desktop
         run: |
           # Both globs match some files (extension-*.e2e.ts and *-extensions.e2e.ts); list each once.
-          mapfile -t files < <(printf '%s\n' test/e2e/*extensions*.e2e.ts test/e2e/extension-*.e2e.ts | sort -u)
+          files=()
+          while IFS= read -r file; do files+=("$file"); done < <(printf '%s\n' test/e2e/*extensions*.e2e.ts test/e2e/extension-*.e2e.ts | sort -u)
           if [ "$RUNNER_OS" = "Linux" ]; then
             xvfb-run -a bun x playwright test --retries=0 "${files[@]}"
           else

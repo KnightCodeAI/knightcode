@@ -1673,7 +1673,13 @@ const tabKey = (path: string) => {
 export function selectPanelContribution(threadId: string, selection?: State["panelContributions"][string]): void {
 	set((s) => ({
 		...s,
-		panelContributions: { ...s.panelContributions, [threadId]: selection },
+		panelContributions: {
+			...s.panelContributions,
+			[threadId]:
+				selection && selection.id === s.panelContributions[threadId]?.id && !("file" in selection)
+					? s.panelContributions[threadId]
+					: selection,
+		},
 		...(selection ? { panel: { ...s.panel, open: true } } : {}),
 	}));
 }

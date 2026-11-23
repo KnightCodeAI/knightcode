@@ -293,6 +293,8 @@ export const DesktopOperationProblem = Obj({
 });
 export const DesktopOperation = Obj({
 	id: Str,
+	/** Exact forwarded request attempt, used by the native restart journal. */
+	attemptId: Type.Optional(Str),
 	kind: Type.Union([
 		Type.Literal("commit"),
 		Type.Literal("commitAndPush"),
@@ -324,6 +326,8 @@ export const DesktopOperation = Obj({
 	]),
 	outputs: Obj({
 		branch: Type.Optional(Str),
+		/** HEAD observed before the first push, even when the workflow did not create a commit. */
+		head: Type.Optional(Str),
 		commit: Type.Optional(Str),
 		message: Type.Optional(Str),
 		remote: Type.Optional(Str),
@@ -1004,13 +1008,14 @@ export const ClientRequests = {
 	},
 	"desktopOperation/read": { params: ThreadId, result: Obj({ operations: Type.Array(DesktopOperation) }) },
 	"desktopOperation/start": {
-		params: Obj({ target: DesktopCheckout, action: DesktopWorkspaceAction }),
+		params: Obj({ target: DesktopCheckout, action: DesktopWorkspaceAction, attemptId: Type.Optional(Str) }),
 		result: Obj({ operation: DesktopOperation }),
 	},
 	"desktopOperation/recover": {
 		params: Obj({
 			target: DesktopCheckout,
 			id: Str,
+			attemptId: Type.Optional(Str),
 			action: Type.Union([Type.Literal("retry"), Type.Literal("cancel"), Type.Literal("acknowledge")]),
 		}),
 		result: Obj({ operation: Type.Optional(DesktopOperation), accepted: Bool }),

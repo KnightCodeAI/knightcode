@@ -46,10 +46,50 @@ interface RootLifetime {
 	signal: AbortSignal;
 	composing: { current: boolean };
 	binding: { current: Binding | undefined };
-	hosts: Map<experimental_ComposerHost, object>;
+	mounts: ComposerMounts;
 	hadEditor: boolean;
 }
 const Root = createContext<RootLifetime | undefined>(undefined);
+
+/** Observe committed editor and host changes without treating a same-commit swap as failure. */
+export class ComposerMounts {
+	private readonly hosts = new Map<experimental_ComposerHost, object>();
+	private readonly listeners = new Set<() => void>();
+	private version = 0;
+	private queued = false;
+	getSnapshot = () => this.version;
+	subscribe = (listener: () => void) => {
+		this.listeners.add(listener);
+		return () => {
+			this.listeners.delete(listener);
+		};
+	};
+	changed(): void {
+		this.version++;
+		if (this.queued) return;
+		this.queued = true;
+		queueMicrotask(() => {
+			this.queued = false;
+			for (const listener of this.listeners) listener();
+		});
+	}
+	mount(host: experimental_ComposerHost): () => void {
+		if (this.hosts.has(host)) throw new Error(`Duplicate composer contribution host: ${host}`);
+		const identity = {};
+		this.hosts.set(host, identity);
+		this.changed();
+		return () => {
+			if (this.hosts.get(host) !== identity) return;
+			this.hosts.delete(host);
+			this.changed();
+		};
+	}
+	problem(hasEditor: boolean): string | undefined {
+		for (const host of HOSTS)
+			if (!this.hosts.has(host)) return `Composer provider must mount the ${host} contribution host.`;
+		if (!hasEditor) return "Composer provider must mount an editor adapter.";
+	}
+}
 const StateContext = createContext<experimental_ComposerState | undefined>(undefined);
 const HOSTS = ["actions", "banners", "chips", "addMenu", "sendMenu", "suggestions", "popups"] as const;
 const SURFACES = {
@@ -128,6 +168,7 @@ export function useComposerEditor(
 				if (root.binding.current === binding) {
 					root.binding.current = undefined;
 					root.composing.current = false;
+					root.mounts.changed();
 				}
 				result.mount.dispose();
 				if (attached.current === binding) attached.current = undefined;
@@ -141,6 +182,7 @@ export function useComposerEditor(
 		};
 		attached.current = binding;
 		root.binding.current = binding;
+		root.mounts.changed();
 		const selection = () => binding.report();
 		document.addEventListener("selectionchange", selection);
 		signal.addEventListener("abort", bound.dispose, { once: true });
@@ -158,19 +200,14 @@ export function useComposerEditor(
 
 function RequiredHosts({ children }: { children: ReactNode }) {
 	const root = useRoot();
-	const [missing, setMissing] = useState(false);
-	useLayoutEffect(() => {
-		for (const host of HOSTS)
-			if (!root.hosts.has(host)) throw new Error(`Composer provider must mount the ${host} contribution host.`);
-	}, [root]);
+	const version = useSyncExternalStore(root.mounts.subscribe, root.mounts.getSnapshot, root.mounts.getSnapshot);
+	const [missing, setMissing] = useState<string>();
 	useEffect(() => {
-		// Callback refs settle before the first frame; a provider without an adapter is not a usable replacement.
-		const frame = requestAnimationFrame(() => {
-			if (!root.binding.current) setMissing(true);
-		});
+		// All layout cleanup/setup has settled before deciding whether a replacement remains usable.
+		const frame = requestAnimationFrame(() => setMissing(root.mounts.problem(!!root.binding.current)));
 		return () => cancelAnimationFrame(frame);
-	}, [root]);
-	if (missing) throw new Error("Composer provider must mount an editor adapter.");
+	}, [root, version]);
+	if (missing) throw new Error(missing);
 	return children;
 }
 
@@ -178,14 +215,7 @@ function RequiredHosts({ children }: { children: ReactNode }) {
 export function ComposerContributions({ host }: { host: experimental_ComposerHost }) {
 	const root = useRoot();
 	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot);
-	useLayoutEffect(() => {
-		if (root.hosts.has(host)) throw new Error(`Duplicate composer contribution host: ${host}`);
-		const identity = {};
-		root.hosts.set(host, identity);
-		return () => {
-			if (root.hosts.get(host) === identity) root.hosts.delete(host);
-		};
-	}, [root, host]);
+	useLayoutEffect(() => root.mounts.mount(host), [root, host]);
 	const { target } = root.state.current;
 	const context: experimental_CommandContext = {
 		sidebarOpen: getState().sidebarOpen,
@@ -221,7 +251,7 @@ export function ComposerRoot(props: experimental_ComposerProps) {
 			signal: lifetime.signal,
 			composing: { current: false },
 			binding: { current: undefined },
-			hosts: new Map(),
+			mounts: new ComposerMounts(),
 			hadEditor: false,
 		}),
 		[lifetime],

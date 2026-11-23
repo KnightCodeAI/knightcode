@@ -265,6 +265,7 @@ function validCustomization(
 	if (!patch) return undefined;
 	const custom: experimental_ThemeCustomization = {};
 	for (const key of ["accent", "background", "foreground"] as const) {
+		if (!(key in patch)) continue;
 		const value = patch[key];
 		if (value === undefined || (typeof value === "string" && isHex(value))) custom[key] = value?.toLowerCase();
 	}
@@ -441,16 +442,21 @@ function BackendSettingsSection({
 	const projects = useStore(selectProjects);
 	const threads = useStore((s) => s.threads);
 	const choices = useMemo(() => settingsScopeChoices(scopes, projects, threads), [scopes, projects, threads]);
-	const [chosen, setChosen] = useState<string>();
-	const choice = choices.find((c) => c.value === chosen) ?? choices[0];
+	const [chosen, setChosen] = useState(choices[0]?.value);
+	const selected = useRef(chosen);
+	selected.current = chosen;
+	const choice = choices.find((c) => c.value === chosen);
 	const picker =
-		choices.length > 1 ? (
+		choices.length > 1 || !choice || choice.selector.scope !== "app" ? (
 			<Row title="Scope" detail="Where these values are saved">
 				<SelectMenu
 					label="Settings scope"
-					value={choice?.value}
+					value={choice?.value ?? "missing"}
 					onChange={setChosen}
-					options={choices.map(({ value, label }) => ({ value, label }))}
+					options={[
+						...(!choice ? [{ value: "missing", label: "Choose a scope" }] : []),
+						...choices.map(({ value, label }) => ({ value, label })),
+					]}
 				/>
 			</Row>
 		) : null;
@@ -458,9 +464,26 @@ function BackendSettingsSection({
 		<Card title={title}>
 			{picker}
 			{choice ? (
-				<BackendSettingsFields key={choice.value} entry={entry} fields={fields} selector={choice.selector} />
+				<BackendSettingsFields
+					key={choice.value}
+					entry={entry}
+					fields={fields}
+					selector={choice.selector}
+					allowed={() =>
+						selected.current === choice.value &&
+						settingsScopeChoices(scopes, selectProjects(getState()), getState().threads).some(
+							(candidate) => candidate.value === choice.value,
+						)
+					}
+				/>
 			) : (
-				<Row title="Add a project to set these values." />
+				<Row
+					title={
+						chosen
+							? "The selected scope is no longer available. Choose another scope to edit."
+							: "Add a project or choose a scope to set these values."
+					}
+				/>
 			)}
 		</Card>
 	);
@@ -471,10 +494,12 @@ function BackendSettingsFields({
 	entry,
 	fields,
 	selector,
+	allowed,
 }: {
 	entry: SettingsSectionRegistration;
 	fields: readonly experimental_SettingsField[];
 	selector: experimental_BackendDataSelector;
+	allowed: () => boolean;
 }) {
 	const backendOf = () => (entry.activation?.admitted() ? entry.activation.backend : undefined);
 	const backend = useSyncExternalStore(
@@ -495,7 +520,7 @@ function BackendSettingsFields({
 		return () => lifetime.abort();
 	}, [backend, entry.signal, selector]);
 	const write = async (key: string, value: unknown) => {
-		if (!backend) return;
+		if (!backend || !entry.activation?.admitted() || !allowed()) return;
 		const result = await backend.experimental_setSetting(key, value, selector, entry.signal);
 		if (entry.signal.aborted) return;
 		if (result.status === "ok") setValues(result.value);

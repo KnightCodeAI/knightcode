@@ -201,8 +201,9 @@ export const shellServices: experimental_ShellServices = {
 	},
 	experimental_usePages: () => {
 		useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot);
+		const context = useCommandContext();
 		return desktopExtensions
-			.pages({ sidebarOpen: true })
+			.pages(context)
 			.map((entry) => ({ id: entry.id, label: entry.contribution.label, hidden: entry.contribution.hidden }));
 	},
 };

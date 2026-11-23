@@ -12,6 +12,8 @@ type Outputs = Snapshot["outputs"];
 export interface DesktopOperationRun {
 	readonly action: Action;
 	readonly snapshot: Snapshot;
+	/** Pin observed checkout identity before a write, independently of completed write stages. */
+	confirm(outputs: Outputs): void;
 	step(stage: Stage, write: () => Promise<Outputs | undefined>): Promise<void>;
 }
 
@@ -36,7 +38,7 @@ export class DesktopOperations {
 		return kind ? this.records.get(threadId)?.get(family(kind))?.snapshot : this.list(threadId).at(-1);
 	}
 
-	async start(target: Target, action: Action, run: Runner): Promise<Snapshot> {
+	async start(target: Target, action: Action, run: Runner, attemptId?: string): Promise<Snapshot> {
 		const thread = this.records.get(target.threadId) ?? new Map<string, Record>();
 		const group = family(action.kind);
 		const prior =
@@ -45,6 +47,7 @@ export class DesktopOperations {
 		if (prior && ["running", "partial", "outcome-unknown"].includes(prior.status)) return prior;
 		const snapshot: Snapshot = {
 			id: randomUUID(),
+			...(attemptId ? { attemptId } : {}),
 			kind: action.kind,
 			target,
 			status: "running",
@@ -68,11 +71,17 @@ export class DesktopOperations {
 	}
 
 	/** Runs the remaining steps only if the record asks for a retry and its project is free; `accepted` says whether it ran. */
-	async retry(target: Target, id: string, run: Runner): Promise<{ accepted: boolean; operation?: Snapshot }> {
+	async retry(
+		target: Target,
+		id: string,
+		run: Runner,
+		attemptId?: string,
+	): Promise<{ accepted: boolean; operation?: Snapshot }> {
 		const record = this.match(target, id);
 		if (!record) return { accepted: false };
 		if (record.snapshot.recovery !== "retry" || this.active.has(target.projectCwd))
 			return { accepted: false, operation: record.snapshot };
+		record.snapshot = { ...record.snapshot, attemptId };
 		return { accepted: true, operation: await this.run(record, run) };
 	}
 
@@ -121,6 +130,9 @@ export class DesktopOperations {
 				action: record.action,
 				get snapshot() {
 					return record.snapshot;
+				},
+				confirm(outputs) {
+					update({ outputs: { ...record.snapshot.outputs, ...outputs } });
 				},
 				async step(stage, write) {
 					if (record.cancelled || record.snapshot.completed.includes(stage)) return;

@@ -158,6 +158,11 @@ export class DesktopExtensionWindows {
 			if (phase.phase === "discard" && sameBinding(window.candidates.get(owner)?.binding, phase.binding))
 				window.candidates.delete(owner);
 			if (phase.phase === "revoke") {
+				if (sameBinding(window.ready.get(owner)?.binding, phase.binding)) window.ready.delete(owner);
+				if (sameBinding(window.candidates.get(owner)?.binding, phase.binding)) window.candidates.delete(owner);
+				for (const frame of window.calls.values()) if (sameBinding(frame.binding, phase.binding)) frame.disconnect();
+			}
+			if (phase.phase === "retire") {
 				window.ready.delete(owner);
 				window.candidates.delete(owner);
 				window.gated.add(owner);

@@ -48,6 +48,7 @@ export class ExtensionRegistry {
 	private entries: readonly Registration[] = [];
 	private quarantined = new WeakSet<Registration>();
 	private owners = new Map<string, () => void>();
+	private ownership = new Map<string, { token: object; references: number }>();
 	private preparing = new Set<string>();
 	private listeners = new Set<() => void>();
 	private sequence = 0;
@@ -99,6 +100,10 @@ export class ExtensionRegistry {
 		if (extension.apiVersion !== 1) throw new Error(`Unsupported desktop apiVersion: ${extension.apiVersion}`);
 		if (this.preparing.has(owner)) throw new Error(`Extension owner is preparing: ${owner}`);
 		const previous = this.owners.get(owner);
+		const ownership = this.ownership.get(owner) ?? { token: {}, references: 0 };
+		ownership.references++;
+		this.ownership.set(owner, ownership);
+		const publication = ownership.token;
 		this.preparing.add(owner);
 		const lifetime = new AbortController();
 		const staged: Registration[] = [];
@@ -115,6 +120,7 @@ export class ExtensionRegistry {
 			for (const controller of signals.values()) controller.abort();
 			signals.clear();
 			if (this.owners.get(owner) === dispose) this.owners.delete(owner);
+			if (--ownership.references === 0) this.ownership.delete(owner);
 			for (const cleanup of disposers.reverse()) {
 				try {
 					cleanup();
@@ -244,12 +250,13 @@ export class ExtensionRegistry {
 				dispose,
 				commit: () => {
 					if (phase !== "prepared") throw new Error("The registration set is closed.");
-					if (this.owners.get(owner) !== previous) {
+					if (ownership.token !== publication) {
 						dispose();
 						throw new Error("A newer registration set replaced this candidate.");
 					}
 					phase = "published";
 					this.owners.set(owner, dispose);
+					ownership.token = {};
 					this.publish([...this.entries.filter((entry) => entry.owner !== owner), ...staged]);
 					previous?.();
 					return { dispose };
@@ -391,14 +398,18 @@ export class ExtensionRegistry {
 		context: experimental_CommandContext,
 		builtinOnly = false,
 	): SurfaceRegistration | undefined {
-		const providers = this.entries.filter(
-			(entry): entry is SurfaceRegistration =>
-				entry.kind === "provider" &&
-				entry.contribution.surface === surface &&
-				(!builtinOnly || entry.owner.startsWith("builtin.")) &&
-				this.available(entry, context),
-		);
-		return providers.find((entry) => entry.id === preferred) ?? providers.find((entry) => entry.id === builtin);
+		const find = (id: string | undefined) =>
+			this.entries.find(
+				(entry): entry is SurfaceRegistration =>
+					entry.kind === "provider" &&
+					entry.id === id &&
+					entry.contribution.surface === surface &&
+					(!builtinOnly || entry.owner.startsWith("builtin.")),
+			);
+		const preferredEntry = find(preferred);
+		if (preferredEntry && this.available(preferredEntry, context)) return preferredEntry;
+		const fallback = find(builtin);
+		return fallback && fallback !== preferredEntry && this.available(fallback, context) ? fallback : undefined;
 	}
 
 	private available(entry: Registration, context: experimental_CommandContext): boolean {

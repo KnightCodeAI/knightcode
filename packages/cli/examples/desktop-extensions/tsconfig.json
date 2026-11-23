@@ -9,7 +9,11 @@
 		"strict": true,
 		"noEmit": true,
 		"skipLibCheck": true,
-		"allowImportingTsExtensions": true
+		"allowImportingTsExtensions": true,
+		"paths": {
+			"@knightcodeai/cli/desktop": ["../../docs/desktop-sdk.d.ts"],
+			"@knightcodeai/cli/desktop-backend": ["../../docs/desktop-backend-sdk.d.ts"]
+		}
 	},
 	"include": ["../../docs/desktop-sdk.d.ts", "./**/*.ts", "./**/*.tsx"]
 }

@@ -80,6 +80,7 @@ function threadOf(params: Record<string, unknown> | undefined): string | undefin
 export class Router {
 	private readonly server: RouterServer;
 	private readonly windows = new Map<number, WindowLink>();
+	private nextRequest = 0;
 	private readonly pending = new Map<string, Pending>();
 	private readonly holders = new Map<string, Set<number>>();
 	private readonly lastStarter = new Map<string, number>();
@@ -169,9 +170,13 @@ export class Router {
 				}
 				this.release(windowId, params.threadId, false);
 			}
-			const serverId = `w${windowId}:${message.id}`;
+			const serverId = `w${windowId}:${this.nextRequest++}`;
+			const attempt =
+				message.method === "desktopOperation/start" ||
+				(message.method === "desktopOperation/recover" && params.action === "retry");
+			const forwarded = attempt ? { ...params, attemptId: serverId } : params;
 			// Between an exit and the next child, serverRestarted() has already run: nothing else would answer.
-			if (!this.server.send({ ...message, id: serverId })) {
+			if (!this.server.send({ ...message, id: serverId, params: forwarded } as Message)) {
 				this.toWindow(windowId, {
 					id: message.id,
 					error: { code: "serverRestarted", message: "KnightCode is not running" },
@@ -199,7 +204,13 @@ export class Router {
 		const pending = this.pending.get(id);
 		if (!pending) return;
 		this.pending.delete(id);
-		this.operations.answered(id);
+		this.operations.answered(
+			id,
+			"result" in response &&
+				(pending.method === "desktopOperation/start" || pending.method === "desktopOperation/recover")
+				? (response.result as ResultOf<"desktopOperation/recover">).operation
+				: undefined,
+		);
 		if ("result" in response && pending.method === "desktopOperation/read") {
 			const { threadId } = pending.params as { threadId: string };
 			const { operations } = response.result as ResultOf<"desktopOperation/read">;

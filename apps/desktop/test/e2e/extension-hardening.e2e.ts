@@ -1,5 +1,5 @@
 /** S9 spec 11 gaps: serving containment, CSP and unsupported imports, and provider choice across install/reload. */
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { expect } from "@playwright/test";
 import { openSettings, test } from "../parity/harness.ts";
@@ -13,6 +13,12 @@ test("staged assets refuse traversal, other owners and revisions; CSP blocks rem
 	const { page, app, agentDir } = desktop;
 	const directory = join(agentDir, "desktop-extensions");
 	cpSync(join(examples, "08-owned-css"), join(directory, "styles"), { recursive: true });
+	// A real harmless backend must stage successfully before the privacy assertion is meaningful.
+	cpSync(join(examples, "10-settings", "server.ts"), join(directory, "styles", "server.ts"));
+	const manifest = join(directory, "styles", "package.json");
+	const pkg = JSON.parse(readFileSync(manifest, "utf8")) as { knightcode: { desktop: { backend?: string } } };
+	pkg.knightcode.desktop.backend = "./server.ts";
+	writeFileSync(manifest, JSON.stringify(pkg));
 	const remote = join(directory, "remote");
 	mkdirSync(remote);
 	writeFileSync(join(remote, "package.json"), JSON.stringify({ knightcode: { desktop: { frontend: "./app.js" } } }));
@@ -34,12 +40,13 @@ test("staged assets refuse traversal, other owners and revisions; CSP blocks rem
 	);
 	await expect(row("remote").getByText("Native consent required", { exact: true })).toBeVisible();
 	expect(await page.evaluate(() => "__remoteRan" in globalThis)).toBe(false);
-	await row("styles").getByRole("button", { name: "Trust frontend", exact: true }).click();
+	await row("styles").getByRole("button", { name: "Trust native code", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Owned CSS example", exact: true })).toBeVisible();
 	const owner = (await row("styles").getAttribute("data-extension"))!;
 	const script = await page.locator(`script[src^="app://ext/${owner}/"]`).first().getAttribute("src");
 	const base = new URL(script!);
 	const revision = base.pathname.split("/")[2]!;
+	expect(existsSync(join(agentDir, "desktop-artifacts", owner, revision, "__backend", "server.ts"))).toBe(true);
 	const statuses = await page.evaluate(
 		async ({ owner, revision, script }) => {
 			const fetchStatus = (url: string) =>
@@ -56,7 +63,7 @@ test("staged assets refuse traversal, other owners and revisions; CSP blocks rem
 				undeclared: await fetchStatus(`app://ext/${owner}/${revision}/package.json`),
 				otherRevision: await fetchStatus(`app://ext/${owner}/${"0".repeat(64)}/__entry.js`),
 				otherOwner: await fetchStatus(`app://ext/external-${"0".repeat(24)}/${revision}/__entry.js`),
-				backendPrivate: await fetchStatus(`app://ext/${owner}/${revision}/__backend/server.js`),
+				backendPrivate: await fetchStatus(`app://ext/${owner}/${revision}/__backend/server.ts`),
 			};
 		},
 		{ owner, revision, script: script! },

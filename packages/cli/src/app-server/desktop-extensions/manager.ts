@@ -1,5 +1,5 @@
 /** Native-kind consent and candidate artifact discovery, held outside repository-writable settings. */
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import {
@@ -17,10 +17,11 @@ import { getPathComparisonKey } from "../../utils/paths.ts";
 import { projectReadable } from "../workspaces.ts";
 import {
 	desktopIncompatibility,
+	desktopExtensionOwner,
 	readDesktopManifest,
-	stageDesktopRevision,
 	type DesktopArtifact,
 } from "./artifacts.ts";
+import { DesktopArtifactCache, retainDesktopArtifact, type ArtifactLease } from "./artifact-cache.ts";
 
 const Consent = Type.Object(
 	{
@@ -50,11 +51,22 @@ export class DesktopExtensionManager {
 	private readonly safeMode: boolean;
 	private readonly appVersion: string | undefined;
 	private readonly diagnostics = new Map<string, DesktopExtensionDiagnostic[]>();
+	private readonly cache: DesktopArtifactCache;
+	private readonly inventoryLeases = new Map<string, ArtifactLease>();
+	private readonly reviewLeases = new Map<string, ArtifactLease>();
 	/** `appVersion` is the running desktop's; without it (CLI validation) only the declared range's syntax is checked. */
 	constructor(agentDir: string, options: { safeMode?: boolean; appVersion?: string } = {}) {
 		this.agent = agentDir;
+		this.cache = new DesktopArtifactCache(join(agentDir, "desktop-artifacts"));
 		this.safeMode = options.safeMode ?? false;
 		this.appVersion = options.appVersion;
+	}
+
+	/** Drop management leases; backend and renderer leases retain their own lifetimes. */
+	dispose(): void {
+		for (const lease of [...this.inventoryLeases.values(), ...this.reviewLeases.values()]) lease.release();
+		this.inventoryLeases.clear();
+		this.reviewLeases.clear();
 	}
 
 	async list(cwd?: string, reviewOwner?: string): Promise<ResultOf<"desktopExtension/list">> {
@@ -113,7 +125,10 @@ export class DesktopExtensionManager {
 			if (entry.error) info.error = entry.error;
 			else if (reviewOwner === entry.owner || (reviewOwner === undefined && approved && record.enabled && runs)) {
 				try {
-					const artifact = await stageDesktopRevision(entry.source, join(this.agent, "desktop-artifacts"), entry.owner);
+					const { artifact, lease } = await this.cache.stage(entry.source, entry.owner);
+					const leases = reviewOwner === undefined ? this.inventoryLeases : this.reviewLeases;
+					leases.get(entry.owner)?.release();
+					leases.set(entry.owner, lease);
 					// A confirmation must pin this hash. Staging it does not admit the package.
 					info.revision = artifact.revision;
 					info.kinds = artifact.kinds;
@@ -135,6 +150,13 @@ export class DesktopExtensionManager {
 			}
 			extensions.push(info);
 		}
+		if (reviewOwner === undefined) {
+			for (const [owner, lease] of this.inventoryLeases)
+				if (!extensions.some((entry) => entry.owner === owner && entry.artifact)) {
+					lease.release();
+					this.inventoryLeases.delete(owner);
+				}
+		}
 		return {
 			snapshot: { safeMode: this.safeMode, preview, extensions },
 			artifacts: [...candidates.values()],
@@ -143,9 +165,18 @@ export class DesktopExtensionManager {
 	}
 
 	/** Coordinator-only candidates recheck consent/trust/safe mode without publishing private server files. */
-	async candidates(cwd?: string) {
+	async candidates(
+		cwd?: string,
+	): Promise<{ artifacts: DesktopArtifact[]; enabled: Set<string>; release?: () => void }> {
 		const { artifacts, enabled } = await this.inventory(cwd);
-		return { artifacts, enabled };
+		const leases = artifacts.map((artifact) => retainDesktopArtifact(artifact.root));
+		return {
+			artifacts,
+			enabled,
+			release: () => {
+				for (const lease of leases) lease.release();
+			},
+		};
 	}
 
 	/** Native consent can change while another window stages; executable admission rechecks the receipt. */
@@ -155,6 +186,7 @@ export class DesktopExtensionManager {
 			!this.safeMode &&
 			this.preview() &&
 			!!record?.enabled &&
+			existsSync(join(record.source, "package.json")) &&
 			artifact.kinds.every((kind) => record.kinds.includes(kind)) &&
 			(record.dev || record.revision === artifact.revision) &&
 			(!record.project || projectReadable(this.agent, record.project))
@@ -173,15 +205,20 @@ export class DesktopExtensionManager {
 			if (params.source !== entry.source) throw new Error("Desktop extension source changed; review its source again.");
 			if (entry.error) throw new Error(entry.error);
 			if (params.revision === undefined) throw new Error("Native approval requires the reviewed revision.");
-			artifact = await stageDesktopRevision(entry.source, join(this.agent, "desktop-artifacts"), entry.owner);
-			if (
-				!params.kinds ||
-				params.kinds.length !== artifact.kinds.length ||
-				!artifact.kinds.every((kind) => params.kinds!.includes(kind))
-			)
-				throw new Error("Native entry kinds changed or were not reviewed. Review and grant native consent again.");
-			if (params.revision !== artifact.revision)
-				throw new Error("The extension changed while its confirmation was open. Review it again.");
+			const staged = await this.cache.stage(entry.source, entry.owner);
+			artifact = staged.artifact;
+			try {
+				if (
+					!params.kinds ||
+					params.kinds.length !== artifact.kinds.length ||
+					!artifact.kinds.every((kind) => params.kinds!.includes(kind))
+				)
+					throw new Error("Native entry kinds changed or were not reviewed. Review and grant native consent again.");
+				if (params.revision !== artifact.revision)
+					throw new Error("The extension changed while its confirmation was open. Review it again.");
+			} finally {
+				staged.lease.release();
+			}
 		}
 		const records = this.readConsents();
 		const previous = records[entry.owner];
@@ -237,7 +274,7 @@ export class DesktopExtensionManager {
 			const source = realpathSync(path);
 			const key = getPathComparisonKey(source);
 			if (roots.has(key)) return;
-			const owner = `external-${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
+			const owner = desktopExtensionOwner(source);
 			try {
 				const manifest = readDesktopManifest(source);
 				if (!manifest) return;

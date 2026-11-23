@@ -14,10 +14,7 @@ const sameTarget = (a: Target, b: Target) =>
 export class DesktopOperationJournal {
 	private readonly latest = new Map<string, Operation[]>();
 	private readonly uncertain = new Map<string, Operation>();
-	private readonly pending = new Map<
-		string,
-		{ target: Target; action?: Action; operationId?: string; before: Operation[] }
-	>();
+	private readonly pending = new Map<string, { target: Target; action?: Action; operationId?: string }>();
 
 	/** Renderer params are wire input; the app server remains the authority for admitting each action. */
 	intercept(
@@ -39,15 +36,22 @@ export class DesktopOperationJournal {
 	track(id: string, method: string, params: Record<string, unknown>): void {
 		if (method === "desktopOperation/start") {
 			const { target, action } = params as ParamsOf<"desktopOperation/start">;
-			this.pending.set(id, { target, action, before: this.latest.get(target.threadId) ?? [] });
+			this.pending.set(id, { target, action });
 		} else if (method === "desktopOperation/recover" && params.action === "retry") {
 			const { target, id: operationId } = params as ParamsOf<"desktopOperation/recover">;
-			this.pending.set(id, { target, operationId, before: this.latest.get(target.threadId) ?? [] });
+			this.pending.set(id, { target, operationId });
 		}
 	}
 
-	answered(id: string): void {
+	answered(id: string, operation?: Operation): void {
 		this.pending.delete(id);
+		if (operation) {
+			const threadId = operation.target.threadId;
+			this.latest.set(threadId, [
+				...(this.latest.get(threadId) ?? []).filter((op) => op.id !== operation.id),
+				operation,
+			]);
+		}
 	}
 
 	observe(threadId: string, operations: Operation[]): void {
@@ -83,29 +87,28 @@ export class DesktopOperationJournal {
 		for (const list of this.latest.values())
 			for (const operation of list)
 				if (operation.status === "running" || operation.status === "outcome-unknown") mark(operation);
-		for (const [id, { target, action, operationId, before }] of this.pending) {
+		for (const [id, { target, action, operationId }] of this.pending) {
 			if (this.unknownAt(target)) continue;
-			const match = this.latest
-				.get(target.threadId)
-				?.find(
-					(op) =>
-						sameTarget(op.target, target) &&
-						(operationId ? op.id === operationId : op.kind === action?.kind && !before.some((old) => old.id === op.id)),
-				);
-			// A terminal observation can beat the reply. An older completion is not proof about a new request.
-			if (match?.status === "completed" && !before.some((old) => old.id === match.id && old.status === "completed"))
-				continue;
-			if (operationId && match && match.status !== "completed") mark(match);
-			else
+			const list = this.latest.get(target.threadId) ?? [];
+			const match = list.find((op) => sameTarget(op.target, target) && op.attemptId === id);
+			// Only this attempt's terminal observation can settle this request before its reply.
+			if (match?.status === "completed" || match?.status === "refused" || match?.status === "cancelled") continue;
+			if (match) mark(match);
+			else {
+				const previous = operationId
+					? list.find((op) => op.id === operationId && sameTarget(op.target, target))
+					: undefined;
 				mark({
 					id: `unknown:${id}`,
+					attemptId: id,
 					target,
-					kind: action?.kind ?? "unknown",
+					kind: previous?.kind ?? action?.kind ?? "unknown",
 					status: "outcome-unknown",
 					recovery: "reconcile",
-					outputs: {},
-					completed: [],
+					outputs: previous?.outputs ?? {},
+					completed: previous?.completed ?? [],
 				});
+			}
 		}
 		this.pending.clear();
 		this.latest.clear();

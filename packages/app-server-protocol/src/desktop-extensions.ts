@@ -87,6 +87,7 @@ export const DesktopExtensionPhase = Obj(
 			Type.Literal("resume"),
 			Type.Literal("discard"),
 			Type.Literal("revoke"),
+			Type.Literal("retire"),
 			Type.Literal("ready"),
 		]),
 		artifact: Type.Optional(DesktopArtifact),

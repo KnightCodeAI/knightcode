@@ -13,6 +13,7 @@ import type { AppServerContext } from "../context.ts";
 import type { DesktopArtifact } from "./artifacts.ts";
 import { DesktopBackend, prepareDesktopBackend } from "./backend.ts";
 import { DesktopRevisionCoordinator, type DesktopCallResult, type DesktopWindowParticipant } from "./coordinator.ts";
+import { retainDesktopArtifact } from "./artifact-cache.ts";
 import type { DesktopExtensionManager } from "./manager.ts";
 
 type Identity = { windowId: number; lifetime: string };
@@ -50,6 +51,7 @@ export class DesktopBackendRuntime {
 	private readonly owners = new Map<string, Owner>();
 	private readonly acknowledgements = new Map<string, Acknowledgement>();
 	private disposed = false;
+	private disposal?: Promise<void>;
 	private reconciliation = 0;
 	private explicitReload = 0;
 
@@ -85,9 +87,26 @@ export class DesktopBackendRuntime {
 			},
 			{ once: true },
 		);
-		for (const [id, owner] of this.owners) {
-			await owner.coordinator.join(this.participant(id, owner, peer));
-			this.ready(owner, peer);
+		try {
+			// Install the lifetime before awaiting inventory, so overlapping connects can revoke this handshake.
+			const inventory = await this.manager.candidates();
+			try {
+				await Promise.all(
+					[...this.owners]
+						.filter(([id]) => !inventory.enabled.has(id))
+						.map(([id, owner]) => (owner.retiring ??= this.retire(id, owner))),
+				);
+			} finally {
+				inventory.release?.();
+			}
+			if (this.disposed || peer.signal.aborted || this.peers.get(key) !== peer) return;
+			for (const [id, owner] of this.owners) {
+				await owner.coordinator.join(this.participant(id, owner, peer));
+				this.ready(owner, peer);
+			}
+		} catch (error) {
+			peer.controller.abort();
+			throw error;
 		}
 	}
 
@@ -110,54 +129,60 @@ export class DesktopBackendRuntime {
 	async reconcile(cwd?: string, force = false): Promise<void> {
 		const generation = ++this.reconciliation;
 		if (force) this.explicitReload++;
-		const { artifacts: candidates, enabled: desired } = await this.manager.candidates(cwd);
-		if (this.disposed || !this.peers.size || generation !== this.reconciliation) return;
-		await Promise.all(
-			[...this.owners]
-				.filter(([id]) => !desired.has(id))
-				.map(([id, owner]) => (owner.retiring ??= this.retire(id, owner))),
-		);
-		await Promise.all(
-			candidates.map(async (artifact) => {
-				let owner = this.owners.get(artifact.owner);
-				if (owner?.retiring) {
-					await owner.retiring;
-					owner = this.owners.get(artifact.owner);
-				}
-				if (this.disposed || generation !== this.reconciliation || !this.manager.admits(artifact)) return;
-				if (!owner) {
-					owner = { coordinator: new DesktopRevisionCoordinator(artifact.owner), initialized: Promise.resolve() };
-					this.owners.set(artifact.owner, owner);
+		const inventory = await this.manager.candidates(cwd);
+		try {
+			const { artifacts: candidates, enabled: desired } = inventory;
+			if (this.disposed || generation !== this.reconciliation) return;
+			await Promise.all(
+				[...this.owners]
+					.filter(([id]) => !desired.has(id))
+					.map(([id, owner]) => (owner.retiring ??= this.retire(id, owner))),
+			);
+			if (this.disposed || !this.peers.size || generation !== this.reconciliation) return;
+			await Promise.all(
+				candidates.map(async (artifact) => {
+					let owner = this.owners.get(artifact.owner);
+					if (owner?.retiring) {
+						await owner.retiring;
+						owner = this.owners.get(artifact.owner);
+					}
+					if (this.disposed || generation !== this.reconciliation || !this.manager.admits(artifact)) return;
+					if (!owner) {
+						owner = { coordinator: new DesktopRevisionCoordinator(artifact.owner), initialized: Promise.resolve() };
+						this.owners.set(artifact.owner, owner);
+						const state = owner;
+						// Queue the complete participant snapshot before any overlapping reconciliation may update it.
+						state.initialized = Promise.all(
+							[...this.peers.values()].map((peer) =>
+								state.coordinator.join(this.participant(artifact.owner, state, peer)),
+							),
+						).then(() => {});
+					}
+					await owner.initialized;
+					while (owner.pending) await owner.pending;
+					if (
+						this.disposed ||
+						generation !== this.reconciliation ||
+						this.owners.get(artifact.owner) !== owner ||
+						!this.manager.admits(artifact)
+					)
+						return;
+					if (owner.reload === this.explicitReload && owner.attempted === artifact.revision) return;
+					owner.attempted = artifact.revision;
+					owner.reload = this.explicitReload;
 					const state = owner;
-					// Queue the complete participant snapshot before any overlapping reconciliation may update it.
-					state.initialized = Promise.all(
-						[...this.peers.values()].map((peer) =>
-							state.coordinator.join(this.participant(artifact.owner, state, peer)),
-						),
-					).then(() => {});
-				}
-				await owner.initialized;
-				while (owner.pending) await owner.pending;
-				if (
-					this.disposed ||
-					generation !== this.reconciliation ||
-					this.owners.get(artifact.owner) !== owner ||
-					!this.manager.admits(artifact)
-				)
-					return;
-				if (owner.reload === this.explicitReload && owner.attempted === artifact.revision) return;
-				owner.attempted = artifact.revision;
-				owner.reload = this.explicitReload;
-				const state = owner;
-				const pending = this.activate(state, artifact);
-				state.pending = pending;
-				try {
-					await pending;
-				} finally {
-					if (state.pending === pending) state.pending = undefined;
-				}
-			}),
-		);
+					const pending = this.activate(state, artifact);
+					state.pending = pending;
+					try {
+						await pending;
+					} finally {
+						if (state.pending === pending) state.pending = undefined;
+					}
+				}),
+			);
+		} finally {
+			inventory.release?.();
+		}
 	}
 
 	async call(params: ParamsOf<"desktopExtension/call">, connection: AppServer): Promise<DesktopCallResult> {
@@ -230,11 +255,14 @@ export class DesktopBackendRuntime {
 	}
 
 	/** Host/process teardown clears authority immediately; shutdown still accounts for admitted backend work. */
-	dispose(): void {
+	dispose(): Promise<void> {
+		if (this.disposal) return this.disposal;
 		this.disposed = true;
 		for (const peer of this.peers.values()) peer.controller.abort();
-		for (const owner of this.owners.values()) void owner.coordinator.shutdown();
+		const stopping = [...this.owners.values()].map((owner) => owner.coordinator.shutdown());
 		this.owners.clear();
+		this.disposal = Promise.all(stopping).then(() => {});
+		return this.disposal;
 	}
 
 	private peer(identity: Identity, connection: AppServer): Peer | undefined {
@@ -258,64 +286,92 @@ export class DesktopBackendRuntime {
 
 	private async activate(owner: Owner, artifact: DesktopArtifact): Promise<void> {
 		let candidate: Metadata | undefined;
-		const result = await owner.coordinator.update(artifact.revision, async (signal) => {
-			if (!this.manager.admits(artifact))
-				throw new Error("Desktop native consent or project trust changed before admission.");
-			const emit = (event: string, value: unknown) => {
-				if (!candidate || owner.live !== candidate) return;
-				for (const peer of this.peers.values())
-					for (const subscription of peer.subscriptions.values()) {
-						if (
-							subscription.binding.owner === artifact.owner &&
-							subscription.event === event &&
-							owner.coordinator.accepts(subscription.binding)
-						)
-							peer.connection.notify("desktopExtension/event", {
-								windowId: peer.windowId,
-								lifetime: peer.lifetime,
-								binding: subscription.binding,
-								id: subscription.id,
-								event,
-								value,
-							});
+		const lease = retainDesktopArtifact(artifact.root);
+		let preparing = false;
+		try {
+			const result = await owner.coordinator.update(
+				artifact.revision,
+				async (signal) => {
+					preparing = true;
+					try {
+						if (!this.manager.admits(artifact))
+							throw new Error("Desktop native consent or project trust changed before admission.");
+						const emit = (event: string, value: unknown) => {
+							if (!candidate || owner.live !== candidate) return;
+							for (const peer of this.peers.values())
+								for (const subscription of peer.subscriptions.values()) {
+									if (
+										subscription.binding.owner === artifact.owner &&
+										subscription.event === event &&
+										owner.coordinator.accepts(subscription.binding)
+									)
+										peer.connection.notify("desktopExtension/event", {
+											windowId: peer.windowId,
+											lifetime: peer.lifetime,
+											binding: subscription.binding,
+											id: subscription.id,
+											event,
+											value,
+										});
+								}
+						};
+						const backend = artifact.backend
+							? await prepareDesktopBackend(
+									join(artifact.root, artifact.backend),
+									artifact.owner,
+									this.data,
+									emit,
+									this.context,
+								)
+							: new DesktopBackend(
+									artifact.owner,
+									this.data,
+									{ apiVersion: 1, experimental_setup() {} },
+									emit,
+									this.context,
+								);
+						if (signal.aborted) {
+							await backend.dispose();
+							throw new Error("Activation revoked.");
+						}
+						candidate = { artifact, backend, contracts: backend.contracts() };
+						owner.candidate = candidate;
+						return {
+							call: (method, args, callSignal) => backend.call(method, args, callSignal),
+							activate: () => backend.activate(),
+							pause: () => backend.pause(),
+							resume: () => backend.resume(),
+							dispose: () => backend.dispose().then(() => lease.release()),
+						};
+					} catch (error) {
+						lease.release();
+						throw error;
 					}
-			};
-			const backend = artifact.backend
-				? await prepareDesktopBackend(
-						join(artifact.root, artifact.backend),
-						artifact.owner,
-						this.data,
-						emit,
-						this.context,
-					)
-				: new DesktopBackend(artifact.owner, this.data, { apiVersion: 1, experimental_setup() {} }, emit, this.context);
-			if (signal.aborted) {
-				await backend.dispose();
-				throw new Error("Activation revoked.");
+				},
+				() => !this.disposed && this.manager.admits(artifact),
+			);
+			if (this.owners.get(artifact.owner) !== owner) return;
+			if (result.status === "committed" && candidate) {
+				candidate.epoch = result.epoch;
+				owner.live = candidate;
+				this.clearSubscriptions(artifact.owner);
+			} else if (result.status === "disabled") {
+				owner.live = undefined;
+				this.clearSubscriptions(artifact.owner);
 			}
-			candidate = { artifact, backend, contracts: backend.contracts() };
-			owner.candidate = candidate;
-			return backend;
-		});
-		if (this.owners.get(artifact.owner) !== owner) return;
-		if (result.status === "committed" && candidate) {
-			candidate.epoch = result.epoch;
-			owner.live = candidate;
-			this.clearSubscriptions(artifact.owner);
-		} else if (result.status === "disabled") {
-			owner.live = undefined;
-			this.clearSubscriptions(artifact.owner);
+			if (owner.candidate === candidate) owner.candidate = undefined;
+			if (result.status !== "committed")
+				for (const peer of this.peers.values())
+					this.manager.report(artifact.owner, {
+						windowId: peer.windowId,
+						revision: artifact.revision,
+						phase: "load",
+						message: result.reason.slice(0, 4096),
+					});
+			for (const peer of this.peers.values()) this.ready(owner, peer);
+		} finally {
+			if (!preparing) lease.release();
 		}
-		if (owner.candidate === candidate) owner.candidate = undefined;
-		if (result.status !== "committed")
-			for (const peer of this.peers.values())
-				this.manager.report(artifact.owner, {
-					windowId: peer.windowId,
-					revision: artifact.revision,
-					phase: "load",
-					message: result.reason.slice(0, 4096),
-				});
-		for (const peer of this.peers.values()) this.ready(owner, peer);
 	}
 
 	private participant(id: string, owner: Owner, peer: Peer): DesktopWindowParticipant {
@@ -323,6 +379,8 @@ export class DesktopBackendRuntime {
 		const phase = (name: DesktopExtensionPhase["phase"], binding: DesktopActivationBinding, signal: AbortSignal) => {
 			last = binding;
 			const metadata = owner.live?.epoch === binding.epoch ? owner.live : owner.candidate;
+			if (name === "prepare" && (!metadata || !this.manager.admits(metadata.artifact)))
+				throw new Error("Activation is no longer eligible for this window.");
 			return this.phase(peer, binding, name, signal, name === "prepare" ? metadata : undefined);
 		};
 		return {
@@ -342,16 +400,17 @@ export class DesktopBackendRuntime {
 					binding,
 				});
 			},
-			revoke: () => {
+			revoke: (binding) => {
 				peer.subscriptions.forEach((subscription, key) => {
-					if (subscription.binding.owner === id) peer.subscriptions.delete(key);
+					if (subscription.binding.owner === id && (!binding || sameBinding(subscription.binding, binding)))
+						peer.subscriptions.delete(key);
 				});
 				peer.connection.notify("desktopExtension/phase", {
 					windowId: peer.windowId,
 					lifetime: peer.lifetime,
 					id: randomUUID(),
-					phase: "revoke",
-					binding: last ?? { owner: id, revision: "", epoch: "", window: peer.key, mount: "" },
+					phase: binding ? "revoke" : "retire",
+					binding: binding ?? last ?? { owner: id, revision: "", epoch: "", window: peer.key, mount: "" },
 				});
 			},
 		};

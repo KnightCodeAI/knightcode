@@ -91,6 +91,11 @@ export function readDesktopManifest(root: string): DesktopManifest | undefined {
 	};
 }
 
+/** Stable artifact owner derived from a canonical source directory, shared by validation and discovery. */
+export function desktopExtensionOwner(source: string): string {
+	return `external-${createHash("sha256").update(getPathComparisonKey(source)).digest("hex").slice(0, 24)}`;
+}
+
 /** Every path is both lexically and physically inside its source root; symlink escapes never become artifacts. */
 export function containedDesktopFile(root: string, name: string): string {
 	if (!name || name.includes("\\") || name.includes("\0") || isAbsolute(name) || /^[a-z]+:/i.test(name))

@@ -1,4 +1,7 @@
+import type * as React from "react";
 import {
+	defineDesktopExtension,
+	experimental_shellServices,
 	experimental_controllers,
 	experimental_composer,
 	experimental_attachComposerEditor,
@@ -8,6 +11,10 @@ import { afterEach, expect, test, vi } from "vitest";
 const host = vi.hoisted(() => vi.fn(async () => ({})));
 const request = vi.hoisted(() => vi.fn());
 vi.hoisted(() => Object.assign(globalThis, { window: { addEventListener() {}, removeEventListener() {} } }));
+vi.mock("react", async (original) => ({
+	...(await original<typeof React>()),
+	useSyncExternalStore: (_subscribe: unknown, read: () => unknown) => read(),
+}));
 vi.mock("../../src/renderer/client.ts", () => ({
 	client: {
 		host,
@@ -18,10 +25,63 @@ vi.mock("../../src/renderer/client.ts", () => ({
 	},
 	RequestError: class extends Error {},
 }));
+import { desktopExtensions } from "../../src/renderer/extensions/runtime.ts";
 import { initializeDesktopExtensions } from "../../src/renderer/extensions/host.tsx";
-import { getState, navigate, refreshThreads, composerDraftOf, setComposerDraft } from "../../src/renderer/store.ts";
+import {
+	getState,
+	navigate,
+	refreshThreads,
+	composerDraftOf,
+	setComposerDraft,
+	selectPanelContribution,
+} from "../../src/renderer/store.ts";
 
 afterEach(() => vi.clearAllMocks());
+
+test("page listing and opening share the real sidebar context", () => {
+	const dispose = initializeDesktopExtensions();
+	const page = desktopExtensions.register(
+		"sidebar-page",
+		defineDesktopExtension((app) => {
+			app.experimental_registerPage({
+				id: "open",
+				label: "Open sidebar",
+				experimental_available: (context) => context.sidebarOpen,
+				experimental_render: () => null,
+			});
+		}),
+	);
+	try {
+		const c = experimental_controllers();
+		c.experimental_setSidebarOpen(false);
+		expect(
+			experimental_shellServices()
+				.experimental_usePages()
+				.some((p) => p.id === "sidebar-page/open"),
+		).toBe(false);
+		expect(c.experimental_openPage("sidebar-page/open")).toBe(false);
+		c.experimental_setSidebarOpen(true);
+		expect(
+			experimental_shellServices()
+				.experimental_usePages()
+				.some((p) => p.id === "sidebar-page/open"),
+		).toBe(true);
+		expect(c.experimental_openPage("sidebar-page/open")).toBe(true);
+	} finally {
+		page.dispose();
+		dispose();
+	}
+});
+
+test("reselecting an extension file tab retains its path and line", () => {
+	selectPanelContribution("tab-thread", { id: "tools/view", file: { path: "README.md", line: 7 } });
+	selectPanelContribution("tab-thread", { id: "tools/view" });
+	expect(getState().panelContributions["tab-thread"]).toEqual({
+		id: "tools/view",
+		file: { path: "README.md", line: 7 },
+	});
+	selectPanelContribution("tab-thread");
+});
 
 test("thread mutation facades return confirmed success or refusal, never success after a failed request", async () => {
 	const dispose = initializeDesktopExtensions();

@@ -18,6 +18,7 @@ export function desktopExtensionHandlers(ctx: AppServerContext): Handlers {
 	});
 	const runtime = new DesktopBackendRuntime(manager, ctx);
 	ctx.onDispose(() => runtime.dispose());
+	ctx.onDispose(() => manager.dispose());
 	const reload = (cause: "source" | "explicit") => {
 		ctx.broadcast("desktopExtension/changed", { reload: true });
 		void runtime

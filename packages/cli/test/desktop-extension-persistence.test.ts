@@ -1,5 +1,5 @@
 /** Explicit backend data contexts never follow the renderer's selected project or thread. */
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -77,6 +77,27 @@ function backend(data: string, ctx: AppServerContext, owner = "example", schema:
 		},
 	};
 }
+
+it("keeps the accepted settings after an atomic replacement fails", async () => {
+	const f = await fixture();
+	const h = backend(f.data, f.ctx);
+	await h.host.activate();
+	h.greeting.experimental_set("accepted");
+	const path = join(f.data, "example.json");
+	const accepted = readFileSync(path, "utf8");
+	rmSync(path);
+	mkdirSync(path);
+	expect(() => h.greeting.experimental_set("rejected")).toThrow();
+	expect(h.greeting.experimental_get()).toBe("accepted");
+	rmSync(path, { recursive: true });
+	writeFileSync(path, accepted);
+	h.count.experimental_set(4);
+	await h.host.dispose();
+	const next = backend(f.data, f.ctx);
+	await next.host.activate();
+	expect(next.greeting.experimental_get()).toBe("accepted");
+	await next.host.dispose();
+});
 
 it("isolates owner/app/project/thread data, inherits settings thread > project > app > default, and never writes a transcript", async () => {
 	const f = await fixture();

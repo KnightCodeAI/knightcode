@@ -7521,6 +7521,9 @@
 								"id": {
 									"type": "string"
 								},
+								"attemptId": {
+									"type": "string"
+								},
 								"kind": {
 									"anyOf": [
 										{
@@ -7692,6 +7695,9 @@
 									"type": "object",
 									"properties": {
 										"branch": {
+											"type": "string"
+										},
+										"head": {
 											"type": "string"
 										},
 										"commit": {
@@ -7932,6 +7938,9 @@
 								"additionalProperties": false
 							}
 						]
+					},
+					"attemptId": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false
@@ -7955,6 +7964,9 @@
 						],
 						"properties": {
 							"id": {
+								"type": "string"
+							},
+							"attemptId": {
 								"type": "string"
 							},
 							"kind": {
@@ -8128,6 +8140,9 @@
 								"type": "object",
 								"properties": {
 									"branch": {
+										"type": "string"
+									},
+									"head": {
 										"type": "string"
 									},
 									"commit": {
@@ -8218,6 +8233,9 @@
 					"id": {
 						"type": "string"
 					},
+					"attemptId": {
+						"type": "string"
+					},
 					"action": {
 						"anyOf": [
 							{
@@ -8256,6 +8274,9 @@
 						],
 						"properties": {
 							"id": {
+								"type": "string"
+							},
+							"attemptId": {
 								"type": "string"
 							},
 							"kind": {
@@ -8429,6 +8450,9 @@
 								"type": "object",
 								"properties": {
 									"branch": {
+										"type": "string"
+									},
+									"head": {
 										"type": "string"
 									},
 									"commit": {
@@ -15462,6 +15486,10 @@
 						},
 						{
 							"type": "string",
+							"const": "retire"
+						},
+						{
+							"type": "string",
 							"const": "ready"
 						}
 					]
@@ -16205,6 +16233,9 @@
 							"id": {
 								"type": "string"
 							},
+							"attemptId": {
+								"type": "string"
+							},
 							"kind": {
 								"anyOf": [
 									{
@@ -16376,6 +16407,9 @@
 								"type": "object",
 								"properties": {
 									"branch": {
+										"type": "string"
+									},
+									"head": {
 										"type": "string"
 									},
 									"commit": {

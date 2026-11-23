@@ -1,6 +1,6 @@
 /** Schema-checked owner data, separate from transcripts and never migrated during preparation. */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Type, type Static, type TSchema } from "typebox";
 import { Compile } from "typebox/compile";
@@ -61,7 +61,8 @@ export class DesktopBackendPersistence {
 
 	/** Persist only the exact scope; settings inheritance never copies values into child scopes. */
 	set(kind: Kind, id: string, key: string, value: unknown): void {
-		const record = this.records.get(key) ?? { settings: {}, storage: {} };
+		const previous = this.records.get(key) ?? { settings: {}, storage: {} };
+		const record = { ...previous, [kind]: { ...previous[kind] } };
 		// Declaration ids are dictionary keys, not prototype setters.
 		Object.defineProperty(record[kind], id, { value, writable: true, enumerable: true, configurable: true });
 		// Persisted-value boundary: a previous getter may have returned a mutable object.
@@ -69,9 +70,13 @@ export class DesktopBackendPersistence {
 		const target = this.path(key);
 		mkdirSync(dirname(target), { recursive: true });
 		const temporary = `${target}.${randomUUID()}.tmp`;
-		writeFileSync(temporary, JSON.stringify(record), { mode: 0o600 });
-		renameSync(temporary, target);
-		this.records.set(key, record);
+		try {
+			writeFileSync(temporary, JSON.stringify(record), { mode: 0o600 });
+			renameSync(temporary, target);
+			this.records.set(key, record);
+		} finally {
+			rmSync(temporary, { force: true });
+		}
 	}
 
 	private read(key: string): void {

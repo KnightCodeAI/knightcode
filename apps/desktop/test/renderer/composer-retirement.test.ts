@@ -29,7 +29,7 @@ vi.mock("../../src/renderer/extensions/composer-behavior.tsx", () => ({
 
 import { FrontendActivation } from "../../src/renderer/extensions/activation.ts";
 import { composerController } from "../../src/renderer/extensions/composer-controller.ts";
-import { ComposerRoot, useComposerEditor } from "../../src/renderer/extensions/composer-root.tsx";
+import { ComposerMounts, ComposerRoot, useComposerEditor } from "../../src/renderer/extensions/composer-root.tsx";
 import { initializeDesktopExtensions } from "../../src/renderer/extensions/host.tsx";
 import { desktopExtensions } from "../../src/renderer/extensions/runtime.ts";
 import { startupLayout } from "../../src/renderer/extensions/startup.ts";
@@ -37,6 +37,38 @@ import { startupLayout } from "../../src/renderer/extensions/startup.ts";
 let target: { threadId: string };
 let controller: ReturnType<typeof composerController>;
 afterEach(() => vi.unstubAllGlobals());
+
+test("readiness observes editor or host loss after a valid mount and permits same-commit swaps", async () => {
+	const mounts = new ComposerMounts();
+	const hosts = ["actions", "banners", "chips", "addMenu", "sendMenu", "suggestions", "popups"] as const;
+	const remove = hosts.map((host) => mounts.mount(host));
+	let editor = true;
+	const failures: (string | undefined)[] = [];
+	const off = mounts.subscribe(() => failures.push(mounts.problem(editor)));
+	await Promise.resolve();
+	expect(failures.at(-1)).toBeUndefined();
+	editor = false;
+	mounts.changed();
+	await Promise.resolve();
+	expect(failures.at(-1)).toMatch(/editor adapter/);
+	editor = true;
+	mounts.changed();
+	remove[0]!();
+	await Promise.resolve();
+	expect(failures.at(-1)).toMatch(/actions contribution host/);
+	const again = mounts.mount("actions");
+	await Promise.resolve();
+	failures.length = 0;
+	again();
+	mounts.mount("actions");
+	editor = false;
+	mounts.changed();
+	editor = true;
+	mounts.changed();
+	await Promise.resolve();
+	expect(failures).toEqual([undefined]);
+	off();
+});
 
 for (const editor of ["standard", "custom"] as const) {
 	for (const retirement of ["reload", "disable"] as const) {

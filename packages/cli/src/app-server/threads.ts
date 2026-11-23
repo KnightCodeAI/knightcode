@@ -2369,8 +2369,8 @@ export class ThreadManager {
 				return;
 			}
 			const status = await gitStatus(repo);
-			const { branch, commit } = op.snapshot.outputs;
-			if ((branch && branch !== status.branch) || (commit && commit !== status.head))
+			const { branch, head, commit } = op.snapshot.outputs;
+			if ((branch && branch !== status.branch) || ((head ?? commit) && (head ?? commit) !== status.head))
 				throw new AppServerError("gitConflict", "The branch or commit changed. Review the checkout before continuing.");
 			if ("branch" in action && action.branch && !status.branch) {
 				const name = action.branch;
@@ -2407,11 +2407,24 @@ export class ThreadManager {
 					}
 				});
 			}
+			if (
+				(action.kind === "commitAndPush" || action.kind === "push" || action.kind === "pullRequest") &&
+				!op.snapshot.outputs.head
+			) {
+				const checkout = await gitStatus(repo);
+				op.confirm({
+					branch: op.snapshot.outputs.branch ?? checkout.branch,
+					head: op.snapshot.outputs.commit ?? checkout.head,
+				});
+			}
 			const verifyConfirmed = async () => {
 				this.assertDesktopCheckout(thread, target);
 				const latest = await gitStatus(repo);
 				const outputs = op.snapshot.outputs;
-				if ((outputs.branch && outputs.branch !== latest.branch) || (outputs.commit && outputs.commit !== latest.head))
+				if (
+					(outputs.branch && outputs.branch !== latest.branch) ||
+					((outputs.head ?? outputs.commit) && (outputs.head ?? outputs.commit) !== latest.head)
+				)
 					throw new AppServerError(
 						"gitConflict",
 						"The branch or commit changed. Review the checkout before continuing.",
@@ -2581,19 +2594,25 @@ export class ThreadManager {
 				return { branch };
 			},
 			"desktopOperation/read": async ({ threadId }) => ({ operations: this.desktopOperations.list(threadId) }),
-			"desktopOperation/start": ({ target, action }, connection) =>
+			"desktopOperation/start": ({ target, action, attemptId }, connection) =>
 				this.track(async () => ({
 					operation: await this.desktopOperations.start(
 						{ ...target, projectCwd: pathKey(canonicalizePath(resolvePath(target.projectCwd))) },
 						action,
 						(op) => this.runDesktopOperation(op, connection),
+						attemptId,
 					),
 				})),
-			"desktopOperation/recover": ({ target: original, id, action }, connection) =>
+			"desktopOperation/recover": ({ target: original, id, action, attemptId }, connection) =>
 				this.track(async () => {
 					const target = { ...original, projectCwd: pathKey(canonicalizePath(resolvePath(original.projectCwd))) };
 					if (action === "retry")
-						return this.desktopOperations.retry(target, id, (op) => this.runDesktopOperation(op, connection));
+						return this.desktopOperations.retry(
+							target,
+							id,
+							(op) => this.runDesktopOperation(op, connection),
+							attemptId,
+						);
 					const accepted =
 						action === "cancel"
 							? this.desktopOperations.cancel(target, id)

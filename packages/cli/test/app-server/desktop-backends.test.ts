@@ -12,11 +12,13 @@ import { DesktopBackend } from "../../src/app-server/desktop-extensions/backend.
 import { desktopExtensionHandlers } from "../../src/app-server/desktop-extensions/handlers.ts";
 import { createInProcessClient } from "../../src/app-server/in-process.ts";
 import { ProjectTrustStore } from "../../src/core/trust-manager.ts";
+// Compile Vitest's lazy SDK bridge before testing the coordinator's real readiness deadline.
+import "../../src/core/extensions/virtual-modules.ts";
 
-const cleanups: (() => void)[] = [];
-afterEach(() => {
+const cleanups: (() => void | Promise<void>)[] = [];
+afterEach(async () => {
+	for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 	vi.restoreAllMocks();
-	for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 });
 const checkPhase = Compile(DesktopExtensionPhase);
 async function fixture(start = true) {
@@ -85,7 +87,7 @@ export default experimental_defineDesktopBackend(app => {
 			if (bindings.size === 2) initialReady.resolve();
 			return;
 		}
-		if (params.phase === "revoke") {
+		if (params.phase === "revoke" || params.phase === "retire") {
 			bindings.delete(params.windowId);
 			return;
 		}
@@ -109,6 +111,8 @@ export default experimental_defineDesktopBackend(app => {
 	if (start) {
 		await client.request("desktopExtension/reconcile", { windowId: 1, lifetime: "window-1" });
 		// Reconciliation may be superseded by a newer discovery; only ready establishes callable bindings.
+		const status = await client.request("desktopExtension/list", {});
+		expect(status.extensions.flatMap((entry) => entry.diagnostics)).toEqual([]);
 		await initialReady.promise;
 	}
 	return {
@@ -133,6 +137,72 @@ export default experimental_defineDesktopBackend(app => {
 		},
 	};
 }
+
+it("a slow old handshake cannot replace a newer window lifetime", async () => {
+	const { client, bindings } = await fixture();
+	const captured = Promise.withResolvers<void>();
+	const released = Promise.withResolvers<void>();
+	const original = DesktopExtensionManager.prototype.candidates;
+	vi.spyOn(DesktopExtensionManager.prototype, "candidates").mockImplementationOnce(async function (
+		this: DesktopExtensionManager,
+		cwd,
+	) {
+		const snapshot = await original.call(this, cwd);
+		captured.resolve();
+		await released.promise;
+		return snapshot;
+	});
+	const old = client.request("desktopExtension/window/connect", { windowId: 1, lifetime: "old-handshake" });
+	await captured.promise;
+	await client.request("desktopExtension/window/connect", { windowId: 1, lifetime: "new-handshake" });
+	const binding = bindings.get(1)!;
+	released.resolve();
+	await old;
+	expect(
+		await client.request("desktopExtension/call", {
+			windowId: 1,
+			lifetime: "new-handshake",
+			binding,
+			requestId: 1,
+			method: "echo",
+			args: 7,
+		}),
+	).toEqual({ status: "ok", value: 7 });
+});
+
+it("retires a removed backend with no windows before a new window joins", async () => {
+	const { client, agentDir, bindings } = await fixture();
+	const dispose = vi.spyOn(DesktopBackend.prototype, "dispose");
+	for (const windowId of [1, 2])
+		await client.request("desktopExtension/window/disconnect", { windowId, lifetime: `window-${windowId}` });
+	rmSync(join(agentDir, "desktop-extensions", "example"), { recursive: true, force: true });
+	await client.request("desktopExtension/reload", {});
+	expect(dispose).toHaveBeenCalled();
+	bindings.clear();
+	await client.request("desktopExtension/window/connect", { windowId: 3, lifetime: "window-3" });
+	expect(bindings.size).toBe(0);
+});
+
+it("context shutdown waits for cooperative asynchronous backend disposal", async () => {
+	const { ctx } = await fixture();
+	const started = Promise.withResolvers<void>();
+	const cleanup = Promise.withResolvers<void>();
+	const original = DesktopBackend.prototype.dispose;
+	vi.spyOn(DesktopBackend.prototype, "dispose").mockImplementationOnce(async function (this: DesktopBackend) {
+		started.resolve();
+		await cleanup.promise;
+		await original.call(this);
+	});
+	let finished = false;
+	const disposing = ctx.dispose().then(() => {
+		finished = true;
+	});
+	await started.promise;
+	expect(finished).toBe(false);
+	cleanup.resolve();
+	await disposing;
+	expect(finished).toBe(true);
+});
 
 it("routes explicit project data through the real loader and never infers a window's selection", async () => {
 	const { client, bindings, ctx, agentDir } = await fixture();
@@ -192,6 +262,14 @@ it("binds incompatible schemas, subscriptions and responses to their original wi
 	expect(events).toHaveLength(1);
 	version("String");
 	await client.request("desktopExtension/reconcile", { windowId: 1, lifetime: "window-1" });
+	// A watch refresh can supersede the explicit inventory request; readiness, not its response, is admission.
+	await vi.waitFor(
+		() => {
+			expect(bindings.get(1)).toBeDefined();
+			expect(bindings.get(1)?.epoch).not.toBe(old.epoch);
+		},
+		{ timeout: 10_000 },
+	);
 	const next = bindings.get(1)!;
 	expect(next.epoch).not.toBe(old.epoch);
 	expect(

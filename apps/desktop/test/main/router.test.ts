@@ -35,6 +35,39 @@ function setup() {
 const thread = (id: string) => ({ thread: { id } });
 
 describe("router", () => {
+	test("a final unknown reply is retained after its renderer detaches", () => {
+		const { router, toServer, open, inbox, roundTrip } = setup();
+		open(1);
+		const target = { threadId: "t", cwd: "/repo", projectCwd: "/repo" };
+		router.fromWindow(1, {
+			id: 1,
+			method: "desktopOperation/start",
+			params: { target, action: { kind: "push" } },
+		} as Message);
+		const sent = toServer.at(-1) as { id: string };
+		router.detach(1);
+		router.fromServer({
+			id: sent.id,
+			result: {
+				operation: {
+					id: "op",
+					kind: "push",
+					target,
+					status: "outcome-unknown",
+					recovery: "reconcile",
+					completed: ["commit"],
+					outputs: { commit: "confirmed" },
+				},
+			},
+		} as Message);
+		router.serverRestarted();
+		open(2);
+		roundTrip(2, 2, "desktopOperation/read", { threadId: "t" }, { operations: [] });
+		expect(inbox.get(2)?.at(-1)).toMatchObject({
+			result: { operations: [{ id: "op", status: "outcome-unknown", outputs: { commit: "confirmed" } }] },
+		});
+	});
+
 	test("desktop native approval and epoch traffic cannot bypass the main-owned host boundary", () => {
 		const { router, toServer, inbox, open } = setup();
 		open(1);

@@ -46,6 +46,33 @@ async function activate(loader: FrontendExtensions, packet: ReturnType<typeof pr
 	loader.ready(packet.binding);
 }
 
+test("retiring A by binding preserves its prepared replacement B", async () => {
+	const registry = new ExtensionRegistry();
+	const disposed: string[] = [];
+	const loader = new FrontendExtensions(
+		registry,
+		async (artifact) => ({
+			extension: extension(artifact.revision),
+			dispose: () => {
+				disposed.push(artifact.revision);
+			},
+		}),
+		() => {},
+	);
+	const a = preparation("A");
+	const b = preparation("B");
+	await activate(loader, a);
+	await loader.prepare(b);
+	loader.revoke("example", a.binding);
+	expect(disposed).toEqual(["A"]);
+	await loader.quiesce(b.binding);
+	loader.publish(b.binding);
+	loader.resume(b.binding);
+	loader.ready(b.binding);
+	expect(registry.commands({ sidebarOpen: true })[0]?.revision).toBe("B");
+	loader.dispose();
+});
+
 test("failed preparation retains the live pair; authoritative revocation releases it", async () => {
 	const registry = new ExtensionRegistry();
 	const disposed: string[] = [];

@@ -20,6 +20,7 @@ const hostEvents = vi.hoisted(() => {
 });
 const requests = vi.hoisted(() => [] as [string, unknown][]);
 const folder = vi.hoisted(() => ({ path: "" }));
+const scopeSelection = vi.hoisted(() => ({ chosen: undefined as string | undefined }));
 const configMount = vi.hoisted(() => ({ layout: undefined as EffectCallback | undefined, enabled: false }));
 vi.mock("react", async (original) => {
 	const react = await original<typeof React>();
@@ -31,7 +32,11 @@ vi.mock("react", async (original) => {
 		},
 		useState: (initial: unknown) =>
 			react.useState(
-				configMount.enabled ? { cwd: undefined, read: { settings: {}, defaults: {}, origins: {} } } : initial,
+				configMount.enabled
+					? { cwd: undefined, read: { settings: {}, defaults: {}, origins: {} } }
+					: scopeSelection.chosen && initial === "app"
+						? scopeSelection.chosen
+						: initial,
 			),
 	};
 });
@@ -190,6 +195,54 @@ test("settings requests outside the allowlist are refused before reaching the ap
 		);
 		expect(requests.map(([method]) => method)).toEqual(["config/read"]);
 	} finally {
+		dispose();
+	}
+});
+
+test("appearance patch edits preserve omitted colors and retain explicit resets", () => {
+	const dispose = initializeDesktopExtensions();
+	try {
+		const api = experimental_appearance();
+		api.experimental_customize("dark", { accent: "#123456", background: "#234567" }, true);
+		api.experimental_customize("dark", { font: "Test", contrast: 60 });
+		expect(getState().desktop?.preferences?.appearance?.dark).toMatchObject({
+			accent: "#123456",
+			background: "#234567",
+			font: "Test",
+			contrast: 60,
+		});
+		api.experimental_customize("dark", { accent: undefined });
+		expect(getState().desktop?.preferences?.appearance?.dark?.accent).toBeUndefined();
+		expect(getState().desktop?.preferences?.appearance?.dark?.background).toBe("#234567");
+		api.experimental_customize("dark", undefined, true);
+	} finally {
+		experimental_appearance().experimental_customize("dark", undefined, true);
+		dispose();
+	}
+});
+
+test("an unavailable explicitly selected scope never falls back to App", () => {
+	const dispose = initializeDesktopExtensions();
+	const entry = desktopExtensions.register(
+		"lost-scope",
+		defineDesktopExtension((app) => {
+			app.experimental_registerSettingsSection({
+				id: "fields",
+				page: "general",
+				title: "Scoped values",
+				fields: [],
+				scopes: ["app", "thread"],
+			});
+		}),
+	);
+	scopeSelection.chosen = "thread:archived";
+	try {
+		const html = renderToStaticMarkup(createElement(SettingsSections, { page: "general" }));
+		expect(html).toContain("The selected scope is no longer available");
+		expect(html).toContain('aria-label="Settings scope"');
+	} finally {
+		scopeSelection.chosen = undefined;
+		entry.dispose();
 		dispose();
 	}
 });

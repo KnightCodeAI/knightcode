@@ -209,6 +209,9 @@ export function startExternalExtensions(registry: ExtensionRegistry): () => void
 					loader.discard(binding);
 					return;
 				case "revoke":
+					loader.revoke(binding.owner, binding);
+					return;
+				case "retire":
 					loader.revoke(binding.owner);
 					return;
 				case "ready":

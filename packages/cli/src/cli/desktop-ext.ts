@@ -1,9 +1,9 @@
 /** Binary-accessible desktop authoring; creation and validation never grant native consent. */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { getDocsPath, getExamplesPath } from "../config.ts";
-import { stageDesktopExtension } from "../app-server/desktop-extensions/artifacts.ts";
+import { desktopExtensionOwner, stageDesktopExtension } from "../app-server/desktop-extensions/artifacts.ts";
 import { desktopControls } from "../app-server/desktop-extensions/control.ts";
 
 export const DESKTOP_EXT_HELP = `Usage: knightcode desktop-ext <command> [--json]
@@ -83,8 +83,8 @@ export default defineDesktopExtension((app) => {
 		} else if (command === "validate") {
 			const cache = mkdtempSync(join(tmpdir(), "kc-desktop-validate-"));
 			try {
-				const source = resolve(options.cwd, argument!);
-				const artifact = await stageDesktopExtension(source, cache, "validation");
+				const source = realpathSync(resolve(options.cwd, argument!));
+				const artifact = await stageDesktopExtension(source, cache, desktopExtensionOwner(source));
 				emit(
 					{ valid: true, source, revision: artifact.revision, files: artifact.files },
 					`Valid: ${source}\nSetup and rendering are checked on activation; inspect desktop-ext status --json afterward.`,

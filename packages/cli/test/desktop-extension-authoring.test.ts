@@ -33,6 +33,24 @@ afterEach(() => {
 });
 
 describe("desktop extension authoring", () => {
+	it("validation uses the discovered owner so its revision matches the native review", async () => {
+		const { agentDir, lines } = fixture();
+		const options = { agentDir, cwd: agentDir, output: (line: string) => lines.push(line) };
+		await runDesktopExtCommand(["new", "digest"], options);
+		const source = join(agentDir, "desktop-extensions", "digest");
+		writeFileSync(join(source, "package.json"), JSON.stringify({ knightcode: { desktop: { frontend: "./app.js" } } }));
+		writeFileSync(join(source, "app.js"), "export default {apiVersion:1,experimental_setup(){}};");
+		expect(await runDesktopExtCommand(["validate", source, "--json"], options)).toBe(0);
+		const result = JSON.parse(lines.pop()!);
+		const manager = new DesktopExtensionManager(agentDir);
+		try {
+			const owner = (await manager.list()).extensions[0]!.owner;
+			expect(result.revision).toBe((await manager.list(undefined, owner)).extensions[0]!.revision);
+		} finally {
+			manager.dispose();
+		}
+	});
+
 	it("creates and validates without executing source or granting native consent", async () => {
 		const { agentDir, lines, run } = fixture();
 		expect(await run(["new", "notice", "--json"])).toBe(0);
