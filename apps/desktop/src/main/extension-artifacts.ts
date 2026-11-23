@@ -38,12 +38,7 @@ export class ExtensionArtifacts {
 		)
 			throw new Error("Invalid desktop artifact identity.");
 		for (const path of artifact.files) {
-			if (
-				path
-					.split("/")[0]!
-					.replace(/[. ]+$/g, "")
-					.toLowerCase() === "__backend"
-			)
+			if (/^__backend[. ]*$/i.test(path.split("/")[0]!))
 				throw new Error("Private backend source cannot be served to a renderer.");
 			if (
 				!MIME[extname(path)] ||
@@ -70,23 +65,25 @@ export class ExtensionArtifacts {
 	runtime(exports: Record<string, string[]>): void {
 		// Renderer runtime descriptions contain names only, never executable shim source.
 		for (const [name, keys] of Object.entries(exports)) {
-			if (!experimental_RUNTIME_IMPORTS.some((entry) => entry === name))
-				throw new Error(`Unsupported shared runtime: ${name}`);
-			if (keys.length > 2048 || keys.some((key) => !/^[$a-zA-Z_][$a-zA-Z0-9_]*$/.test(key)))
-				throw new Error("Invalid runtime export name.");
+			const moduleName = experimental_RUNTIME_IMPORTS.find((entry) => entry === name);
+			if (!moduleName) throw new Error(`Unsupported shared runtime: ${name}`);
+			if (keys.length > 2048) throw new Error("Too many runtime exports.");
+			const scoped = moduleName === "@knightcodeai/cli/desktop";
 			const declarations = keys
 				.map((key, index) => {
-					const read = `runtime[${JSON.stringify(key)}]`;
-					const value =
-						name === "@knightcodeai/cli/desktop"
-							? `typeof ${read} === "function" ? (...args) => invoke(${JSON.stringify(key)},args) : ${read}`
-							: read;
+					// Only ASCII IdentifierNames can enter the generated export declaration or string literal.
+					if (!/^[$a-zA-Z_][$a-zA-Z0-9_]*$/.test(key)) throw new Error("Invalid runtime export name.");
+					const read = `runtime.${key}`;
+					const value = scoped ? `typeof ${read} === "function" ? (...args) => invoke("${key}",args) : ${read}` : read;
 					return `const value${index}=${value}; export {value${index} as ${key}};`;
 				})
 				.join("\n");
+			const activation = scoped
+				? `const activation="${DESKTOP_ACTIVATION_MARKER}"; const invoke=(key,args)=>{const scopes=globalThis.__knightcodeDesktopScopedRuntime;const target=scopes?.[activation]??scopes?.retired;if(!target)throw new Error("Desktop extension activation is retired.");return target[key](...args);};\n`
+				: "";
 			this.shims.set(
-				name,
-				`const runtime=globalThis.__knightcodeDesktopRuntime[${JSON.stringify(name)}];\n${name === "@knightcodeai/cli/desktop" ? `const activation=${JSON.stringify(DESKTOP_ACTIVATION_MARKER)}; const invoke=(key,args)=>{const scopes=globalThis.__knightcodeDesktopScopedRuntime;const target=scopes?.[activation]??scopes?.retired;if(!target)throw new Error("Desktop extension activation is retired.");return target[key](...args);};\n` : ""}${declarations}`,
+				moduleName,
+				`const runtime=globalThis.__knightcodeDesktopRuntime["${moduleName}"];\n${activation}${declarations}`,
 			);
 		}
 	}
@@ -159,10 +156,7 @@ export class ExtensionArtifacts {
 				inside === ".." ||
 				inside.startsWith(`..${sep}`) ||
 				isAbsolute(inside) ||
-				inside
-					.split(sep)[0]!
-					.replace(/[. ]+$/g, "")
-					.toLowerCase() === "__backend"
+				/^__backend[. ]*$/i.test(inside.split(sep)[0]!)
 			)
 				return new Response(null, { status: 403, headers });
 			const bytes = readFileSync(file);

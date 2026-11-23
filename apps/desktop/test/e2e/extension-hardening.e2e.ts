@@ -107,9 +107,15 @@ test("installing and reloading external providers never changes the selected pro
 		const source = join(directory, name);
 		mkdirSync(source, { recursive: true });
 		writeFileSync(join(source, "package.json"), JSON.stringify({ knightcode: { desktop: { frontend: "./app.js" } } }));
+		writeFileSync(join(source, "label.js"), `export default ${JSON.stringify(text)};\n`);
 		writeFileSync(
 			join(source, "app.js"),
-			`import {createElement} from "react"; import {defineDesktopExtension} from "@knightcodeai/cli/desktop"; export default defineDesktopExtension(app=>{app.experimental_registerProvider({id:"view",surface:"feedback",experimental_render:()=>createElement("p",{role:"status"},${JSON.stringify(text)})});});`,
+			`import {createElement} from "react";
+import {defineDesktopExtension} from "@knightcodeai/cli/desktop";
+import label from "./label.js";
+export default defineDesktopExtension(app => {
+ app.experimental_registerProvider({id:"view",surface:"feedback",experimental_render:()=>createElement("p",{role:"status"},label)});
+});`,
 		);
 	};
 	// Two owners whose discovery order differs from approval order.
@@ -141,10 +147,7 @@ test("installing and reloading external providers never changes the selected pro
 	const chosen = `${await row("aa-second").getAttribute("data-extension")}/view`;
 	await feedback.selectOption(chosen);
 	await expect(page.getByText("Provider A", { exact: true })).toBeVisible();
-	writeFileSync(
-		join(directory, "aa-second", "app.js"),
-		readFileSync(join(directory, "aa-second", "app.js"), "utf8").replace("Provider A", "Provider A2"),
-	);
+	writeFileSync(join(directory, "aa-second", "label.js"), 'export default "Provider A2";\n');
 	await management.getByRole("button", { name: "Reload extensions", exact: true }).click();
 	await expect(page.getByText("Provider A2", { exact: true })).toBeVisible();
 	expect(saved()).toBe(chosen);

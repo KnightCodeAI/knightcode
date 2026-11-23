@@ -39,14 +39,20 @@ function pack(root: string, version: string, desktop: Record<string, unknown> = 
 		}),
 	);
 	writeFileSync(join(dir, "app.js"), "export default {apiVersion:1,experimental_setup(){}};");
+	const data = { log: join(root, "starts.txt"), version };
+	const fixture = `const fixture = ${JSON.stringify(data)};\n`;
 	writeFileSync(
 		join(dir, "server.js"),
-		`import { experimental_defineDesktopBackend } from "@knightcodeai/cli/desktop-backend";
+		fixture +
+			`import { experimental_defineDesktopBackend } from "@knightcodeai/cli/desktop-backend";
 import { Type } from "typebox";
 import { appendFileSync } from "node:fs";
 export default experimental_defineDesktopBackend(app => {
- app.experimental_onActivate(() => { appendFileSync(${JSON.stringify(join(root, "starts.txt"))}, "start:${version}\\n"); return () => appendFileSync(${JSON.stringify(join(root, "starts.txt"))}, "stop:${version}\\n"); });
- app.experimental_registerRpc({ id:"version", kind:"read", params:Type.Null(), result:Type.String(), experimental_handle: () => ${JSON.stringify(version)} });
+ app.experimental_onActivate(() => {
+  appendFileSync(fixture.log, "start:" + fixture.version + "\\n");
+  return () => appendFileSync(fixture.log, "stop:" + fixture.version + "\\n");
+ });
+ app.experimental_registerRpc({ id:"version", kind:"read", params:Type.Null(), result:Type.String(), experimental_handle: () => fixture.version });
 });`,
 	);
 	execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["pack", "--silent", "--pack-destination", root], {

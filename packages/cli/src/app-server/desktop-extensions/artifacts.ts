@@ -140,12 +140,7 @@ export async function stageDesktopRevision(sourceRoot: string, cache: string, ow
 	const modules = new Map<string, string>();
 	let bytes = backend ? [...backend.files.values()].reduce((sum, code) => sum + Buffer.byteLength(code), 0) : 0;
 	const put = (name: string, content: string | Buffer) => {
-		if (
-			name
-				.split("/")[0]!
-				.replace(/[. ]+$/g, "")
-				.toLowerCase() === "__backend"
-		)
+		if (/^__backend[. ]*$/i.test(name.split("/")[0]!))
 			throw new Error("The __backend artifact directory is reserved for private backend source.");
 		if (files.has(name)) throw new Error(`Artifact output collision: ${name}`);
 		bytes += Buffer.byteLength(content);
