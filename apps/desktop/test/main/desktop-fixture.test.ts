@@ -1,5 +1,6 @@
 /** The parity fixture must never inherit the developer's credentials or configuration. */
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDesktopFixture } from "../fixtures/desktop.ts";
@@ -38,6 +39,23 @@ describe("desktop parity fixture", () => {
 		expect(fixture.env.NODE_OPTIONS).toBeUndefined();
 		expect(fixture.env.KNIGHTCODE_OFFLINE).toBe("1");
 		expect(fixture.env.GIT_CONFIG_NOSYSTEM).toBe("1");
+	});
+
+	// PR #598: on Linux, Git and gh can share /usr/bin.
+	it.skipIf(process.platform === "win32")("keeps tools on PATH when they share a directory with gh", () => {
+		const tools = createDesktopFixture({ theme: "light" });
+		roots.push(tools.root);
+		const bin = join(tools.root, "tools");
+		mkdirSync(bin);
+		writeFileSync(join(bin, "fixture-tool"), "#!/bin/sh\necho fixture tool\n", { mode: 0o755 });
+		writeFileSync(join(bin, "gh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+		vi.stubEnv("PATH", bin);
+		const fixture = createDesktopFixture({ theme: "light" });
+		roots.push(fixture.root);
+		const result = spawnSync("fixture-tool", [], { env: fixture.env, encoding: "utf8" });
+		expect(result.error).toBeUndefined();
+		expect(result.status).toBe(0);
+		expect(result.stdout.trim()).toBe("fixture tool");
 	});
 
 	it("puts the project where no ancestor holds the developer's skills or context files", () => {

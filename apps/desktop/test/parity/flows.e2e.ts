@@ -256,7 +256,7 @@ test("Git writes, failures and recovery", async ({ desktop }) => {
 	await expect(page.getByText("no remote to push to")).toBeVisible();
 	await capture(desktop, "git-pull-request-no-remote");
 	await releaseToasts(page);
-	// A reachable remote: the push succeeds, then PR creation fails, because the fixture keeps gh off PATH.
+	// The push succeeds against a local remote, then PR creation fails because the faux server simulates missing gh.
 	const remote = join(root, "remote.git");
 	execFileSync("git", ["init", "-q", "--bare", remote], { env: desktop.env });
 	git("remote", "add", "origin", remote);

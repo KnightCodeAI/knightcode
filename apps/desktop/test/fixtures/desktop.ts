@@ -2,7 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { delimiter, isAbsolute, join, parse, relative, resolve } from "node:path";
+import { isAbsolute, join, parse, relative, resolve } from "node:path";
 import { DEFAULT_PREFERENCES, DEFAULT_STATE } from "../../src/shared/host-protocol.ts";
 
 const COUNTER = resolve(__dirname, "../../../../packages/cli/examples/mcp-app/server.mjs");
@@ -178,15 +178,6 @@ export function createDesktopFixture(options: DesktopFixtureOptions): DesktopFix
 	}
 	// The desktop's own commits need an identity; the scratch global config is the only one Git reads.
 	writeFileSync(env.GIT_CONFIG_GLOBAL, "[user]\n\tname = Parity\n\temail = parity@example.invalid\n");
-	// gh's presence and sign-in are the developer's: without it on PATH, PR creation always takes the missing-gh path.
-	for (const key of ["PATH", "Path"]) {
-		if (env[key] === undefined) continue;
-		const gh = process.platform === "win32" ? "gh.exe" : "gh";
-		env[key] = env[key]
-			.split(delimiter)
-			.filter((dir) => dir && !existsSync(join(dir, gh)))
-			.join(delimiter);
-	}
 	const fd = findFd();
 	const fdCopy = join(agentDir, "bin", process.platform === "win32" ? "fd.exe" : "fd");
 	if (fd) {

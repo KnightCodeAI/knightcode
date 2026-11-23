@@ -74,8 +74,8 @@ the expected, actual and diff images in `apps/desktop/test-results/parity/`.
   any ancestor of the project holds `.agents/skills`, `.claude/skills`,
   `AGENTS.md` or `CLAUDE.md`, and every ordinary scenario asserts that no trust
   card appears.
-- `gh` is removed from the fixture's PATH, so PR creation always takes the
-  missing-gh path regardless of what the developer has installed or signed into.
+- The faux app server simulates missing `gh` for PR creation. The fixture
+  keeps `PATH` intact so Git and other tools stay available.
 - The scratch Git global config has a fixed identity for the desktop's own
   commits. Fixture commits made by the tests use fixed dates.
 - The project contains a fixed README; scenarios add fixed files. Agent settings

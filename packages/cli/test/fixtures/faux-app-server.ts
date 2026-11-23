@@ -19,6 +19,7 @@
 
 import "../../src/bun/runtime-setup.ts";
 import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	type AssistantMessage,
 	fauxAssistantMessage,
@@ -126,7 +127,11 @@ ctx.models.registerNativeProvider(faux.provider);
 await ctx.models.refresh({ allowNetwork: false });
 // Keep S0 screenshot usage deterministic: the faux model derives token counts from the prompt.
 // Desktop skill discovery is verified separately against the real packaged server in extension-authoring.e2e.ts.
-const threads = new ThreadManager(ctx, { disabledBuiltinExtensions: ["desktop-customization"] });
+const threads = new ThreadManager(ctx, {
+	disabledBuiltinExtensions: ["desktop-customization"],
+	// Exercise the missing-gh path without hiding Git or running the developer's gh.
+	ghCommand: [join(ctx.agentDir, "missing-gh", "gh")],
+});
 const transport = createStdioTransport(process.stdin, writeRawStdoutReporting);
 const exit = async () => {
 	setTimeout(() => process.exit(0), 5_000);
