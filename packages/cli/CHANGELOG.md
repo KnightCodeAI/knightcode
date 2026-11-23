@@ -1,5 +1,35 @@
 # @knightcodeai/cli
 
+## 0.24.4
+
+### Changed
+
+- Changed Gemini tool calling so a model id with a prefix still counts as Gemini 3 or later, and compat.supportsStrictMode can force validated tool sampling.
+
+### Fixed
+
+- Fixed closing a Windows console window or terminal tab so KnightCode runs session shutdown and stops commands the shell started before it exits. Quitting while a `!` command is still running, or ending RPC mode while a bash command is still running, also waits for those processes to stop.
+
+- Fixed request retries for Cloudflare error 525, a gateway that says the provider is temporarily unavailable, a response that ends before it is complete, and other temporary provider failures.
+
+- Fixed OpenAI Decisions usage so cache reads and writes are reported. They stay priced at the input rate, so the cost does not change.
+
+- Fixed Bedrock requests that sign in with AWS SSO so the credential request uses the same HTTPS proxy as the model call.
+
+- Fixed cancelled request retries so the backoff wait removes its abort listener.
+
+- Fixed the editor so a paste or a text replace from an extension repaints the screen.
+
+- Fixed bash output so the end of an over-long line is shown when blank lines follow it, and the truncation note names that line.
+
+- Fixed loading a session whose messages after the last compaction are very large.
+
+- Fixed unscoped syntax highlighting so it uses the theme text color on light and dark themes.
+
+- Fixed editor history so a prompt that is already stored moves to the front instead of being stored again.
+
+- Fixed replay of OpenAI Responses tool calls so a function call or a custom tool call is sent again with status completed. After the Codex connection closes, GPT-6.2 was dropping the reasoning that followed those calls, because the resent history no longer matched the calls the API had stored.
+
 ## 0.24.3
 
 ### Added
