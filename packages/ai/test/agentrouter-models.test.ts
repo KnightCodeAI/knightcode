@@ -12,7 +12,9 @@ vi.mock("node:fs", { spy: true });
 
 const ANTHROPIC_MODEL_IDS = ["claude-opus-4-8", "claude-opus-5"] as const;
 const COMPLETIONS_MODEL_IDS = ["deepseek-v4-flash", "glm-5.3"] as const;
-const RESPONSES_MODEL_IDS = ["gpt-5.6-sol", "gpt-6-astra", "gpt-6.1-sol"] as const;
+const RESPONSES_MODEL_IDS = ["gpt-5.6-sol", "gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"] as const;
+// The generated catalog only contains models the live rate table still lists.
+const GENERATED_RESPONSES_MODEL_IDS = ["gpt-5.6-sol", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"] as const;
 const ALL_MODEL_IDS = [...ANTHROPIC_MODEL_IDS, ...COMPLETIONS_MODEL_IDS, ...RESPONSES_MODEL_IDS] as const;
 
 // Pinned deliberately: AgentRouter publishes no cache ratios, so these are chosen
@@ -111,7 +113,7 @@ describe("AgentRouter models", () => {
 		expect(models.map((model) => model.id).sort()).toEqual([...ALL_MODEL_IDS].sort());
 	});
 
-	it.each(RESPONSES_MODEL_IDS)("includes %s in the generated catalog with Responses routing", (modelId) => {
+	it.each(GENERATED_RESPONSES_MODEL_IDS)("includes %s in the generated catalog with Responses routing", (modelId) => {
 		expect(getModels("agentrouter").map((model) => model.id)).toContain(modelId);
 		expect(getModel("agentrouter", modelId)).toMatchObject({
 			api: "openai-responses",
@@ -225,7 +227,7 @@ describe("AgentRouter models", () => {
 		expect(await request.clone().json()).toMatchObject({ model: "deepseek-v4-flash", messages: expect.any(Array) });
 	});
 
-	it.each(RESPONSES_MODEL_IDS)(
+	it.each(GENERATED_RESPONSES_MODEL_IDS)(
 		"sends generated %s requests to Responses with bearer authentication",
 		async (modelId) => {
 			const request = await captureRequest(getModel("agentrouter", modelId));
