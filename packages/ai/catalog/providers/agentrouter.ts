@@ -9,7 +9,7 @@ import { type ModelsDevModel, normalizeModelsDevModel, roundCost } from "../sour
 const ANTHROPIC_BASE_URL = "https://agentrouter.org";
 const OPENAI_BASE_URL = "https://agentrouter.org/v1";
 // Confirmed by AgentRouter HTTP 400 responses rejecting Chat Completions for these models.
-const RESPONSES_MODEL_IDS = new Set(["gpt-5.6-sol", "gpt-6-astra", "gpt-6.1-sol"]);
+const RESPONSES_MODEL_IDS = new Set(["gpt-5.6-sol", "gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"]);
 // AgentRouter publishes no cache_ratio / create_cache_ratio, so these cannot be read and have to be
 // chosen: Anthropic's own multipliers applied to AgentRouter's input price. Contested: when a model is
 // absent from new-api's cache map, GetCacheRatio returns 1, i.e. cached reads bill at full input price;
