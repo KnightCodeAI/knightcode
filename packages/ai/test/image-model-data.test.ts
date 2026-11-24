@@ -56,7 +56,6 @@ describe("OpenRouter catalog parsing", () => {
 				api: "openrouter-images",
 				input: ["text", "image"],
 				output: ["image"],
-				compat: { endpoint: "images" },
 				cost: expect.objectContaining({ input: 1, output: 2 }),
 			}),
 		]);
@@ -69,7 +68,6 @@ describe("OpenRouter catalog parsing", () => {
 		expect(catalog.images.map((model) => model.id)).toEqual(["example/multimodal", "example/image-model"]);
 		expect(catalog.images.every((model) => model.type === "image")).toBe(true);
 		expect(catalog.images.map((model) => model.output)).toEqual([["text", "image"], ["image"]]);
-		expect(catalog.images[0].compat).toBeUndefined();
 	});
 
 	it("ignores listed models that neither support tools nor emit images", () => {
