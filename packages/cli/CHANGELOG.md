@@ -1,5 +1,61 @@
 # @knightcodeai/cli
 
+## 0.24.5
+
+### Added
+
+- Added a classifier API, and Radius now lists classifier models from the gateway config without mixing them into the chat model list.
+
+### Changed
+
+- Changed first-time setup so it shows the logo and asks only whether to share anonymous usage data.
+
+- Changed the Mistral catalog so a model marked deprecated stays listed until the provider shuts it down, and dropped the hand-added Mistral Medium 3.5 entry.
+
+- Changed the default Mistral model to Mistral Medium, since Mistral no longer lists Devstral Medium.
+
+- Changed the models configuration reference so xhigh and max say which models accept those thinking levels.
+
+- Changed the installer so a Windows KnightCode found through WSL is ignored, and an install from another package manager is left in place unless you confirm a second copy.
+
+### Removed
+
+- Removed gpt-5-chat-latest from the OpenAI catalog. That model is shut down.
+
+- Removed Groq models the provider has shut down. The catalog skips Groq models marked deprecated.
+
+### Fixed
+
+- Fixed non-strict Anthropic tool schemas so a declared dialect and tuple item syntax are sent unchanged.
+
+- Fixed clipboard copy on Wayland so wl-copy receives an explicit text/plain type.
+
+- Fixed Codex requests so the effort stays at the level selected for the first message, and a later change is sent as a configuration update.
+
+- Fixed provider retries so a finish reason of error is retried, including Mistral and Chat Completions streams.
+
+- Fixed Gemini 4 Hydrogen and Neon so an xhigh thinking level is sent as XHIGH. The Gemini client is now @google/genai 3.6.1.
+
+- Fixed Google and Vertex streams so a blocked prompt is reported as a policy error, and a stream that ends with no finish reason is reported as empty.
+
+- Fixed Markdown so an unclosed currency dollar sign does not hide the rest of the line.
+
+- Fixed MCP clients so a response whose id is the decimal text of a numeric request id still matches that request.
+
+- Fixed oversized Mermaid diagrams so the message explains why the source is shown instead of the diagram.
+
+- Fixed image generation with OpenRouter FLUX models, which require the dedicated images endpoint.
+
+- Fixed bash, session share, and the external editor so a temp file that cannot be written is reported instead of exiting the process.
+
+- Fixed retries so a provider error that says the request rate increased too quickly is retried.
+
+- Fixed /login so a stored key whose command fails says the key did not resolve, and saving that key runs the command again.
+
+- Fixed the managed updater so the Windows installation, when started from WSL, refuses to update itself and says to update it from Windows.
+
+- Fixed Cloudflare Workers AI requests that reject a null assistant message by sending empty content instead.
+
 ## 0.24.4
 
 ### Changed
