@@ -16,6 +16,7 @@ import type {
 	ImagesOptions,
 	ProviderHeaders,
 	TextContent,
+	Usage,
 } from "../types.ts";
 import { formatProviderError, normalizeProviderError } from "../utils/error-body.ts";
 import { headersToRecord, providerHeadersToRecord } from "../utils/headers.ts";
@@ -39,7 +40,12 @@ type OpenRouterImageGenerationResponse = ChatCompletion & {
 	choices: OpenRouterImageGenerationChoice[];
 };
 
-/** Image generation over OpenRouter's chat completions endpoint. */
+interface OpenRouterDedicatedImageResponse {
+	data: Array<{ b64_json?: string; media_type?: string }>;
+	usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
+}
+
+/** Image generation over OpenRouter's chat completions or dedicated images endpoint. */
 export const generateImages: ImagesFunction<ImagesOptions> = async (
 	model: ImageModel<ImageApi>,
 	context: ImagesContext,
@@ -60,7 +66,8 @@ export const generateImages: ImagesFunction<ImagesOptions> = async (
 			throw new Error(`No API key for provider: ${model.provider}`);
 		}
 		const client = createClient(model, apiKey, options?.headers, options?.fetch, options?.identity);
-		let params = buildParams(model, context);
+		const useImagesEndpoint = model.compat?.endpoint === "images";
+		let params = useImagesEndpoint ? buildDedicatedImageParams(model, context) : buildChatParams(model, context);
 		const nextParams = await options?.onPayload?.(params, model);
 		if (nextParams !== undefined) {
 			params = nextParams as typeof params;
@@ -70,11 +77,16 @@ export const generateImages: ImagesFunction<ImagesOptions> = async (
 			...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
 			maxRetries: 0,
 		};
-		const { data: response, response: rawResponse } = await retryProviderRequest(
+		const { data: response, response: rawResponse } = await retryProviderRequest<{
+			data: ChatCompletion | OpenRouterDedicatedImageResponse;
+			response: Response;
+		}>(
 			() =>
-				client.chat.completions
-					.create(params as unknown as ChatCompletionCreateParamsNonStreaming, requestOptions)
-					.withResponse(),
+				useImagesEndpoint
+					? client.post<OpenRouterDedicatedImageResponse>("/images", { ...requestOptions, body: params }).withResponse()
+					: client.chat.completions
+							.create(params as unknown as ChatCompletionCreateParamsNonStreaming, requestOptions)
+							.withResponse(),
 			{
 				maxRetries: options?.maxRetries,
 				maxRetryDelayMs: options?.maxRetryDelayMs,
@@ -82,6 +94,23 @@ export const generateImages: ImagesFunction<ImagesOptions> = async (
 			},
 		);
 		await options?.onResponse?.({ status: rawResponse.status, headers: headersToRecord(rawResponse.headers) }, model);
+
+		if ("data" in response) {
+			if (response.usage) {
+				output.usage = parseUsage(response.usage, model);
+				const cost = response.usage.cost;
+				if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
+					output.usage.cost.total = cost;
+					output.usage.cost.totalFromProvider = true;
+				}
+			}
+			for (const image of response.data) {
+				if (!image.b64_json) continue;
+				output.output.push({ type: "image", mimeType: image.media_type ?? "image/png", data: image.b64_json });
+			}
+			if (output.output.length === 0) throw new Error("OpenRouter returned no inline images");
+			return output;
+		}
 
 		const imageResponse = response as OpenRouterImageGenerationResponse;
 		output.responseId = imageResponse.id;
@@ -137,7 +166,25 @@ type OpenRouterImagesCreateParams = Omit<ChatCompletionCreateParamsNonStreaming,
 	modalities: Array<"image" | "text">;
 };
 
-function buildParams(model: ImageModel<ImageApi>, context: ImagesContext): OpenRouterImagesCreateParams {
+function buildDedicatedImageParams(model: ImageModel<ImageApi>, context: ImagesContext) {
+	const prompts: string[] = [];
+	const references: ChatCompletionContentPartImage[] = [];
+	for (const item of context.input) {
+		if (item.type === "text") {
+			prompts.push(sanitizeSurrogates(item.text));
+		} else {
+			references.push({ type: "image_url", image_url: { url: `data:${item.mimeType};base64,${item.data}` } });
+		}
+	}
+	return {
+		model: model.id,
+		prompt: prompts.join("\n"),
+		response_format: "b64_json",
+		...(references.length > 0 && { input_references: references }),
+	};
+}
+
+function buildChatParams(model: ImageModel<ImageApi>, context: ImagesContext): OpenRouterImagesCreateParams {
 	const content: ChatCompletionContentPart[] = context.input.map((item): ChatCompletionContentPart => {
 		if (item.type === "text") {
 			return {
@@ -173,7 +220,7 @@ function parseUsage(
 		prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
 	},
 	model: ImageModel<ImageApi>,
-) {
+): Usage {
 	const promptTokens = rawUsage.prompt_tokens || 0;
 	const reportedCachedTokens = rawUsage.prompt_tokens_details?.cached_tokens || 0;
 	const cacheWriteTokens = rawUsage.prompt_tokens_details?.cache_write_tokens || 0;

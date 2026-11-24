@@ -4,6 +4,7 @@ import { buildOpenRouterCatalog, type OpenRouterModelListItem } from "../catalog
 const imageOnly: OpenRouterModelListItem = {
 	id: "example/image-model",
 	name: "Example Image Model",
+	endpoints: ["/api/v1/images"],
 	architecture: {
 		input_modalities: ["text", "image"],
 		output_modalities: ["image"],
@@ -17,6 +18,7 @@ const imageOnly: OpenRouterModelListItem = {
 const chatWithImages: OpenRouterModelListItem = {
 	id: "example/multimodal",
 	name: "Example Multimodal",
+	endpoints: ["/api/v1/chat/completions", "/api/v1/images"],
 	supported_parameters: ["tools"],
 	architecture: {
 		modality: "text+image->text+image",
@@ -54,6 +56,7 @@ describe("OpenRouter catalog parsing", () => {
 				api: "openrouter-images",
 				input: ["text", "image"],
 				output: ["image"],
+				compat: { endpoint: "images" },
 				cost: expect.objectContaining({ input: 1, output: 2 }),
 			}),
 		]);
@@ -66,6 +69,7 @@ describe("OpenRouter catalog parsing", () => {
 		expect(catalog.images.map((model) => model.id)).toEqual(["example/multimodal", "example/image-model"]);
 		expect(catalog.images.every((model) => model.type === "image")).toBe(true);
 		expect(catalog.images.map((model) => model.output)).toEqual([["text", "image"], ["image"]]);
+		expect(catalog.images[0].compat).toBeUndefined();
 	});
 
 	it("ignores listed models that neither support tools nor emit images", () => {

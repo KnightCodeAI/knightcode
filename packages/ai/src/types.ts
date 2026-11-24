@@ -907,6 +907,8 @@ export interface ImageModel<TApi extends ImageApi> extends BaseModel<TApi> {
 	type: "image";
 	/** Output modalities. Always includes `"image"`; `"text"` means the model can also return text blocks. */
 	output: ("text" | "image")[];
+	/** OpenRouter request path override. Defaults to chat completions. */
+	compat?: TApi extends "openrouter-images" ? { endpoint: "images" } : never;
 }
 
 /** Structured classifier model: usable with `classify()` only. */
