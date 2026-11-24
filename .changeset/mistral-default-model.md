@@ -2,4 +2,4 @@
 "@knightcodeai/cli": patch
 ---
 
-The default Mistral model is now Mistral Medium, since Mistral no longer lists Devstral Medium.
+Changed the default Mistral model to Mistral Medium, since Mistral no longer lists Devstral Medium.
