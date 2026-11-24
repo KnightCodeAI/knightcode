@@ -28,6 +28,7 @@ export function getOpenRouterThinkingLevelMap(
 export interface OpenRouterModelListItem extends OpenRouterModel {
 	name: string;
 	supported_parameters?: string[];
+	endpoints?: string[];
 	architecture?: { modality?: string; input_modalities?: string[]; output_modalities?: string[] };
 	reasoning?: OpenRouterReasoningMetadata;
 }
@@ -102,6 +103,8 @@ export function buildOpenRouterCatalog(
 			input: input.length > 0 ? input : ["text"],
 			output,
 			cost: openRouterCost(model.pricing),
+			...(model.endpoints?.includes("/api/v1/images") &&
+				!model.endpoints.includes("/api/v1/chat/completions") && { compat: { endpoint: "images" } }),
 		});
 	}
 

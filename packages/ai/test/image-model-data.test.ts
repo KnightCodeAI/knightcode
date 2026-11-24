@@ -4,6 +4,7 @@ import { buildOpenRouterCatalog, type OpenRouterModelListItem } from "../catalog
 const imageOnly: OpenRouterModelListItem = {
 	id: "example/image-model",
 	name: "Example Image Model",
+	endpoints: ["/api/v1/images"],
 	architecture: {
 		input_modalities: ["text", "image"],
 		output_modalities: ["image"],
@@ -17,6 +18,7 @@ const imageOnly: OpenRouterModelListItem = {
 const chatWithImages: OpenRouterModelListItem = {
 	id: "example/multimodal",
 	name: "Example Multimodal",
+	endpoints: ["/api/v1/chat/completions", "/api/v1/images"],
 	supported_parameters: ["tools"],
 	architecture: {
 		modality: "text+image->text+image",
