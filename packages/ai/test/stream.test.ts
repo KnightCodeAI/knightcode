@@ -996,8 +996,8 @@ describe("Generate E2E Tests", () => {
 		});
 	});
 
-	describe.skipIf(!process.env.MISTRAL_API_KEY)("Mistral Provider (ministral-8b-latest with image support)", () => {
-		const llm = getModel("mistral", "ministral-8b-latest");
+	describe.skipIf(!process.env.MISTRAL_API_KEY)("Mistral Provider (ministral-14b-latest with image support)", () => {
+		const llm = getModel("mistral", "ministral-14b-latest");
 
 		it("should complete basic text generation", { retry: 3 }, async () => {
 			await basicTextGeneration(llm);
