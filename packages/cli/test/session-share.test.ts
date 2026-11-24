@@ -1,5 +1,7 @@
 import { EventEmitter } from "node:events";
 import { readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -130,6 +132,25 @@ describe("shareSession", () => {
 			expect.any(String),
 		]);
 		expect(statuses[0]).toContain("https://knightcode.dev/session/#forced-gist");
+	});
+
+	// /share runs from the editor's submit handler, so a full or unwritable temp dir must not throw.
+	it("reports a temp dir it cannot write to", async () => {
+		const missing = join(tmpdir(), `knightcode-share-missing-${process.pid}`, "tmp");
+		for (const name of ["TMPDIR", "TEMP", "TMP"]) vi.stubEnv(name, missing);
+		const errors: string[] = [];
+
+		await shareSession({
+			session: {},
+			ui: {},
+			editorContainer: {},
+			editor: {},
+			showStatus: vi.fn(),
+			showError: (message: string) => errors.push(message),
+		} as never);
+
+		expect(errors).toEqual([expect.stringMatching(/^Failed to export session: ENOENT/)]);
+		expect(childProcessMocks.spawn).not.toHaveBeenCalled();
 	});
 
 	it("reports missing Radius authentication when Radius is forced", async () => {

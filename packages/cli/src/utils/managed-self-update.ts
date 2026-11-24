@@ -33,17 +33,32 @@ export function getActiveManagedInstallRoot(): string | undefined {
 	if (getCwdRelativePath(canonicalizePath(getPackageDir()), releasesDir) === undefined) return undefined;
 
 	const markerPath = join(managedRoot, MANAGED_INSTALL_MARKER);
+	let entrypointPath: unknown;
 	try {
 		const marker = JSON.parse(stripBom(readFileSync(markerPath, "utf8"))) as {
 			kind?: unknown;
 			layout?: unknown;
 			schemaVersion?: unknown;
+			entrypoint?: { path?: unknown };
 		};
 		if (marker.kind !== "knightcode-managed-install" || marker.schemaVersion !== 1 || marker.layout !== "releases-v1") {
 			throw new Error();
 		}
+		entrypointPath = marker.entrypoint?.path;
 	} catch {
 		throw new Error(`Managed install marker is missing or invalid: ${markerPath}`);
+	}
+
+	// install.ps1 records a Windows entrypoint (C:\...\knightcode.cmd). WSL can run that install
+	// through its sh launcher on Linux Node, where an update would rebuild it with Linux npm.
+	if (
+		process.platform !== "win32" &&
+		typeof entrypointPath === "string" &&
+		/^(?:[A-Za-z]:\\|\\\\)/.test(entrypointPath)
+	) {
+		throw new Error(
+			`This is the Windows installation of ${APP_NAME}, run from WSL. Running the Windows installation from WSL is unsupported, so it cannot update itself here. Update it from Windows, or install ${APP_NAME} in WSL.`,
+		);
 	}
 
 	return managedRoot;
