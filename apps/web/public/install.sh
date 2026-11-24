@@ -52,6 +52,12 @@ knightcode_installer_main() {
   fi
 
   KNIGHTCODE_EXISTING_PATH=$(command -v "$KNIGHTCODE_CMD" 2>/dev/null || true)
+  # WSL appends the Windows PATH, so command -v can find the Windows KnightCode. That
+  # install belongs to Windows: leave it alone and install KnightCode for Linux. A Linux
+  # managed install stored on a Windows drive is still recognized by its marker.
+  if [ -n "$KNIGHTCODE_EXISTING_PATH" ] && path_is_on_windows_drive "$KNIGHTCODE_EXISTING_PATH" && ! managed_install_root_for_command "$KNIGHTCODE_EXISTING_PATH" >/dev/null 2>&1; then
+    KNIGHTCODE_EXISTING_PATH=
+  fi
   export KNIGHTCODE_EXISTING_PATH
 
   if knightcode_managed_install_enabled; then
@@ -71,12 +77,21 @@ knightcode_installer_main() {
   export KNIGHTCODE_NPM_INSTALL_PREFIX
 
   KNIGHTCODE_LEGACY_NPM_MIGRATION=0
+  KNIGHTCODE_OTHER_PATH=
   if knightcode_managed_install_enabled && managed_install_root_for_command "$KNIGHTCODE_EXISTING_PATH" >/dev/null 2>&1; then
     KNIGHTCODE_NPM_UNINSTALL_PREFIX=
   else
     KNIGHTCODE_NPM_UNINSTALL_PREFIX=$(select_npm_uninstall_prefix "$KNIGHTCODE_EXISTING_PATH")
-    if knightcode_managed_install_enabled && [ -n "$KNIGHTCODE_EXISTING_PATH" ] && npm_package_is_installed_for_uninstall; then
-      KNIGHTCODE_LEGACY_NPM_MIGRATION=1
+    if knightcode_managed_install_enabled && [ -n "$KNIGHTCODE_EXISTING_PATH" ]; then
+      if npm_owns_existing_knightcode; then
+        KNIGHTCODE_LEGACY_NPM_MIGRATION=1
+      else
+        # A knightcode this installer did not install, such as a distro package. It
+        # cannot reinstall or uninstall it, so the user decides whether KnightCode is
+        # installed alongside it. The legacy npm install keeps its old behavior.
+        KNIGHTCODE_OTHER_PATH=$KNIGHTCODE_EXISTING_PATH
+        KNIGHTCODE_EXISTING_PATH=
+      fi
     fi
   fi
   export KNIGHTCODE_NPM_UNINSTALL_PREFIX KNIGHTCODE_LEGACY_NPM_MIGRATION
@@ -146,6 +161,16 @@ prompt_start_knightcode() {
   printf '\n'
   unset KNIGHTCODE_EXISTING_PATH KNIGHTCODE_MANAGED_INSTALL_DIR KNIGHTCODE_MANAGED_AGENT_DIR KNIGHTCODE_MANAGED_BIN_DIR KNIGHTCODE_NPM_INSTALL_PREFIX KNIGHTCODE_NPM_UNINSTALL_PREFIX KNIGHTCODE_LEGACY_NPM_MIGRATION
   exec "$start_knightcode_path" </dev/tty
+}
+
+# wslpath -w maps Linux files to \\wsl.localhost\... and Windows drive files
+# to C:\..., following symlinks and any automount root.
+path_is_on_windows_drive() {
+  command -v wslpath >/dev/null 2>&1 || return 1
+  case "$(wslpath -w "$1" 2>/dev/null)" in
+    [A-Za-z]:\\*) return 0 ;;
+  esac
+  return 1
 }
 
 run_preflight_checks() {
@@ -680,6 +705,8 @@ default_knightcode_action() {
     printf 'migrate'
   elif [ -n "$existing_knightcode_path" ]; then
     printf 'reinstall'
+  elif [ -n "$KNIGHTCODE_OTHER_PATH" ]; then
+    printf 'none'
   else
     printf 'install'
   fi
@@ -689,6 +716,12 @@ choose_knightcode_action() {
   existing_knightcode_path="$1"
 
   if ! ( : <>/dev/tty ) 2>/dev/null; then
+    if [ -n "$KNIGHTCODE_OTHER_PATH" ]; then
+      print_other_knightcode_path >&2
+      printf 'No terminal detected, so KnightCode was not installed alongside it. Uninstall it\n' >&2
+      printf 'or remove its directory from PATH, then run this installer again.\n' >&2
+      exit 1
+    fi
     print_knightcode_action_menu "$existing_knightcode_path"
     printf 'No terminal detected; continuing without confirmation.\n'
     KNIGHTCODE_INSTALL_ACTION=$(default_knightcode_action "$existing_knightcode_path")
@@ -704,8 +737,17 @@ choose_knightcode_action() {
     key=$(read_tty_key)
 
     case "$key" in
-      ""|" "|"$KNIGHTCODE_CR"|y|Y)
+      ""|" "|"$KNIGHTCODE_CR")
         KNIGHTCODE_INSTALL_ACTION=$(default_knightcode_action "$existing_knightcode_path")
+        break
+        ;;
+      y|Y)
+        # With another knightcode on PATH the default is to do nothing; y installs alongside it.
+        if [ -n "$KNIGHTCODE_OTHER_PATH" ]; then
+          KNIGHTCODE_INSTALL_ACTION=install
+        else
+          KNIGHTCODE_INSTALL_ACTION=$(default_knightcode_action "$existing_knightcode_path")
+        fi
         break
         ;;
       u|U)
@@ -754,6 +796,13 @@ print_knightcode_action_menu() {
     printf '  %s\n\n' "$existing_knightcode_path"
   fi
 
+  if [ -n "$KNIGHTCODE_OTHER_PATH" ]; then
+    print_other_knightcode_path
+    printf 'KnightCode can be installed alongside it and leaves it in place. Whichever comes\n'
+    printf 'first on PATH then runs as knightcode; to avoid that, uninstall it or remove its\n'
+    printf 'directory from PATH first.\n\n'
+  fi
+
   if [ -n "${KNIGHTCODE_NPM_INSTALL_PREFIX:-}" ]; then
     printf "npm's global directory is not writable; KnightCode will be installed under %s.\n\n" "$KNIGHTCODE_NPM_INSTALL_PREFIX"
   fi
@@ -783,10 +832,21 @@ print_knightcode_action_menu() {
   elif [ -n "$existing_knightcode_path" ]; then
     printf '  %s%-4s%s %sReinstall KnightCode%s %s(default)%s\n' "$cyan" 'y' "$reset" "$green" "$reset" "$dim" "$reset"
     printf '  %s%-4s%s %sUninstall KnightCode%s\n' "$cyan" 'u' "$reset" "$red" "$reset"
+  elif [ -n "$KNIGHTCODE_OTHER_PATH" ]; then
+    printf '  %s%-4s%s %sInstall KnightCode alongside it%s\n' "$cyan" 'y' "$reset" "$green" "$reset"
   else
     printf '  %s%-4s%s %sInstall KnightCode%s %s(default)%s\n' "$cyan" 'y' "$reset" "$green" "$reset" "$dim" "$reset"
   fi
-  printf '  %s%-4s%s %sDo nothing%s\n' "$cyan" 'n' "$reset" "$dim" "$reset"
+  if [ -n "$KNIGHTCODE_OTHER_PATH" ]; then
+    printf '  %s%-4s%s %sDo nothing%s %s(default)%s\n' "$cyan" 'n' "$reset" "$dim" "$reset" "$dim" "$reset"
+  else
+    printf '  %s%-4s%s %sDo nothing%s\n' "$cyan" 'n' "$reset" "$dim" "$reset"
+  fi
+}
+
+print_other_knightcode_path() {
+  printf 'Another knightcode command is on PATH, and this installer did not install it:\n\n'
+  printf '  %s\n\n' "$KNIGHTCODE_OTHER_PATH"
 }
 
 print_knightcode_action_selection() {
@@ -853,10 +913,14 @@ managed_install_marker_is_valid() {
   node - "$marker_path" <<'NODE' >/dev/null 2>&1
 const fs = require("node:fs");
 const marker = JSON.parse(fs.readFileSync(process.argv[2], "utf8").replace(/^\uFEFF/, ""));
+// install.ps1 records a Windows entrypoint (C:\...\knightcode.cmd). WSL can reach that
+// install through PATH or an inherited KNIGHTCODE_MANAGED_INSTALL_ROOT; it is not ours.
+const windowsEntrypoint = /^(?:[A-Za-z]:\\|\\\\)/.test(marker.entrypoint?.path ?? "");
 if (
 	marker.kind !== "knightcode-managed-install" ||
 	marker.schemaVersion !== 1 ||
-	marker.layout !== "releases-v1"
+	marker.layout !== "releases-v1" ||
+	windowsEntrypoint
 ) {
 	process.exit(1);
 }
@@ -1211,11 +1275,11 @@ write_managed_install_link() {
     return 1
   fi
 
-  managed_link_target=$(node - "$managed_bin_dir" "$managed_launcher" <<'NODE'
-const path = require("node:path");
-console.log(path.relative(process.argv[2], process.argv[3]));
-NODE
-  )
+  # The PATH directory may itself be a symlink, so use an absolute target.
+  case "$managed_launcher" in
+    /*) managed_link_target="$managed_launcher" ;;
+    *) managed_link_target="$PWD/$managed_launcher" ;;
+  esac
   managed_link_tmp="$managed_bin_dir/.$KNIGHTCODE_CMD.tmp.$$"
   rm -f "$managed_link_tmp"
   ln -s "$managed_link_target" "$managed_link_tmp"
@@ -1393,6 +1457,20 @@ uninstall_knightcode_package() {
     printf '\nnpm uninstall finished, but knightcode is still present at:\n\n  %s\n' "$KNIGHTCODE_EXISTING_PATH" >&2
     return 1
   fi
+}
+
+# npm owns the knightcode on PATH only if it is the bin link of the prefix that has the
+# package. Compare resolved files, so a PATH entry such as prefix/bin// matches.
+npm_owns_existing_knightcode() {
+  npm_owner_bin=$(resolve_existing_file "${KNIGHTCODE_NPM_UNINSTALL_PREFIX:-$(npm_global_prefix)}/bin/$KNIGHTCODE_CMD") || return 1
+  npm_existing_bin=$(resolve_existing_file "$KNIGHTCODE_EXISTING_PATH") || return 1
+  [ "$npm_existing_bin" = "$npm_owner_bin" ] && npm_package_is_installed_for_uninstall
+}
+
+resolve_existing_file() {
+  node - "$1" <<'NODE' 2>/dev/null
+console.log(require("node:fs").realpathSync(process.argv[2]));
+NODE
 }
 
 npm_package_is_installed_for_uninstall() {
