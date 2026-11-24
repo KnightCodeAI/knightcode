@@ -59,6 +59,7 @@ export async function shareSession(context: SessionShareContext): Promise<void> 
 	try {
 		tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "knightcode-share-"));
 	} catch (error: unknown) {
+		// /share runs from the editor's submit handler, where a thrown error would crash KnightCode.
 		context.showError(`Failed to export session: ${error instanceof Error ? error.message : "Unknown error"}`);
 		return;
 	}
