@@ -198,6 +198,12 @@ export async function createAgentSessionServices(
 	extensionsResult.runtime.pendingVirtualModelRegistrations = [];
 	try {
 		await modelRuntime.refresh({ allowNetwork: false });
+		// A warning, like invalid settings: the runtime keeps working without the file's models, and an error would
+		// make the CLI exit.
+		const modelsJsonError = modelRuntime.getError();
+		if (modelsJsonError) {
+			diagnostics.push({ type: "warning", message: `models.json error: ${modelsJsonError}` });
+		}
 		diagnostics.push(...applyExtensionFlagValues(resourceLoader, options.extensionFlagValues));
 	} catch (error) {
 		modelRuntime.releaseVirtualModels(extensionsResult.runtime);

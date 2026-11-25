@@ -2,8 +2,9 @@
  * Test that BashExecutionComponent's collapsed output respects the render-time width,
  * not a stale captured width. Regression test for #2569.
  */
-import { visibleWidth } from "@knightcode/tui";
-import { beforeAll, describe, expect, it } from "vitest";
+import { setKeybindings, visibleWidth } from "@knightcode/tui";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { KeybindingsManager } from "../src/core/keybindings.ts";
 import { BashExecutionComponent } from "../src/modes/interactive/components/bash-execution.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
@@ -92,5 +93,32 @@ describe("BashExecutionComponent command echo", () => {
 		expect(included).toContain("!pwd");
 		expect(included).not.toContain("!!pwd");
 		expect(excluded).toContain("!!pwd");
+	});
+});
+
+describe("BashExecutionComponent cancel hint", () => {
+	beforeAll(() => {
+		initTheme(undefined, false);
+	});
+
+	afterEach(() => {
+		setKeybindings(new KeybindingsManager());
+	});
+
+	function runningHint(): string | undefined {
+		const component = new BashExecutionComponent("sleep 30", createTuiStub(120).stub);
+		return component.render(120).find((line) => line.includes("Running..."));
+	}
+
+	it("names the interrupt key, which is the key that cancels the command", () => {
+		setKeybindings(new KeybindingsManager());
+
+		expect(runningHint()).toContain("Running... (escape to cancel)");
+	});
+
+	it("follows a remapped interrupt key", () => {
+		setKeybindings(new KeybindingsManager({ "app.interrupt": "ctrl+g" }));
+
+		expect(runningHint()).toContain("Running... (ctrl+g to cancel)");
 	});
 });

@@ -321,16 +321,12 @@ export class SettingsList implements Component {
 	}
 
 	private addHintLine(lines: string[], width: number): void {
+		const kb = getKeybindings();
+		const confirm = [...kb.getKeys("tui.select.confirm"), "space"].join("/");
+		const keysHint = `${confirm} to change · ${kb.getKeys("tui.select.cancel").join("/")} to cancel`;
 		lines.push("");
 		lines.push(
-			truncateToWidth(
-				this.theme.hint(
-					this.searchEnabled
-						? "  Type to search · Enter/Space to change · Esc to cancel"
-						: "  Enter/Space to change · Esc to cancel",
-				),
-				width,
-			),
+			truncateToWidth(this.theme.hint(this.searchEnabled ? `  Type to search · ${keysHint}` : `  ${keysHint}`), width),
 		);
 	}
 }
