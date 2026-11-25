@@ -1,5 +1,53 @@
 # @knightcodeai/cli
 
+## 0.25.0
+
+### Added
+
+- Added a `blockedKind` option to the extension `select()`, `confirm()` and `input()` dialogs, so an extension can report a dialog as a permission, question or auth request in terminal program status.
+
+- Added GPT-6 Luna decision support for GitHub Copilot. Signed-in accounts only list decision models their plan and settings allow.
+
+- Added response IDs and provider-reported cost to OpenRouter decision results in codemode.
+
+### Changed
+
+- Changed the single `showCacheMissNotices` setting into one setting per transcript notice (`notices.cacheMisses`, `notices.cacheWarming`, `notices.compactionCosts`, `notices.reasoningDrops`), with a Notices submenu in `/settings`; an existing `showCacheMissNotices` value is migrated to all four.
+
+- Changed Radius decision requests to use `POST /decision` and renamed the adapter to `knightcode-decision`.
+
+### Fixed
+
+- Fixed the `!` command "Running..." hint naming a fixed key; it now names the configured interrupt key.
+
+- Fixed Cloudflare's default chat model selection by choosing DeepSeek V4.1 Flash, which is available through Workers AI and AI Gateway.
+
+- Fixed key hints that named the wrong or a hardcoded key: the extension editor and session rename name the configured submit key, and the settings lists, `/config` selector, session selector and fullscreen copy setting follow remapped keys.
+
+- Fixed `/llama` "Download model" downloading the typed `owner/repository` text instead of the result highlighted with the arrow keys.
+
+- Fixed a bare URL that runs into a multi-megabyte line exhausting memory in terminals with OSC 8 hyperlinks; URLs longer than 8192 characters are no longer linked.
+
+- Fixed print, JSON and RPC modes not reporting an invalid `models.json`, so a typo showed up only as "Model not found" or "No API key found"; every mode and SDK runtimes now report it as a warning, including interactive mode, which showed it as an error.
+
+- Fixed `!` command output ignoring the ctrl+o expanded state when the transcript is rebuilt from the session.
+
+- Fixed the project trust prompt, the missing session folder prompt and first-time setup reporting nothing to terminals that show program status; they now report KnightCode as blocked, the trust prompt and first-time setup as a permission request, and an in-session dialog with a multi-line title reports only its first line.
+
+- Fixed slow parsing of large output from streaming providers, MCP servers, and the CLI's RPC interface.
+
+- Fixed Windows Bash discovery when Git for Windows is on `PATH` but installed outside its default location.
+
+- Fixed context overflow detection so unrelated error codes no longer trigger compaction.
+
+- Fixed missing HTTP response status and headers in extension diagnostics when a provider request fails or retries.
+
+- Fixed Claude thinking options to reflect whether each model supports turning thinking off.
+
+- Fixed OpenRouter replies that stop before producing text or a tool call when the provider reports a failure.
+
+- Fixed right-click paste inserting the clipboard twice in Tabby on Windows, which pastes on right-click itself.
+
 ## 0.24.6
 
 ### Fixed
