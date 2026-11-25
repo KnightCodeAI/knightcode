@@ -14,24 +14,24 @@ import { formatProviderError, normalizeProviderError } from "../utils/error-body
 import { isRecord, postClassifierRequest, requiredNumber } from "./classifier-shared.ts";
 
 /**
- * knightcode-classifier API implementation.
+ * knightcode-decision API implementation.
  *
- * Sends KnightCode's own classifier protocol directly to a backend: the request is a
- * single POST of `{ model, context, options }` to `<baseUrl>/classify`, and
- * a `200 OK` response is a completed `{ answers, usage? }` JSON object. Errors
+ * Sends KnightCode's own decision protocol directly to a backend: the request is a
+ * single POST of `{ model, context, options }` to `<baseUrl>/decision`, and
+ * a `200 OK` response is a completed `{ answers, usage?, responseId? }` JSON object. Errors
  * use non-2xx HTTP statuses with the `{ error: { message, code?, details? } }`
  * envelope, matching `knightcode-messages`.
  */
 
-const LABEL = "KnightCode Classifier";
+const LABEL = "KnightCode Decision";
 
-export interface KnightCodeClassifierOptions extends ClassifierOptions {
+export interface KnightCodeDecisionOptions extends ClassifierOptions {
 	/** Optional session identifier for gateway correlation/analytics. */
 	sessionId?: string;
 }
 
-/** Wire request body sent by `knightcode-classifier` to `POST <baseUrl>/classify`. */
-export type KnightCodeClassifierRequest = {
+/** Wire request body sent by `knightcode-decision` to `POST <baseUrl>/decision`. */
+export type KnightCodeDecisionRequest = {
 	model: string;
 	context: ClassifierContext;
 	options?: {
@@ -39,10 +39,11 @@ export type KnightCodeClassifierRequest = {
 	};
 };
 
-/** Wire response body returned by a `knightcode-classifier` backend on `200 OK`. */
-export type KnightCodeClassifierResponse = {
+/** Wire response body returned by a `knightcode-decision` backend on `200 OK`. */
+export type KnightCodeDecisionResponse = {
 	answers: Record<string, ClassifierAnswer>;
 	usage?: Usage;
+	responseId?: string;
 };
 
 function finiteNonNegative(value: unknown): number {
@@ -145,8 +146,8 @@ function parseAnswers(value: unknown, context: ClassifierContext): Record<string
 	);
 }
 
-/** Classification through KnightCode's canonical `POST <baseUrl>/classify` protocol. */
-export const classify: ClassifierFunction<KnightCodeClassifierOptions> = async (model, context, options) => {
+/** Classification through KnightCode's canonical `POST <baseUrl>/decision` protocol. */
+export const classify: ClassifierFunction<KnightCodeDecisionOptions> = async (model, context, options) => {
 	const output: ClassifierResult = {
 		api: model.api,
 		provider: model.provider,
@@ -157,13 +158,13 @@ export const classify: ClassifierFunction<KnightCodeClassifierOptions> = async (
 	};
 
 	try {
-		if (model.api !== "knightcode-classifier") throw new Error(`Unsupported classifier API: ${model.api}`);
+		if (model.api !== "knightcode-decision") throw new Error(`Unsupported classifier API: ${model.api}`);
 		const images = context.images ?? [];
 		if (images.length > 0 && !model.input.includes("image")) {
 			throw new Error(`${LABEL} model ${model.id} does not support image input`);
 		}
-		const url = new URL("classify", `${model.baseUrl.replace(/\/+$/u, "")}/`);
-		const requestBody: KnightCodeClassifierRequest = {
+		const url = new URL("decision", `${model.baseUrl.replace(/\/+$/u, "")}/`);
+		const requestBody: KnightCodeDecisionRequest = {
 			model: model.id,
 			context: {
 				state: context.state,
@@ -174,6 +175,7 @@ export const classify: ClassifierFunction<KnightCodeClassifierOptions> = async (
 		};
 		const body = await postClassifierRequest(LABEL, url, model, requestBody, options);
 		if (!isRecord(body)) throw new Error(`${LABEL} returned an unexpected response`);
+		if (typeof body.responseId === "string" && body.responseId) output.responseId = body.responseId;
 		const usage = parseUsage(body.usage, model);
 		if (usage) output.usage = usage;
 		output.answers = parseAnswers(body.answers, context);

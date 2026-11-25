@@ -318,11 +318,18 @@ describe("subagent example extension", () => {
 		it("escalates SIGTERM to SIGKILL based on close state and preserves partial details", async () => {
 			const pidFile = join(tempDir, "ignores-sigterm.pid");
 			const controller = new AbortController();
+			let receivedPartial = false;
 			const execution = captureSettlement(
-				executeSubagent(singleTask(fixtureScenario.ignoreSigterm(pidFile)), { signal: controller.signal }),
+				executeSubagent(singleTask(fixtureScenario.ignoreSigterm(pidFile)), {
+					signal: controller.signal,
+					onUpdate: (update) => {
+						receivedPartial ||= detailsOf(update).results[0].messages.length > 0;
+					},
+				}),
 			);
 
-			await waitFor(() => existsSync(pidFile));
+			// The PID file alone does not mean the child installed its handler or sent its message.
+			await waitFor(() => receivedPartial && existsSync(pidFile));
 			const pid = Number(readFileSync(pidFile, "utf8"));
 			vi.useFakeTimers();
 			controller.abort();

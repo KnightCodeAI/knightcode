@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { classify } from "../src/api/knightcode-classifier.ts";
+import { classify } from "../src/api/knightcode-decision.ts";
 import type { ClassifierContext, ClassifierModel } from "../src/types.ts";
 
-const model: ClassifierModel<"knightcode-classifier"> = {
+const model: ClassifierModel<"knightcode-decision"> = {
 	type: "classifier",
 	id: "jev-latest",
 	name: "Jev Latest",
-	api: "knightcode-classifier",
+	api: "knightcode-decision",
 	provider: "radius",
 	baseUrl: "https://radius.example/v1",
 	input: ["text"],
@@ -35,8 +35,8 @@ const context: ClassifierContext = {
 	},
 };
 
-describe("KnightCode Classifier", () => {
-	it("posts canonical context and options to /classify and returns typed answers with authoritative cost", async () => {
+describe("KnightCode Decision", () => {
+	it("posts canonical context and options to /decision and returns typed answers with authoritative cost", async () => {
 		const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
 			new Response(
 				JSON.stringify({
@@ -58,6 +58,7 @@ describe("KnightCode Classifier", () => {
 						totalTokens: 123,
 						cost: { input: 0.0001, output: 0.00001, cacheRead: 0, cacheWrite: 0, total: 0.00011 },
 					},
+					responseId: "gen-dec-1",
 				}),
 				{ status: 200, headers: { "content-type": "application/json" } },
 			),
@@ -71,7 +72,7 @@ describe("KnightCode Classifier", () => {
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		const [url, init] = fetchMock.mock.calls[0];
-		expect(String(url)).toBe("https://radius.example/v1/classify");
+		expect(String(url)).toBe("https://radius.example/v1/decision");
 		expect(init?.method).toBe("POST");
 		expect(JSON.parse(String(init?.body))).toEqual({
 			model: "jev-latest",
@@ -85,7 +86,7 @@ describe("KnightCode Classifier", () => {
 		});
 
 		expect(result).toMatchObject({
-			api: "knightcode-classifier",
+			api: "knightcode-decision",
 			provider: "radius",
 			model: "jev-latest",
 			stopReason: "stop",
@@ -105,6 +106,7 @@ describe("KnightCode Classifier", () => {
 				totalTokens: 123,
 				cost: { total: 0.00011 },
 			},
+			responseId: "gen-dec-1",
 		});
 	});
 
@@ -123,6 +125,30 @@ describe("KnightCode Classifier", () => {
 		expect(result.stopReason).toBe("error");
 		expect(result.answers).toEqual({});
 		expect(result.errorMessage).toContain("Insufficient credits");
+	});
+
+	// Decision callbacks report failed HTTP responses.
+	it("reports an error response to onResponse even when its body fails", async () => {
+		const body = new ReadableStream({
+			start(controller) {
+				controller.error(new Error("body stream failed"));
+			},
+		});
+		const fetchMock = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(new Response(body, { status: 503, headers: { "retry-after": "7" } }));
+		const onResponse = vi.fn();
+
+		const result = await classify(model, context, {
+			apiKey: "radius-key",
+			maxRetries: 0,
+			fetch: fetchMock,
+			onResponse,
+		});
+
+		expect(result.stopReason).toBe("error");
+		expect(onResponse).toHaveBeenCalledTimes(1);
+		expect(onResponse.mock.calls[0][0]).toMatchObject({ status: 503, headers: { "retry-after": "7" } });
 	});
 
 	it("rejects out-of-range probabilities and unknown choices", async () => {
@@ -212,7 +238,7 @@ describe("KnightCode Classifier", () => {
 	});
 
 	it("forwards images when the model supports image input and rejects them on text-only models", async () => {
-		const imageModel: ClassifierModel<"knightcode-classifier"> = { ...model, input: ["text", "image"] };
+		const imageModel: ClassifierModel<"knightcode-decision"> = { ...model, input: ["text", "image"] };
 		const images = [{ type: "image" as const, data: "AAAA", mimeType: "image/png" }];
 		const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
 			new Response(

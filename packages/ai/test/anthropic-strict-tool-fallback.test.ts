@@ -99,7 +99,8 @@ describe("Anthropic preferred strict tool fallback", () => {
 		expect(events).toEqual(["start", "done"]);
 		expect(payloads).toHaveLength(2);
 		expect(onPayload).toHaveBeenCalledTimes(2);
-		expect(onResponse).toHaveBeenCalledTimes(1);
+		// The rejected request and the fallback each report their response.
+		expect(onResponse.mock.calls.map(([response]) => response.status)).toEqual([400, 200]);
 		const first = payloads[0].tools as BetaTool[];
 		const second = payloads[1].tools as BetaTool[];
 		expect(first[0]).toMatchObject({
@@ -257,7 +258,7 @@ describe("Anthropic preferred strict tool fallback", () => {
 		expect(payloads.map((payload) => (payload.tools as BetaTool[])[0].strict)).toEqual([true, undefined, true]);
 	});
 
-	// Regression: REWRITE-ME.
+	// Strict-tool fallback still reports the failed HTTP response.
 	it("sends preferred tools non-strict right away on later requests of a rejected session", async () => {
 		const { payloads, options } = harness((_payload, attempt) => (attempt === 1 ? errorResponse() : successResponse()));
 		const transcript = context([tool("lookup", "prefer"), tool("required", "require")]);

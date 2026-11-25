@@ -15,10 +15,10 @@ export type { OpenAICodexResponsesOptions, OpenAICodexWebSocketDebugStats } from
 export type { OpenAICompletionsOptions } from "./api/openai-completions.ts";
 export type { OpenAIResponsesOptions } from "./api/openai-responses.ts";
 export type {
-	KnightCodeClassifierOptions,
-	KnightCodeClassifierRequest,
-	KnightCodeClassifierResponse,
-} from "./api/knightcode-classifier.ts";
+	KnightCodeDecisionOptions,
+	KnightCodeDecisionRequest,
+	KnightCodeDecisionResponse,
+} from "./api/knightcode-decision.ts";
 export type {
 	KnightCodeMessagesEvent,
 	KnightCodeMessagesOptions,

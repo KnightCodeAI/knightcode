@@ -613,9 +613,9 @@ describe("Generate E2E Tests", () => {
 	});
 
 	describe.skipIf(!hasCloudflareWorkersAICredentials())(
-		"Cloudflare Workers AI Provider (Kimi K2.6 via OpenAI Completions)",
+		"Cloudflare Workers AI Provider (DeepSeek V4.1 Flash via OpenAI Completions)",
 		() => {
-			const llm = getModel("cloudflare-workers-ai", "@cf/moonshotai/kimi-k2.6");
+			const llm = getModel("cloudflare-workers-ai", "@cf/deepseek-ai/deepseek-v4.1-flash-1017");
 
 			it("should complete basic text generation", { retry: 3 }, async () => {
 				await basicTextGeneration(llm);
@@ -640,9 +640,9 @@ describe("Generate E2E Tests", () => {
 	);
 
 	describe.skipIf(!hasCloudflareAiGatewayCredentials())(
-		"Cloudflare AI Gateway → Workers AI (Kimi K2.6 via /compat)",
+		"Cloudflare AI Gateway → Workers AI (DeepSeek V4.1 Flash via /compat)",
 		() => {
-			const llm = getModel("cloudflare-ai-gateway", "workers-ai/@cf/moonshotai/kimi-k2.6");
+			const llm = getModel("cloudflare-ai-gateway", "workers-ai/@cf/deepseek-ai/deepseek-v4.1-flash-1017");
 
 			it("should complete basic text generation", { retry: 3 }, async () => {
 				await basicTextGeneration(llm);

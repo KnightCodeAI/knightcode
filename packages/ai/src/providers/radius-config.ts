@@ -20,7 +20,7 @@ export type RadiusGatewayClassifierModel = {
 	id: string;
 	name: string;
 	input: ("text" | "image")[];
-	cost: ClassifierModel<"knightcode-classifier">["cost"];
+	cost: ClassifierModel<"knightcode-decision">["cost"];
 	contextWindow: number;
 };
 
@@ -115,13 +115,13 @@ export function getRadiusModelsFromConfig(
 export function getRadiusAllModelsFromConfig(
 	providerId: string,
 	config: RadiusGatewayConfig,
-): (Model<"knightcode-messages"> | ClassifierModel<"knightcode-classifier">)[] {
+): (Model<"knightcode-messages"> | ClassifierModel<"knightcode-decision">)[] {
 	return [
 		...getRadiusModelsFromConfig(providerId, config),
-		...(config.classifiers ?? []).map((model): ClassifierModel<"knightcode-classifier"> => ({
+		...(config.classifiers ?? []).map((model): ClassifierModel<"knightcode-decision"> => ({
 			...model,
 			type: "classifier",
-			api: "knightcode-classifier",
+			api: "knightcode-decision",
 			provider: providerId,
 			baseUrl: config.baseUrl,
 		})),
