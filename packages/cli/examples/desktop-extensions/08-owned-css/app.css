@@ -1,0 +1,3 @@
+.external-only { color: rgb(17, 83, 149); font-weight: 700; }
+.external-button { position: fixed; right: 24px; top: 80px; padding: 8px 12px; color: inherit; background: white; border: 1px solid currentColor; }
+.external-popup { position: fixed; right: 24px; top: 128px; padding: 16px; color: var(--kc-text); background: var(--kc-selection); font-family: var(--kc-font-ui); }

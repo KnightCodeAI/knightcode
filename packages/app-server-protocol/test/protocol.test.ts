@@ -96,7 +96,66 @@ const ui = {
 // One valid example per message. A message without an example fails the coverage test below.
 const backgroundShell = { id: "ab12cd34", command: "npm run dev", cwd: "/p", status: "running", startedAt: 1 };
 
+const desktopWindow = { windowId: 1, lifetime: "native-port" };
+const desktopBinding = {
+	owner: "external-example",
+	revision: "a".repeat(64),
+	epoch: "epoch",
+	window: "connection:1",
+	mount: "mount",
+};
+
+const checkout = { threadId: "t1", cwd: "/p", projectCwd: "/p" };
+const operation = {
+	id: "operation-1",
+	target: checkout,
+	kind: "commitAndPush",
+	status: "partial",
+	stage: "push",
+	completed: ["branch", "commit"],
+	recovery: "retry",
+	outputs: { branch: "kc/fix-it", commit: "89abcdef", message: "fix it" },
+	problem: {
+		code: "gitConflict",
+		message: "push refused",
+		recoveryInstructions: ["Check the remote."],
+		paths: ["a.txt"],
+	},
+};
+
 const requestParams: Record<string, unknown> = {
+	"desktopOperation/start": {
+		target: checkout,
+		action: { kind: "commitAndPush", branch: "kc/fix-it", message: "fix it", includeUnstaged: true },
+	},
+	"desktopOperation/read": { threadId: "t1" },
+	"desktopOperation/recover": { target: checkout, id: "operation-1", action: "retry" },
+	"desktopOperation/preflight": { target: checkout, to: "local", branch: "kc/fix-it" },
+	"desktopExtension/fail": { ...desktopWindow, binding: desktopBinding, message: "Render failed" },
+	"desktopExtension/window/connect": desktopWindow,
+	"desktopExtension/window/disconnect": desktopWindow,
+	"desktopExtension/reconcile": { ...desktopWindow, cwd: "/p" },
+	"desktopExtension/ack": { ...desktopWindow, binding: desktopBinding, id: "phase" },
+	"desktopExtension/call": { ...desktopWindow, binding: desktopBinding, requestId: 1, method: "count", args: null },
+	"desktopExtension/cancel": { ...desktopWindow, binding: desktopBinding, requestId: 1 },
+	"desktopExtension/subscribe": { ...desktopWindow, binding: desktopBinding, id: "watch", event: "changed" },
+	"desktopExtension/unsubscribe": { ...desktopWindow, binding: desktopBinding, id: "watch" },
+	"desktopExtension/list": { cwd: "/p" },
+	"desktopExtension/set": {
+		owner: "external-example",
+		source: "/extensions/example",
+		approve: true,
+		revision: desktopBinding.revision,
+		kinds: ["frontend"],
+		enabled: true,
+		dev: false,
+	},
+	"desktopExtension/reload": {},
+	"desktopExtension/preview/set": { enabled: true },
+	"desktopExtension/diagnostic": {
+		owner: "external-example",
+		diagnostic: { windowId: 1, revision: "a".repeat(64), phase: "render", message: "Provider failed" },
+	},
 	initialize: {
 		clientInfo: { name: "test", version: "1" },
 		capabilities: { optOutNotifications: ["item/reasoning/delta"] },
@@ -231,6 +290,48 @@ const marketplaceInfo = {
 	diagnostics: [],
 };
 const requestResults: Record<string, unknown> = {
+	"desktopOperation/start": { operation },
+	"desktopOperation/read": { operations: [operation] },
+	"desktopOperation/recover": { accepted: true, operation },
+	"desktopOperation/preflight": { branch: "kc/fix-it" },
+	"desktopExtension/fail": {},
+	"desktopExtension/window/connect": {},
+	"desktopExtension/window/disconnect": {},
+	"desktopExtension/reconcile": {},
+	"desktopExtension/ack": {},
+	"desktopExtension/call": { status: "ok", value: 1 },
+	"desktopExtension/cancel": {},
+	"desktopExtension/subscribe": { status: "subscribed" },
+	"desktopExtension/unsubscribe": {},
+	"desktopExtension/list": {
+		safeMode: false,
+		preview: true,
+		extensions: [
+			{
+				owner: "external-example",
+				name: "example",
+				source: "/extensions/example",
+				scope: "user",
+				approved: true,
+				enabled: true,
+				dev: false,
+				revision: "a".repeat(64),
+				artifact: {
+					owner: "external-example",
+					revision: "a".repeat(64),
+					root: "/cache/example",
+					frontend: "__entry.js",
+					styles: ["__styles/0.css"],
+					files: ["__entry.js", "app.js", "__styles/0.css"],
+				},
+				diagnostics: [],
+			},
+		],
+	},
+	"desktopExtension/set": {},
+	"desktopExtension/reload": {},
+	"desktopExtension/preview/set": {},
+	"desktopExtension/diagnostic": {},
 	initialize: {
 		serverInfo: { name: "knightcode", version: "0.0.0" },
 		platform: { os: "linux", arch: "x64", homeDir: "/home/u" },
@@ -464,6 +565,10 @@ const requestResults: Record<string, unknown> = {
 	"ui/event": {},
 };
 const notificationParams: Record<string, unknown> = {
+	"desktopOperation/changed": { threadId: "t1", operations: [operation] },
+	"desktopExtension/phase": { ...desktopWindow, binding: desktopBinding, id: "phase", phase: "quiesce" },
+	"desktopExtension/event": { ...desktopWindow, binding: desktopBinding, id: "watch", event: "changed", value: 1 },
+	"desktopExtension/changed": { reload: true },
 	initialized: {},
 	"thread/started": { thread },
 	"thread/replaced": { oldThreadId: "t0", thread },
@@ -593,6 +698,15 @@ describe("app server protocol", () => {
 			checkSchema(`${method} params`, params, serverRequestParams[method]);
 			checkSchema(`${method} result`, result, serverRequestResults[method]);
 		}
+	});
+
+	test("desktop call sequences are safe positive integers and transport outcomes remain typed", () => {
+		const call = Compile(ClientRequests["desktopExtension/call"].params);
+		const params = requestParams["desktopExtension/call"] as Record<string, unknown>;
+		for (const requestId of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
+			expect(call.Check({ ...params, requestId })).toBe(false);
+		const result = Compile(ClientRequests["desktopExtension/call"].result);
+		for (const status of ["disconnected", "cancelled", "outcome-unknown"]) expect(result.Check({ status })).toBe(true);
 	});
 
 	test("Phase B params reject malformed values", () => {

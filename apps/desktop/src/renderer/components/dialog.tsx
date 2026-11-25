@@ -11,6 +11,7 @@
  */
 
 import { Dialog as DialogPrimitive } from "radix-ui";
+import { usePortalOwnership } from "../extensions/surface.tsx";
 import { type ReactNode, useState } from "react";
 import { Button, IconButton } from "./button.tsx";
 import { X } from "./icons.tsx";
@@ -54,13 +55,15 @@ export function Dialog({
 	width?: number;
 	children: ReactNode;
 }) {
+	const ownership = usePortalOwnership();
 	const card = variant === "card";
 	const [returnTo] = useState(openers);
 	return (
 		<DialogPrimitive.Root open={open} onOpenChange={(next) => next || onClose()}>
 			<DialogPrimitive.Portal>
-				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay" />
+				<DialogPrimitive.Overlay {...ownership} className="fixed inset-0 z-50 bg-overlay" />
 				<DialogPrimitive.Content
+					{...ownership}
 					// Radix asks for a description or an explicit "none".
 					{...(description ? {} : { "aria-describedby": undefined })}
 					// A dialog with a field opens on it (the one marked data-autofocus, else the first), as Codex's do.

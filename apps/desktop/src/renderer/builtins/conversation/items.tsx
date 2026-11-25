@@ -1,0 +1,775 @@
+/**
+ * Transcript rendering (desktop-shell.md section 9.3), laid out as Codex's (measured 2026-10-19). A turn is the
+ * user's message (a blue 22px bubble, its time and Copy/Edit on hover), then "Worked for …" over a hairline, which
+ * opens to the work, then the final reply, an "Edited N files" card when the turn changed files, and the reply's
+ * Copy and time. While a turn runs its work shows as it happens under "Working for …".
+ *
+ * Work is a column 16px apart: the agent's commentary, reasoning, and tool calls (components/activity.tsx), two or
+ * more in a row folded under one summary ("Edited files, ran commands"). While the turn runs, finished calls are
+ * hidden and the running one shows in the present tense, as in Codex; a turn with no final reply shows its work open.
+ */
+
+import { type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	experimental_Button as Button,
+	experimental_controls,
+	experimental_icons,
+	experimental_shellServices,
+	experimental_conversationServices,
+	experimental_ItemRenderer as ItemRenderer,
+	experimental_MessageActions as ExtensionMessageActions,
+	type experimental_TurnFile as TurnFile,
+	type experimental_ViewItem as ViewItem,
+	type experimental_ViewTurn as ViewTurn,
+	type experimental_AppItem as AppItem,
+} from "@knightcodeai/cli/desktop";
+import { ActivityThread } from "./activity.tsx";
+import {
+	afterReply,
+	diffStats,
+	inputOf,
+	isRunning,
+	thinkingHeading,
+	type ToolItem,
+	workEntries,
+} from "./activity-model.ts";
+
+/**
+ * The proposed plan: a card headed "Plan" ("Writing plan" while it streams) with
+ * Download, Copy and a collapse toggle, the plan's Markdown held to 320px with "Expand plan" while collapsed.
+ */
+function PlanCard({ item }: { item: ToolItem }) {
+	const { experimental_IconButton: IconButton } = experimental_controls();
+	const { ChevronDown, Download } = experimental_icons();
+	const { experimental_Markdown: Markdown } = experimental_conversationServices();
+	const markdown = typeof inputOf(item).markdown === "string" ? (inputOf(item).markdown as string) : "";
+	const writing = isRunning(item);
+	// A plan still being written is collapsed and opens when it is finished, until the user toggles it.
+	const [toggled, setCollapsed] = useState<boolean>();
+	const collapsed = toggled ?? writing;
+	const download = () => {
+		const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = "PLAN.md";
+		link.click();
+		URL.revokeObjectURL(url);
+	};
+	const done = !writing && markdown.trim().length > 0;
+	const threadId = useContext(ActivityThread);
+	return (
+		<ItemRenderer threadId={threadId} item={item}>
+			<div className="overflow-hidden rounded-lg bg-card-soft shadow-[0_0_0_0.5px_var(--kc-border-strong)]">
+				<div className="flex h-10 items-center justify-between gap-2 px-3 py-2">
+					<span className="text-base leading-tight font-semibold text-ink">
+						{writing ? <span className="kc-shimmer">Writing plan</span> : "Plan"}
+					</span>
+					<div className="flex items-center gap-1">
+						{done ? (
+							<>
+								<IconButton label="Download plan" size="sm" className="rounded-md" onClick={download}>
+									<Download size={14} />
+								</IconButton>
+								<CopyMessage text={markdown} />
+							</>
+						) : null}
+						<IconButton
+							label={collapsed ? "Expand plan summary" : "Collapse plan summary"}
+							size="sm"
+							className="rounded-md"
+							onClick={() => setCollapsed(!collapsed)}
+						>
+							<ChevronDown size={14} className={`transition-transform ${collapsed ? "rotate-180" : ""}`} />
+						</IconButton>
+					</div>
+				</div>
+				<div className="relative overflow-hidden px-3 pb-3" style={collapsed ? { height: PLAN_COLLAPSED } : undefined}>
+					<Markdown text={markdown} />
+					{collapsed ? (
+						<>
+							<div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-surface to-transparent" />
+							<div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+								<Button
+									variant="solid"
+									size="md"
+									squircle
+									className="pointer-events-auto"
+									onClick={() => setCollapsed(false)}
+								>
+									Expand plan
+								</Button>
+							</div>
+						</>
+					) : null}
+				</div>
+			</div>
+		</ItemRenderer>
+	);
+}
+
+/** A collapsed plan's height. */
+const PLAN_COLLAPSED = 320;
+
+/** The turn's proposed plan: its last plan submission that did not fail. */
+const isPlan = (item: ViewItem): item is ToolItem =>
+	item.type === "toolCall" && item.tool === "submit_plan" && !item.parentItemId && item.status !== "failed";
+
+/** A row of actions under a message, with its time (Codex's 26px buttons); hidden until hovered unless `shown`. */
+function MessageActions({
+	time,
+	shown,
+	align = "start",
+	children,
+	context,
+}: {
+	context?: { threadId: string; item: ViewItem };
+	time?: number;
+	shown?: boolean;
+	align?: "start" | "end";
+	children: ReactNode;
+}) {
+	const { experimental_messageTime: messageTime } = experimental_shellServices();
+	return (
+		<div
+			className={`flex items-center gap-2 transition-opacity ${align === "end" ? "flex-row-reverse self-end" : "-ms-1"} ${shown ? "" : "opacity-0 group-hover/message:opacity-100 focus-within:opacity-100"}`}
+		>
+			<div className="flex items-center gap-0.5">
+				{children}
+				{context ? <ExtensionMessageActions {...context} /> : null}
+			</div>
+			{time ? <span className="text-xs text-tertiary">{messageTime(time)}</span> : null}
+		</div>
+	);
+}
+
+function CopyMessage({ text, label = "Copy" }: { text: string; label?: string }) {
+	const { experimental_IconButton: IconButton } = experimental_controls();
+	const { Check, Copy } = experimental_icons();
+	const { experimental_copyText: copyText } = experimental_conversationServices();
+	const [copied, setCopied] = useState(0);
+	// Each copy restarts the 1.5 s "Copied" state; unmounting clears it.
+	useEffect(() => {
+		if (!copied) return;
+		const timer = setTimeout(() => setCopied(0), 1500);
+		return () => clearTimeout(timer);
+	}, [copied]);
+	return (
+		<IconButton
+			label={copied ? "Copied" : label}
+			size="sm"
+			className="rounded-md"
+			onClick={() => {
+				void copyText(text).then((ok) => {
+					if (ok) setCopied(Date.now());
+				});
+			}}
+		>
+			{copied ? <Check size={16} /> : <Copy size={16} />}
+		</IconButton>
+	);
+}
+
+/** Codex's "More actions" on a reply: "Branch in new chat", a fork of the thread up to the end of this turn. */
+function ReplyMenu({ threadId, atItemId }: { threadId: string; atItemId: string }) {
+	const {
+		experimental_Menu: Menu,
+		experimental_MenuTrigger: MenuTrigger,
+		experimental_MenuContent: MenuContent,
+		experimental_MenuItem: MenuItem,
+		experimental_IconButton: IconButton,
+	} = experimental_controls();
+	const { MoreHorizontal, GitBranch } = experimental_icons();
+	const { experimental_fork: fork } = experimental_conversationServices();
+	return (
+		<Menu>
+			<MenuTrigger>
+				<IconButton label="More actions" size="sm" className="rounded-md">
+					<MoreHorizontal size={16} />
+				</IconButton>
+			</MenuTrigger>
+			<MenuContent side="top" minWidth={0}>
+				<MenuItem icon={<GitBranch />} onSelect={() => void fork(threadId, atItemId)}>
+					Branch in new thread
+				</MenuItem>
+			</MenuContent>
+		</Menu>
+	);
+}
+
+export function UserBubble({
+	text,
+	images,
+	time,
+	pending,
+	failed,
+	onRetry,
+	onDismiss,
+	onEdit,
+	context,
+}: {
+	context?: { threadId: string; item: ViewItem };
+	text: string;
+	images?: { mimeType: string; data: string }[];
+	time?: number;
+	pending?: boolean;
+	failed?: string;
+	onRetry?: () => void;
+	onDismiss?: () => void;
+	/** Offered on the last message of an idle thread (Codex's Edit message). */
+	onEdit?: (text: string) => void;
+}) {
+	const { experimental_IconButton: IconButton } = experimental_controls();
+	const { CircleAlert, RefreshCw, Pencil } = experimental_icons();
+	const { experimental_matches: matches } = experimental_shellServices();
+	const [editing, setEditing] = useState<string>();
+	if (editing !== undefined && onEdit)
+		return (
+			<div className="flex flex-col items-end">
+				<div className="flex w-full max-w-[70%] flex-col gap-2 rounded-composer bg-composer p-3 shadow-[var(--kc-composer-ring)]">
+					<textarea
+						autoFocus
+						aria-label="Edit message"
+						value={editing}
+						onChange={(e) => setEditing(e.target.value)}
+						onKeyDown={(e) => {
+							if (matches(e, "desktop.picker.dismiss")) {
+								e.preventDefault();
+								setEditing(undefined);
+							} else if (matches(e, "desktop.composer.send") && editing.trim()) {
+								e.preventDefault();
+								onEdit(editing.trim());
+								setEditing(undefined);
+							}
+						}}
+						rows={Math.min(8, editing.split("\n").length + 1)}
+						className="selectable w-full resize-none bg-transparent px-1 text-base leading-[22.75px] text-ink outline-none focus-visible:outline-none"
+					/>
+					<div className="flex justify-end gap-2">
+						<Button variant="ghost" color="secondary" size="md" squircle onClick={() => setEditing(undefined)}>
+							Cancel
+						</Button>
+						<Button
+							variant="solid"
+							size="md"
+							squircle
+							disabled={!editing.trim()}
+							onClick={() => {
+								onEdit(editing.trim());
+								setEditing(undefined);
+							}}
+						>
+							Send
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
+	return (
+		<div className="group/message flex flex-col items-end gap-1">
+			{images?.length ? (
+				<div className={`flex max-w-[70%] flex-wrap justify-end gap-2 ${pending ? "opacity-60" : ""}`}>
+					{images.map((image, i) => (
+						<img
+							key={i}
+							src={`data:${image.mimeType};base64,${image.data}`}
+							className="max-h-40 rounded-xl border border-line object-cover"
+							alt=""
+						/>
+					))}
+				</div>
+			) : null}
+			{text ? (
+				<div
+					className={`flex max-w-[70%] flex-col rounded-composer bg-bubble px-4 py-2.5 text-base leading-[22.75px] text-bubble-text ${pending ? "opacity-60" : ""}`}
+				>
+					{context ? (
+						<ItemRenderer threadId={context.threadId} item={context.item}>
+							<FoldedText text={text} />
+						</ItemRenderer>
+					) : (
+						<FoldedText text={text} />
+					)}
+				</div>
+			) : null}
+			{failed ? (
+				<div className="flex items-center gap-2 text-xs text-danger-text">
+					<CircleAlert size={12} /> Not sent: {failed}
+					<Button variant="ghost" color="danger" size="2xs" onClick={onRetry}>
+						<RefreshCw size={12} /> Retry
+					</Button>
+					<Button variant="ghost" color="secondary" size="2xs" onClick={onDismiss}>
+						Dismiss
+					</Button>
+				</div>
+			) : pending ? null : (
+				<MessageActions time={time} align="end" context={context}>
+					<CopyMessage text={text} label="Copy message" />
+					{onEdit ? (
+						<IconButton label="Edit message" size="sm" className="rounded-md" onClick={() => setEditing(text)}>
+							<Pencil size={16} />
+						</IconButton>
+					) : null}
+				</MessageActions>
+			)}
+		</div>
+	);
+}
+
+/** A collapsed user message: 20 lines, the last an ellipsis. */
+const USER_LINES = 20;
+
+/** A user message longer than USER_LINES shows its start and "Show more". */
+function FoldedText({ text }: { text: string }) {
+	const { ChevronDown } = experimental_icons();
+	const { experimental_Markdown: Markdown } = experimental_conversationServices();
+	const body = useRef<HTMLDivElement>(null);
+	const [long, setLong] = useState(false);
+	const [open, setOpen] = useState(false);
+	useLayoutEffect(() => {
+		const el = body.current;
+		const content = el?.firstElementChild;
+		if (!el || !content) return;
+		const measure = () =>
+			setLong(content.scrollHeight > USER_LINES * Number.parseFloat(getComputedStyle(el).lineHeight));
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(content);
+		return () => observer.disconnect();
+	}, []);
+	const folded = long && !open;
+	return (
+		<>
+			<div
+				ref={body}
+				className={folded ? "overflow-hidden" : undefined}
+				style={folded ? { maxHeight: `${USER_LINES - 1}lh` } : undefined}
+				// Tabbing to a link below the fold opens the message, so focus never sits on hidden text.
+				onFocus={(e) => {
+					if (folded && e.target.matches(":focus-visible")) setOpen(true);
+				}}
+			>
+				<div>
+					<Markdown text={text} tone="user" />
+				</div>
+			</div>
+			{folded ? <span aria-hidden="true">…</span> : null}
+			{long ? (
+				<button
+					type="button"
+					aria-expanded={open}
+					onClick={() => setOpen(!open)}
+					className="mt-1.5 flex items-center gap-1 self-start opacity-70 hover:opacity-100"
+				>
+					{open ? "Show less" : "Show more"}
+					<ChevronDown size={12} className={open ? "rotate-180" : undefined} />
+				</button>
+			) : null}
+		</>
+	);
+}
+
+/**
+ * Work in order: commentary and tool calls, consecutive calls folded under one summary. While the turn runs every
+ * action stays in sight; a call in progress is its present-tense row in its place, only the finished calls on either
+ * side folded. Reasoning is not a row: it shows only in the "Thinking" status.
+ */
+function WorkItems({
+	items,
+	live,
+	cwd,
+	threadId,
+}: {
+	items: ViewItem[];
+	live?: boolean;
+	cwd: string;
+	threadId: string;
+}) {
+	const {
+		experimental_ActiveRow: ActiveRow,
+		experimental_ToolRow: ToolRow,
+		experimental_ActivityGroup: ActivityGroup,
+		experimental_Markdown: Markdown,
+		experimental_ViewNode: ViewNode,
+		experimental_BackgroundNotices: BackgroundNotices,
+	} = experimental_conversationServices();
+	const nestedOf = (id: string) => items.filter((i): i is ToolItem => i.type === "toolCall" && i.parentItemId === id);
+	const entries = workEntries(items);
+	const rows: ReactNode[] = [];
+	const call = (item: ToolItem) =>
+		live && isRunning(item) ? (
+			<ActiveRow key={item.id} item={item} cwd={cwd} />
+		) : (
+			<ToolRow key={item.id} item={item} cwd={cwd} nested={nestedOf(item.id)} />
+		);
+	for (const entry of entries) {
+		if (entry.kind === "group") {
+			let done: ToolItem[] = [];
+			const fold = () => {
+				if (done.length > 1) rows.push(<ActivityGroup key={done[0]!.id} items={done} cwd={cwd} nestedOf={nestedOf} />);
+				else if (done[0]) rows.push(call(done[0]));
+				done = [];
+			};
+			for (const item of entry.items) {
+				if (!live || !isRunning(item)) done.push(item);
+				else {
+					fold();
+					rows.push(call(item));
+				}
+			}
+			fold();
+			continue;
+		}
+		const item = entry.item;
+		if (item.type === "toolCall") rows.push(call(item));
+		else if (item.type === "agentMessage")
+			rows.push(
+				<ItemRenderer key={item.id} item={item} threadId={threadId}>
+					<Markdown text={item.text} />
+				</ItemRenderer>,
+			);
+		else if (item.type === "compaction") rows.push(<CompactionDivider key={item.id} />);
+		else if (item.type === "extensionMessage" && item.backgroundShells)
+			rows.push(<BackgroundNotices key={item.id} notices={item.backgroundShells} />);
+		else if (item.type === "extensionMessage")
+			rows.push(
+				<ItemRenderer key={item.id} item={item} threadId={threadId}>
+					<div>
+						<div className="mb-1 text-xs font-medium text-accent">{item.extension}</div>
+						{item.view ? <ViewNode view={item.view} /> : <Markdown text={item.text} />}
+					</div>
+				</ItemRenderer>,
+			);
+		else if (item.type === "userMessage")
+			rows.push(<UserBubble key={item.id} text={item.text} images={item.images} context={{ threadId, item }} />);
+	}
+	return <div className="flex flex-col gap-4">{rows}</div>;
+}
+
+/** Compaction as a rule across the transcript: it changes what the model sees, so it is never folded away. */
+function CompactionDivider() {
+	const { Layers } = experimental_icons();
+	return (
+		<div className="flex items-center gap-3 py-1 text-sm text-tertiary">
+			<span className="h-px flex-1 bg-line" />
+			<span className="flex items-center gap-1.5">
+				<Layers size={14} /> Context compacted
+			</span>
+			<span className="h-px flex-1 bg-line" />
+		</div>
+	);
+}
+
+/** "Working for 12s", counting while the turn runs. */
+function useElapsed(since: number, running: boolean): number {
+	const [now, setNow] = useState(Date.now());
+	useEffect(() => {
+		if (!running) return;
+		const timer = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(timer);
+	}, [running]);
+	return Math.max(0, now - since);
+}
+
+/** Codex's turn header: "Working for …" or "Worked for … ›" over a hairline. */
+function WorkedFor({ turn, open, onToggle }: { turn: ViewTurn; open: boolean; onToggle?: () => void }) {
+	const { experimental_duration: duration } = experimental_shellServices();
+	const { ChevronRight } = experimental_icons();
+	const running = turn.status === "inProgress";
+	const elapsed = useElapsed(turn.startedAt, running);
+	const label = running
+		? `Working for ${duration(elapsed)}`
+		: turn.completedAt
+			? `Worked for ${duration(turn.completedAt - turn.startedAt)}`
+			: "Worked";
+	return (
+		<div className="flex flex-col">
+			{onToggle ? (
+				<button
+					type="button"
+					aria-expanded={open}
+					onClick={onToggle}
+					className={`-ms-1 flex w-fit items-center gap-1 rounded-md px-1 text-base ${open ? "text-ink" : "text-tertiary hover:text-secondary"}`}
+				>
+					{label}
+					<ChevronRight
+						size={14}
+						className={`transition-[rotate] motion-reduce:transition-none ${open ? "rotate-90" : ""}`}
+					/>
+				</button>
+			) : (
+				<span className="text-base text-tertiary">{label}</span>
+			)}
+			<div className="pt-1">
+				<div className="border-t border-line" />
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The files a turn changed, with their totals: the server's before/after comparison of the checkout when it recorded
+ * one (net, and covering bash), else the sum of the turn's edit and write patches (outside git, older sessions).
+ */
+export function editedFiles(turn: ViewTurn): TurnFile[] {
+	if (turn.files) return turn.files;
+	const files = new Map<string, TurnFile>();
+	for (const item of turn.items) {
+		if (item.type !== "toolCall" || item.status !== "completed") continue;
+		for (const change of item.fileChanges ?? []) {
+			const stats = diffStats(change.diff ?? "");
+			// Tool paths can be native Windows paths: one key and one separator for the same file either way.
+			const path = change.path.replaceAll("\\", "/");
+			const prev = files.get(path) ?? { path, additions: 0, deletions: 0 };
+			files.set(path, {
+				path,
+				additions: prev.additions + stats.additions,
+				deletions: prev.deletions + stats.deletions,
+			});
+		}
+	}
+	return [...files.values()];
+}
+
+/**
+ * Codex's "Edited N files" card: totals, Undo or Reapply and View changes, then a row per file. `undoable` only for
+ * the latest turn once its change record arrived: until then the server's Last Turn is still the turn before.
+ */
+function EditedFilesCard({
+	threadId,
+	turnId,
+	files,
+	undoable,
+}: {
+	threadId: string;
+	turnId: string;
+	files: TurnFile[];
+	undoable: boolean;
+}) {
+	const { experimental_Tooltip: Tooltip } = experimental_controls();
+	const { FileDiff, Spinner, RefreshCw, Undo } = experimental_icons();
+	const {
+		experimental_showChanges: showChanges,
+		experimental_undoTurnEdits: undoTurnEdits,
+		experimental_useUndone: useUndone,
+	} = experimental_conversationServices();
+	const added = files.reduce((n, f) => n + f.additions, 0);
+	const removed = files.reduce((n, f) => n + f.deletions, 0);
+	const view = () => showChanges(threadId, "lastTurn");
+	// As Codex's: Undo turns into Reapply and back, held while a request runs, with a spinner in place of its icon.
+	// In the store, so leaving the thread and coming back still offers Reapply.
+	const undone = useUndone(turnId);
+	const [pending, setPending] = useState(false);
+	const toggle = () => {
+		setPending(true);
+		void undoTurnEdits(threadId, turnId, undone).then(() => setPending(false));
+	};
+	return (
+		<div className="overflow-hidden rounded-lg bg-card-soft shadow-[0_0_0_0.5px_var(--kc-border-strong)]">
+			<div className="flex items-center gap-2.5 p-3">
+				<button
+					type="button"
+					onClick={view}
+					aria-label="View changed files"
+					className="flex min-w-0 flex-1 items-center gap-2.5 text-start"
+				>
+					<span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-secondary">
+						<FileDiff size={24} />
+					</span>
+					<span className="flex min-w-0 flex-col">
+						<span className="text-base font-medium text-ink">
+							Edited {files.length} file{files.length === 1 ? "" : "s"}
+						</span>
+						<span className="text-sm leading-[19.5px] tabular-nums">
+							<span className="text-git-added">+{added}</span> <span className="text-git-deleted">-{removed}</span>
+						</span>
+					</span>
+				</button>
+				<div className="flex items-center gap-2">
+					{undoable ? (
+						<Button variant="ghost" size="md" squircle disabled={pending} onClick={toggle}>
+							{undone ? "Reapply" : "Undo"}
+							{pending ? (
+								<Spinner size={14} className="motion-safe:animate-spin" />
+							) : undone ? (
+								<RefreshCw size={14} />
+							) : (
+								<Undo size={14} />
+							)}
+						</Button>
+					) : null}
+					<Button variant="surface" size="md" squircle onClick={view}>
+						View changes
+					</Button>
+				</div>
+			</div>
+			<div className="border-t border-line">
+				{files.map((f) => {
+					const cut = f.path.lastIndexOf("/");
+					return (
+						<button
+							key={f.path}
+							type="button"
+							onClick={view}
+							className="flex h-9 w-full items-center gap-2 bg-card-row px-3 text-base hover:bg-ghost-hover"
+						>
+							<Tooltip content={f.path} align="start" overflow>
+								<span className="min-w-0 flex-1 truncate text-start">
+									{cut >= 0 ? (
+										<span className="text-output">{f.path.slice(0, cut).replaceAll("/", " / ")} / </span>
+									) : null}
+									<span className="text-ink">{f.path.slice(cut + 1)}</span>
+								</span>
+							</Tooltip>
+							<span className="shrink-0 tabular-nums">
+								<span className="text-git-added">+{f.additions}</span>{" "}
+								<span className="text-git-deleted">-{f.deletions}</span>
+							</span>
+						</button>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
+export function TurnView({
+	turn,
+	retry,
+	latest,
+	threadId,
+}: {
+	turn: ViewTurn;
+	retry?: { attempt: number; maxAttempts: number; delayMs: number; at: number; error: string };
+	/** The thread's last turn: its reply actions stay shown, and its edits can be undone. */
+	latest: boolean;
+	threadId: string;
+}) {
+	const running = turn.status === "inProgress";
+	const { CircleAlert } = experimental_icons();
+	const { experimental_clockTime: clockTime } = experimental_shellServices();
+	const {
+		experimental_useTurnStatus: useTurnStatus,
+		experimental_resendEdited: resendEdited,
+		experimental_McpAppCard: McpAppCard,
+		experimental_BackgroundNotices: BackgroundNotices,
+		experimental_Markdown: Markdown,
+	} = experimental_conversationServices();
+	const { idle, cwd, workingVisible, workingMessage } = useTurnStatus(threadId);
+	const working = { visible: workingVisible, message: workingMessage };
+	const [open, setOpen] = useState(false);
+	const first = turn.items.find((i) => i.type === "userMessage");
+	// A run a background command's end started has no message of the user's: the notice opens the turn in its place,
+	// out of the work it folds.
+	const opening = turn.items[0];
+	const woke = !first && opening?.type === "extensionMessage" && opening.backgroundShells ? opening : undefined;
+	const rest = turn.items.filter((i) => i !== first && i !== woke);
+	const finalIndex = running ? -1 : rest.findLastIndex((i) => i.type === "agentMessage");
+	const final = finalIndex >= 0 ? rest[finalIndex] : undefined;
+	// Compactions stay visible: those before the final reply show above it, later ones below.
+	const compactedBefore = rest.some((i, n) => i.type === "compaction" && (finalIndex < 0 || n < finalIndex));
+	// The proposed plan is a card of its own after the reply, not a row of the work.
+	const plan = turn.items.findLast(isPlan);
+	// Below the reply, in the order they came: later compactions and notices recorded after it.
+	const later = afterReply(rest, finalIndex);
+	// Reasoning is no row (it shows only in the running status), so a turn of reasoning alone has no work.
+	const work = rest.filter(
+		(i) => i !== final && i.type !== "compaction" && i.type !== "reasoning" && !isPlan(i) && !later.includes(i),
+	);
+	const last = turn.items.at(-1);
+	// A reply streaming in shows itself; until one does, the "Thinking" status stands in.
+	const typing = running && last?.type === "agentMessage" && last.completedAt === undefined;
+	const files = running ? [] : editedFiles(turn);
+	const apps = turn.items.filter(
+		(i): i is AppItem => i.type === "toolCall" && i.mcpApp !== undefined && i.parentItemId === undefined,
+	);
+	const undoable = latest && turn.files !== undefined;
+	// A fork point must be saved, as only indexed items are.
+	const forkPoint = turn.items.findLast((i) => i.index !== undefined);
+	return (
+		<ActivityThread.Provider value={threadId}>
+			<div className="flex flex-col gap-3">
+				{first?.type === "userMessage" ? (
+					<UserBubble
+						text={first.text}
+						context={{ threadId, item: first }}
+						images={first.images}
+						time={turn.startedAt}
+						onEdit={latest && idle ? (text) => void resendEdited(threadId, turn.id, text, first.images) : undefined}
+					/>
+				) : null}
+				{woke?.backgroundShells ? <BackgroundNotices notices={woke.backgroundShells} /> : null}
+				{running ? (
+					<>
+						<WorkedFor turn={turn} open />
+						<WorkItems items={work} live cwd={cwd} threadId={threadId} />
+						{plan ? <PlanCard item={plan} /> : null}
+						{retry ? (
+							<div className="flex items-center gap-2 text-base text-warning">
+								<CircleAlert size={14} /> Retrying (attempt {retry.attempt} of {retry.maxAttempts}): {retry.error}
+							</div>
+						) : !typing && !work.some((i) => i.type === "toolCall" && isRunning(i)) && working.visible ? (
+							// Waiting on the model, not on a tool: a shimmering status, named for what it is thinking about,
+							// or an extension's working text.
+							<span className="kc-shimmer w-fit text-base">
+								{working.message ?? thinkingHeading(turn.items) ?? "Thinking"}
+							</span>
+						) : null}
+					</>
+				) : work.length > 0 && !final ? (
+					// No reply to fold the work under (a turn that only asked questions).
+					<WorkItems items={work} cwd={cwd} threadId={threadId} />
+				) : work.length > 0 ? (
+					<div className="flex flex-col gap-4">
+						<WorkedFor turn={turn} open={open} onToggle={() => setOpen(!open)} />
+						{open ? <WorkItems items={work} cwd={cwd} threadId={threadId} /> : null}
+					</div>
+				) : null}
+				{/* MCP Apps stay in sight when the work folds, and in one place while the turn runs and after, so the frame
+			    is never made again (mcp-app.tsx). */}
+				{apps.map((item) => (
+					<McpAppCard key={item.id} threadId={threadId} item={item} />
+				))}
+				{running ? null : (
+					<>
+						{compactedBefore ? <CompactionDivider /> : null}
+						{final?.type === "agentMessage" ? (
+							<div className="group/message flex flex-col gap-2">
+								<ItemRenderer threadId={threadId} item={final}>
+									<Markdown text={final.text} />
+								</ItemRenderer>
+								{files.length > 0 ? (
+									<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
+								) : null}
+								<MessageActions time={turn.completedAt} shown={latest} context={{ threadId, item: final }}>
+									<CopyMessage text={final.text} />
+									{forkPoint ? <ReplyMenu threadId={threadId} atItemId={forkPoint.id} /> : null}
+								</MessageActions>
+							</div>
+						) : files.length > 0 ? (
+							<EditedFilesCard threadId={threadId} turnId={turn.id} files={files} undoable={undoable} />
+						) : null}
+						{plan ? <PlanCard item={plan} /> : null}
+						{later.map((item) =>
+							item.type === "compaction" ? (
+								<CompactionDivider key={item.id} />
+							) : item.type === "extensionMessage" && item.backgroundShells ? (
+								<BackgroundNotices key={item.id} notices={item.backgroundShells} />
+							) : null,
+						)}
+						{turn.status === "interrupted" ? (
+							<div className="text-base text-tertiary">
+								Interrupted · {clockTime(turn.completedAt ?? turn.startedAt)}
+							</div>
+						) : null}
+						{turn.status === "failed" ? (
+							<div className="flex items-start gap-2 rounded-lg bg-danger-soft px-3 py-2 text-base text-danger-text">
+								<CircleAlert size={14} className="mt-1 shrink-0" />
+								<span className="selectable">{turn.error?.message ?? "The turn failed."}</span>
+							</div>
+						) : null}
+					</>
+				)}
+			</div>
+		</ActivityThread.Provider>
+	);
+}

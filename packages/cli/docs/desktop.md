@@ -184,6 +184,29 @@ The app server notes each such call once per thread in `app-server.log`. A widge
 status the server refuses (an invalid view, too large, too many) shows a warning
 once. The protocol side is in [app-server.md](app-server.md#dialogs-and-extension-ui).
 
+### Experimental desktop contributions
+
+The palette's Quick actions and the toast presenter now use a window-local
+contribution registry. The source SDK is `@knightcodeai/cli/desktop`; its
+experimental members can change. It shares the renderer's existing state,
+icons, buttons and configured key hints. Server and recovery banners remain
+host-owned.
+
+[Native frontend extensions](desktop-extensions.md) can load explicit
+local or installed package entries after separate native consent. Settings →
+Extensions & skills manages trust, reload, disable and app/window feedback
+providers. Use the native View menu's Restart without extensions, or launch
+with `--safe-mode`, to recover without external frontend code. Session
+extensions described above are unchanged. `knightcode desktop-ext new | validate |
+reload | status [--json]` provides the authoring loop; explicitly development-approved
+sources reload on save. Desktop sessions discover the on-demand
+`desktop-customization` skill. Layout, navigation, thread-list, home and title-bar
+providers now use the same public path, with shared rows, hidden pages, ordered
+sections and mediated window intents. Git/workspace controllers, file openers,
+code/diff renderers and terminal providers use explicit checkout targets and
+retain confirmed steps during recovery. Backend entries use coordinated
+frontend/backend revisions; see the desktop extension guide.
+
 ## Keyboard shortcuts
 
 | Action | Default |

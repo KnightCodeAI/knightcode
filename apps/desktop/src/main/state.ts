@@ -31,6 +31,18 @@ export class StateFile {
 	}
 
 	write(state: DesktopState): void {
+		const { desktopProviders: _incoming, ...ordinary } = state;
+		const current = this.read().desktopProviders;
+		this.save(current ? { ...ordinary, desktopProviders: current } : ordinary);
+	}
+
+	/** Only explicit provider selection writes the main-owned preferences. */
+	setDesktopProvider(surface: string, provider: string): void {
+		const current = this.read();
+		this.save({ ...current, desktopProviders: { ...current.desktopProviders, [surface]: provider } });
+	}
+
+	private save(state: DesktopState): void {
 		const temp = `${this.path}.tmp`;
 		writeFileSync(temp, JSON.stringify(state, null, 2));
 		renameSync(temp, this.path);

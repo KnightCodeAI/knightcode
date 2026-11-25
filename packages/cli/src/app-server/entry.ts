@@ -16,6 +16,7 @@ import { accountHandlers } from "./accounts.ts";
 import { configureHandlers } from "./configure.ts";
 import { type AppServerContext, createAppServerContext } from "./context.ts";
 import { modelHandlers } from "./models.ts";
+import { desktopExtensionHandlers } from "./desktop-extensions/handlers.ts";
 import { pluginHandlers } from "./plugins.ts";
 import { AppServer, type Handlers } from "./server.ts";
 import { createStdioTransport } from "./stdio.ts";
@@ -31,6 +32,7 @@ export function appServerHandlers(ctx: AppServerContext, threads: ThreadManager)
 		...modelHandlers(ctx),
 		...configureHandlers(ctx),
 		...pluginHandlers(ctx),
+		...desktopExtensionHandlers(ctx),
 	};
 }
 
@@ -91,9 +93,8 @@ export async function runAppServer(args: string[]): Promise<void> {
 		setTimeout(() => connection.settleUnfinishedRequests(), SHUTDOWN_DEADLINE_MS - 1_000);
 		// No new work; requests already accepted still get their answers (§5.6).
 		connection.endInput();
-		ctx.dispose();
-		// Unloading cancels starts in preflight and fails loads with shuttingDown, so every accepted request settles.
-		await threads.closeAll();
+		// Join cooperative backend cleanup with thread unloading under the same process deadline.
+		await Promise.all([ctx.dispose(), threads.closeAll()]);
 		await outputClosed;
 		// After EPIPE there is nobody to flush to; shutdown already ran, so a flush failure changes nothing.
 		await flushRawStdout().catch(() => {});

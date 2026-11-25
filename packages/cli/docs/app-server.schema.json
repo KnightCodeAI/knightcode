@@ -191,6 +191,954 @@
 		]
 	},
 	"clientRequests": {
+		"desktopExtension/window/connect": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/window/disconnect": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/reconcile": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"cwd": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/ack": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"id",
+					"binding"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"id": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"error": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/fail": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"message"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"message": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/call": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"requestId",
+					"method",
+					"args"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"requestId": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 9007199254740991
+					},
+					"method": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"args": {}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"anyOf": [
+					{
+						"type": "object",
+						"required": [
+							"status",
+							"value"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "ok"
+							},
+							"value": {}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"status",
+							"message"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "error"
+							},
+							"message": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"status"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "disconnected"
+							}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"status"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "cancelled"
+							}
+						},
+						"additionalProperties": false
+					},
+					{
+						"type": "object",
+						"required": [
+							"status"
+						],
+						"properties": {
+							"status": {
+								"type": "string",
+								"const": "outcome-unknown"
+							}
+						},
+						"additionalProperties": false
+					}
+				]
+			}
+		},
+		"desktopExtension/cancel": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"requestId"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"requestId": {
+						"type": "integer",
+						"minimum": 1,
+						"maximum": 9007199254740991
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/subscribe": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"id",
+					"event"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"id": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"event": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"status"
+				],
+				"properties": {
+					"status": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "subscribed"
+							},
+							{
+								"type": "string",
+								"const": "disconnected"
+							}
+						]
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/unsubscribe": {
+			"params": {
+				"type": "object",
+				"required": [
+					"windowId",
+					"lifetime",
+					"binding",
+					"id"
+				],
+				"properties": {
+					"windowId": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lifetime": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"binding": {
+						"type": "object",
+						"required": [
+							"owner",
+							"revision",
+							"epoch",
+							"window",
+							"mount"
+						],
+						"properties": {
+							"owner": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"epoch": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"window": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"mount": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					},
+					"id": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/list": {
+			"params": {
+				"type": "object",
+				"properties": {
+					"cwd": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"review": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"safeMode",
+					"preview",
+					"extensions"
+				],
+				"properties": {
+					"safeMode": {
+						"type": "boolean"
+					},
+					"preview": {
+						"type": "boolean"
+					},
+					"extensions": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"owner",
+								"name",
+								"source",
+								"scope",
+								"approved",
+								"enabled",
+								"dev",
+								"diagnostics"
+							],
+							"properties": {
+								"owner": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"name": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"source": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"scope": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "user"
+										},
+										{
+											"type": "string",
+											"const": "project"
+										}
+									]
+								},
+								"kinds": {
+									"type": "array",
+									"items": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "frontend"
+											},
+											{
+												"type": "string",
+												"const": "backend"
+											}
+										]
+									},
+									"minItems": 1,
+									"maxItems": 2,
+									"uniqueItems": true
+								},
+								"approved": {
+									"type": "boolean"
+								},
+								"enabled": {
+									"type": "boolean"
+								},
+								"dev": {
+									"type": "boolean"
+								},
+								"revision": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"error": {
+									"type": "string",
+									"maxLength": 4096
+								},
+								"artifact": {
+									"type": "object",
+									"required": [
+										"owner",
+										"revision",
+										"root",
+										"frontend",
+										"styles",
+										"files"
+									],
+									"properties": {
+										"owner": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"kinds": {
+											"type": "array",
+											"items": {
+												"anyOf": [
+													{
+														"type": "string",
+														"const": "frontend"
+													},
+													{
+														"type": "string",
+														"const": "backend"
+													}
+												]
+											},
+											"minItems": 1,
+											"maxItems": 2,
+											"uniqueItems": true
+										},
+										"revision": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"root": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"frontend": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"backend": {
+											"type": "string",
+											"maxLength": 4096
+										},
+										"styles": {
+											"type": "array",
+											"items": {
+												"type": "string",
+												"maxLength": 4096
+											}
+										},
+										"files": {
+											"type": "array",
+											"items": {
+												"type": "string",
+												"maxLength": 4096
+											}
+										}
+									},
+									"additionalProperties": false
+								},
+								"diagnostics": {
+									"type": "array",
+									"items": {
+										"type": "object",
+										"required": [
+											"windowId",
+											"revision",
+											"phase",
+											"message"
+										],
+										"properties": {
+											"windowId": {
+												"type": "integer"
+											},
+											"revision": {
+												"type": "string",
+												"maxLength": 4096
+											},
+											"phase": {
+												"anyOf": [
+													{
+														"type": "string",
+														"const": "active"
+													},
+													{
+														"type": "string",
+														"const": "load"
+													},
+													{
+														"type": "string",
+														"const": "render"
+													},
+													{
+														"type": "string",
+														"const": "dispose"
+													}
+												]
+											},
+											"message": {
+												"type": "string",
+												"maxLength": 4096
+											}
+										},
+										"additionalProperties": false
+									}
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/preview/set": {
+			"params": {
+				"type": "object",
+				"required": [
+					"enabled"
+				],
+				"properties": {
+					"enabled": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/set": {
+			"params": {
+				"type": "object",
+				"required": [
+					"owner"
+				],
+				"properties": {
+					"owner": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"cwd": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"enabled": {
+						"type": "boolean"
+					},
+					"approve": {
+						"type": "boolean"
+					},
+					"kinds": {
+						"type": "array",
+						"items": {
+							"anyOf": [
+								{
+									"type": "string",
+									"const": "frontend"
+								},
+								{
+									"type": "string",
+									"const": "backend"
+								}
+							]
+						},
+						"minItems": 1,
+						"maxItems": 2,
+						"uniqueItems": true
+					},
+					"revoke": {
+						"type": "boolean"
+					},
+					"dev": {
+						"type": "boolean"
+					},
+					"source": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"revision": {
+						"type": "string",
+						"maxLength": 4096
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/reload": {
+			"params": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
+		"desktopExtension/diagnostic": {
+			"params": {
+				"type": "object",
+				"required": [
+					"owner",
+					"diagnostic"
+				],
+				"properties": {
+					"owner": {
+						"type": "string",
+						"maxLength": 4096
+					},
+					"diagnostic": {
+						"type": "object",
+						"required": [
+							"windowId",
+							"revision",
+							"phase",
+							"message"
+						],
+						"properties": {
+							"windowId": {
+								"type": "integer"
+							},
+							"revision": {
+								"type": "string",
+								"maxLength": 4096
+							},
+							"phase": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "active"
+									},
+									{
+										"type": "string",
+										"const": "load"
+									},
+									{
+										"type": "string",
+										"const": "render"
+									},
+									{
+										"type": "string",
+										"const": "dispose"
+									}
+								]
+							},
+							"message": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"additionalProperties": false
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			}
+		},
 		"initialize": {
 			"params": {
 				"type": "object",
@@ -6377,6 +7325,9 @@
 					},
 					"expectedMtimeMs": {
 						"type": "number"
+					},
+					"expectedCwd": {
+						"type": "string"
 					}
 				},
 				"additionalProperties": false
@@ -6469,6 +7420,1095 @@
 						"items": {
 							"type": "string"
 						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopOperation/preflight": {
+			"params": {
+				"type": "object",
+				"required": [
+					"target",
+					"to"
+				],
+				"properties": {
+					"target": {
+						"type": "object",
+						"required": [
+							"threadId",
+							"cwd",
+							"projectCwd"
+						],
+						"properties": {
+							"threadId": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"projectCwd": {
+								"type": "string"
+							}
+						},
+						"additionalProperties": false
+					},
+					"to": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "local"
+							},
+							{
+								"type": "string",
+								"const": "worktree"
+							}
+						]
+					},
+					"branch": {
+						"type": "string",
+						"maxLength": 200
+					},
+					"environment": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {
+					"branch": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopOperation/read": {
+			"params": {
+				"type": "object",
+				"required": [
+					"threadId"
+				],
+				"properties": {
+					"threadId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"operations"
+				],
+				"properties": {
+					"operations": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": [
+								"id",
+								"kind",
+								"target",
+								"status",
+								"completed",
+								"recovery",
+								"outputs"
+							],
+							"properties": {
+								"id": {
+									"type": "string"
+								},
+								"attemptId": {
+									"type": "string"
+								},
+								"kind": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "commitAndPush"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "createBranch"
+										},
+										{
+											"type": "string",
+											"const": "switchBranch"
+										},
+										{
+											"type": "string",
+											"const": "pullRequest"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										},
+										{
+											"type": "string",
+											"const": "unknown"
+										}
+									]
+								},
+								"target": {
+									"type": "object",
+									"required": [
+										"threadId",
+										"cwd",
+										"projectCwd"
+									],
+									"properties": {
+										"threadId": {
+											"type": "string"
+										},
+										"cwd": {
+											"type": "string"
+										},
+										"projectCwd": {
+											"type": "string"
+										}
+									},
+									"additionalProperties": false
+								},
+								"status": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "running"
+										},
+										{
+											"type": "string",
+											"const": "completed"
+										},
+										{
+											"type": "string",
+											"const": "partial"
+										},
+										{
+											"type": "string",
+											"const": "refused"
+										},
+										{
+											"type": "string",
+											"const": "cancelled"
+										},
+										{
+											"type": "string",
+											"const": "outcome-unknown"
+										}
+									]
+								},
+								"stage": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "branch"
+										},
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "pr"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								},
+								"completed": {
+									"type": "array",
+									"items": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "branch"
+											},
+											{
+												"type": "string",
+												"const": "commit"
+											},
+											{
+												"type": "string",
+												"const": "push"
+											},
+											{
+												"type": "string",
+												"const": "pr"
+											},
+											{
+												"type": "string",
+												"const": "handoff"
+											},
+											{
+												"type": "string",
+												"const": "restore"
+											}
+										]
+									}
+								},
+								"recovery": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "none"
+										},
+										{
+											"type": "string",
+											"const": "retry"
+										},
+										{
+											"type": "string",
+											"const": "reconcile"
+										},
+										{
+											"type": "string",
+											"const": "cancel"
+										}
+									]
+								},
+								"outputs": {
+									"type": "object",
+									"properties": {
+										"branch": {
+											"type": "string"
+										},
+										"head": {
+											"type": "string"
+										},
+										"commit": {
+											"type": "string"
+										},
+										"message": {
+											"type": "string"
+										},
+										"remote": {
+											"type": "string"
+										},
+										"url": {
+											"type": "string"
+										},
+										"warnings": {
+											"type": "array",
+											"items": {
+												"type": "string"
+											}
+										}
+									},
+									"additionalProperties": false
+								},
+								"problem": {
+									"type": "object",
+									"required": [
+										"code",
+										"message"
+									],
+									"properties": {
+										"code": {
+											"type": "string"
+										},
+										"message": {
+											"type": "string"
+										},
+										"paths": {
+											"type": "array",
+											"items": {
+												"type": "string"
+											}
+										},
+										"recoveryInstructions": {
+											"type": "array",
+											"items": {
+												"type": "string"
+											}
+										}
+									},
+									"additionalProperties": false
+								}
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopOperation/start": {
+			"params": {
+				"type": "object",
+				"required": [
+					"target",
+					"action"
+				],
+				"properties": {
+					"target": {
+						"type": "object",
+						"required": [
+							"threadId",
+							"cwd",
+							"projectCwd"
+						],
+						"properties": {
+							"threadId": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"projectCwd": {
+								"type": "string"
+							}
+						},
+						"additionalProperties": false
+					},
+					"action": {
+						"anyOf": [
+							{
+								"type": "object",
+								"required": [
+									"kind"
+								],
+								"properties": {
+									"kind": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "commit"
+											},
+											{
+												"type": "string",
+												"const": "commitAndPush"
+											}
+										]
+									},
+									"branch": {
+										"type": "string",
+										"maxLength": 200
+									},
+									"message": {
+										"type": "string",
+										"maxLength": 20000
+									},
+									"includeUnstaged": {
+										"type": "boolean"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind"
+								],
+								"properties": {
+									"kind": {
+										"type": "string",
+										"const": "push"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"name"
+								],
+								"properties": {
+									"kind": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "createBranch"
+											},
+											{
+												"type": "string",
+												"const": "switchBranch"
+											}
+										]
+									},
+									"name": {
+										"type": "string",
+										"maxLength": 200
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"commitFirst"
+								],
+								"properties": {
+									"kind": {
+										"type": "string",
+										"const": "pullRequest"
+									},
+									"branch": {
+										"type": "string",
+										"maxLength": 200
+									},
+									"title": {
+										"type": "string"
+									},
+									"body": {
+										"type": "string"
+									},
+									"draft": {
+										"type": "boolean"
+									},
+									"commitFirst": {
+										"type": "boolean"
+									},
+									"hasChanges": {
+										"type": "boolean"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind",
+									"to"
+								],
+								"properties": {
+									"kind": {
+										"type": "string",
+										"const": "handoff"
+									},
+									"to": {
+										"anyOf": [
+											{
+												"type": "string",
+												"const": "local"
+											},
+											{
+												"type": "string",
+												"const": "worktree"
+											}
+										]
+									},
+									"branch": {
+										"type": "string",
+										"maxLength": 200
+									},
+									"environment": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							},
+							{
+								"type": "object",
+								"required": [
+									"kind"
+								],
+								"properties": {
+									"kind": {
+										"type": "string",
+										"const": "restore"
+									}
+								},
+								"additionalProperties": false
+							}
+						]
+					},
+					"attemptId": {
+						"type": "string"
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"operation"
+				],
+				"properties": {
+					"operation": {
+						"type": "object",
+						"required": [
+							"id",
+							"kind",
+							"target",
+							"status",
+							"completed",
+							"recovery",
+							"outputs"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"attemptId": {
+								"type": "string"
+							},
+							"kind": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "commitAndPush"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "createBranch"
+									},
+									{
+										"type": "string",
+										"const": "switchBranch"
+									},
+									{
+										"type": "string",
+										"const": "pullRequest"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									},
+									{
+										"type": "string",
+										"const": "unknown"
+									}
+								]
+							},
+							"target": {
+								"type": "object",
+								"required": [
+									"threadId",
+									"cwd",
+									"projectCwd"
+								],
+								"properties": {
+									"threadId": {
+										"type": "string"
+									},
+									"cwd": {
+										"type": "string"
+									},
+									"projectCwd": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "running"
+									},
+									{
+										"type": "string",
+										"const": "completed"
+									},
+									{
+										"type": "string",
+										"const": "partial"
+									},
+									{
+										"type": "string",
+										"const": "refused"
+									},
+									{
+										"type": "string",
+										"const": "cancelled"
+									},
+									{
+										"type": "string",
+										"const": "outcome-unknown"
+									}
+								]
+							},
+							"stage": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "branch"
+									},
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "pr"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"completed": {
+								"type": "array",
+								"items": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "branch"
+										},
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "pr"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								}
+							},
+							"recovery": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "none"
+									},
+									{
+										"type": "string",
+										"const": "retry"
+									},
+									{
+										"type": "string",
+										"const": "reconcile"
+									},
+									{
+										"type": "string",
+										"const": "cancel"
+									}
+								]
+							},
+							"outputs": {
+								"type": "object",
+								"properties": {
+									"branch": {
+										"type": "string"
+									},
+									"head": {
+										"type": "string"
+									},
+									"commit": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"remote": {
+										"type": "string"
+									},
+									"url": {
+										"type": "string"
+									},
+									"warnings": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							},
+							"problem": {
+								"type": "object",
+								"required": [
+									"code",
+									"message"
+								],
+								"properties": {
+									"code": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"paths": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									},
+									"recoveryInstructions": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							}
+						},
+						"additionalProperties": false
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"desktopOperation/recover": {
+			"params": {
+				"type": "object",
+				"required": [
+					"target",
+					"id",
+					"action"
+				],
+				"properties": {
+					"target": {
+						"type": "object",
+						"required": [
+							"threadId",
+							"cwd",
+							"projectCwd"
+						],
+						"properties": {
+							"threadId": {
+								"type": "string"
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"projectCwd": {
+								"type": "string"
+							}
+						},
+						"additionalProperties": false
+					},
+					"id": {
+						"type": "string"
+					},
+					"attemptId": {
+						"type": "string"
+					},
+					"action": {
+						"anyOf": [
+							{
+								"type": "string",
+								"const": "retry"
+							},
+							{
+								"type": "string",
+								"const": "cancel"
+							},
+							{
+								"type": "string",
+								"const": "acknowledge"
+							}
+						]
+					}
+				},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"required": [
+					"accepted"
+				],
+				"properties": {
+					"operation": {
+						"type": "object",
+						"required": [
+							"id",
+							"kind",
+							"target",
+							"status",
+							"completed",
+							"recovery",
+							"outputs"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"attemptId": {
+								"type": "string"
+							},
+							"kind": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "commitAndPush"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "createBranch"
+									},
+									{
+										"type": "string",
+										"const": "switchBranch"
+									},
+									{
+										"type": "string",
+										"const": "pullRequest"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									},
+									{
+										"type": "string",
+										"const": "unknown"
+									}
+								]
+							},
+							"target": {
+								"type": "object",
+								"required": [
+									"threadId",
+									"cwd",
+									"projectCwd"
+								],
+								"properties": {
+									"threadId": {
+										"type": "string"
+									},
+									"cwd": {
+										"type": "string"
+									},
+									"projectCwd": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "running"
+									},
+									{
+										"type": "string",
+										"const": "completed"
+									},
+									{
+										"type": "string",
+										"const": "partial"
+									},
+									{
+										"type": "string",
+										"const": "refused"
+									},
+									{
+										"type": "string",
+										"const": "cancelled"
+									},
+									{
+										"type": "string",
+										"const": "outcome-unknown"
+									}
+								]
+							},
+							"stage": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "branch"
+									},
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "pr"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"completed": {
+								"type": "array",
+								"items": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "branch"
+										},
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "pr"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								}
+							},
+							"recovery": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "none"
+									},
+									{
+										"type": "string",
+										"const": "retry"
+									},
+									{
+										"type": "string",
+										"const": "reconcile"
+									},
+									{
+										"type": "string",
+										"const": "cancel"
+									}
+								]
+							},
+							"outputs": {
+								"type": "object",
+								"properties": {
+									"branch": {
+										"type": "string"
+									},
+									"head": {
+										"type": "string"
+									},
+									"commit": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"remote": {
+										"type": "string"
+									},
+									"url": {
+										"type": "string"
+									},
+									"warnings": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							},
+							"problem": {
+								"type": "object",
+								"required": [
+									"code",
+									"message"
+								],
+								"properties": {
+									"code": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"paths": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									},
+									"recoveryInstructions": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							}
+						},
+						"additionalProperties": false
+					},
+					"accepted": {
+						"type": "boolean"
 					}
 				},
 				"additionalProperties": false
@@ -13363,6 +15403,291 @@
 		}
 	},
 	"serverNotifications": {
+		"desktopExtension/phase": {
+			"type": "object",
+			"required": [
+				"windowId",
+				"lifetime",
+				"id",
+				"binding",
+				"phase"
+			],
+			"properties": {
+				"windowId": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"lifetime": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"id": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"binding": {
+					"type": "object",
+					"required": [
+						"owner",
+						"revision",
+						"epoch",
+						"window",
+						"mount"
+					],
+					"properties": {
+						"owner": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"revision": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"epoch": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"window": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"mount": {
+							"type": "string",
+							"maxLength": 4096
+						}
+					},
+					"additionalProperties": false
+				},
+				"phase": {
+					"anyOf": [
+						{
+							"type": "string",
+							"const": "prepare"
+						},
+						{
+							"type": "string",
+							"const": "quiesce"
+						},
+						{
+							"type": "string",
+							"const": "publish"
+						},
+						{
+							"type": "string",
+							"const": "resume"
+						},
+						{
+							"type": "string",
+							"const": "discard"
+						},
+						{
+							"type": "string",
+							"const": "revoke"
+						},
+						{
+							"type": "string",
+							"const": "retire"
+						},
+						{
+							"type": "string",
+							"const": "ready"
+						}
+					]
+				},
+				"artifact": {
+					"type": "object",
+					"required": [
+						"owner",
+						"revision",
+						"root",
+						"frontend",
+						"styles",
+						"files"
+					],
+					"properties": {
+						"owner": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"kinds": {
+							"type": "array",
+							"items": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "frontend"
+									},
+									{
+										"type": "string",
+										"const": "backend"
+									}
+								]
+							},
+							"minItems": 1,
+							"maxItems": 2,
+							"uniqueItems": true
+						},
+						"revision": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"root": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"frontend": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"backend": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"styles": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						},
+						"files": {
+							"type": "array",
+							"items": {
+								"type": "string",
+								"maxLength": 4096
+							}
+						}
+					},
+					"additionalProperties": false
+				},
+				"contracts": {
+					"type": "object",
+					"required": [
+						"methods",
+						"events"
+					],
+					"properties": {
+						"methods": {
+							"type": "object",
+							"patternProperties": {
+								"^.*$": {
+									"type": "object",
+									"required": [
+										"kind",
+										"params",
+										"result"
+									],
+									"properties": {
+										"kind": {
+											"anyOf": [
+												{
+													"type": "string",
+													"const": "read"
+												},
+												{
+													"type": "string",
+													"const": "write"
+												}
+											]
+										},
+										"params": {
+											"type": "object"
+										},
+										"result": {
+											"type": "object"
+										}
+									},
+									"additionalProperties": false
+								}
+							}
+						},
+						"events": {
+							"type": "object",
+							"patternProperties": {
+								"^.*$": {
+									"type": "object"
+								}
+							}
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			"additionalProperties": false
+		},
+		"desktopExtension/event": {
+			"type": "object",
+			"required": [
+				"windowId",
+				"lifetime",
+				"binding",
+				"id",
+				"event",
+				"value"
+			],
+			"properties": {
+				"windowId": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"lifetime": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"binding": {
+					"type": "object",
+					"required": [
+						"owner",
+						"revision",
+						"epoch",
+						"window",
+						"mount"
+					],
+					"properties": {
+						"owner": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"revision": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"epoch": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"window": {
+							"type": "string",
+							"maxLength": 4096
+						},
+						"mount": {
+							"type": "string",
+							"maxLength": 4096
+						}
+					},
+					"additionalProperties": false
+				},
+				"id": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"event": {
+					"type": "string",
+					"maxLength": 4096
+				},
+				"value": {}
+			},
+			"additionalProperties": false
+		},
+		"desktopExtension/changed": {
+			"type": "object",
+			"properties": {
+				"reload": {
+					"type": "boolean"
+				}
+			},
+			"additionalProperties": false
+		},
 		"thread/started": {
 			"type": "object",
 			"required": [
@@ -13877,6 +16202,268 @@
 						}
 					},
 					"additionalProperties": false
+				}
+			},
+			"additionalProperties": false
+		},
+		"desktopOperation/changed": {
+			"type": "object",
+			"required": [
+				"threadId",
+				"operations"
+			],
+			"properties": {
+				"threadId": {
+					"type": "string"
+				},
+				"operations": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"required": [
+							"id",
+							"kind",
+							"target",
+							"status",
+							"completed",
+							"recovery",
+							"outputs"
+						],
+						"properties": {
+							"id": {
+								"type": "string"
+							},
+							"attemptId": {
+								"type": "string"
+							},
+							"kind": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "commitAndPush"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "createBranch"
+									},
+									{
+										"type": "string",
+										"const": "switchBranch"
+									},
+									{
+										"type": "string",
+										"const": "pullRequest"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									},
+									{
+										"type": "string",
+										"const": "unknown"
+									}
+								]
+							},
+							"target": {
+								"type": "object",
+								"required": [
+									"threadId",
+									"cwd",
+									"projectCwd"
+								],
+								"properties": {
+									"threadId": {
+										"type": "string"
+									},
+									"cwd": {
+										"type": "string"
+									},
+									"projectCwd": {
+										"type": "string"
+									}
+								},
+								"additionalProperties": false
+							},
+							"status": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "running"
+									},
+									{
+										"type": "string",
+										"const": "completed"
+									},
+									{
+										"type": "string",
+										"const": "partial"
+									},
+									{
+										"type": "string",
+										"const": "refused"
+									},
+									{
+										"type": "string",
+										"const": "cancelled"
+									},
+									{
+										"type": "string",
+										"const": "outcome-unknown"
+									}
+								]
+							},
+							"stage": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "branch"
+									},
+									{
+										"type": "string",
+										"const": "commit"
+									},
+									{
+										"type": "string",
+										"const": "push"
+									},
+									{
+										"type": "string",
+										"const": "pr"
+									},
+									{
+										"type": "string",
+										"const": "handoff"
+									},
+									{
+										"type": "string",
+										"const": "restore"
+									}
+								]
+							},
+							"completed": {
+								"type": "array",
+								"items": {
+									"anyOf": [
+										{
+											"type": "string",
+											"const": "branch"
+										},
+										{
+											"type": "string",
+											"const": "commit"
+										},
+										{
+											"type": "string",
+											"const": "push"
+										},
+										{
+											"type": "string",
+											"const": "pr"
+										},
+										{
+											"type": "string",
+											"const": "handoff"
+										},
+										{
+											"type": "string",
+											"const": "restore"
+										}
+									]
+								}
+							},
+							"recovery": {
+								"anyOf": [
+									{
+										"type": "string",
+										"const": "none"
+									},
+									{
+										"type": "string",
+										"const": "retry"
+									},
+									{
+										"type": "string",
+										"const": "reconcile"
+									},
+									{
+										"type": "string",
+										"const": "cancel"
+									}
+								]
+							},
+							"outputs": {
+								"type": "object",
+								"properties": {
+									"branch": {
+										"type": "string"
+									},
+									"head": {
+										"type": "string"
+									},
+									"commit": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"remote": {
+										"type": "string"
+									},
+									"url": {
+										"type": "string"
+									},
+									"warnings": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							},
+							"problem": {
+								"type": "object",
+								"required": [
+									"code",
+									"message"
+								],
+								"properties": {
+									"code": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"paths": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									},
+									"recoveryInstructions": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									}
+								},
+								"additionalProperties": false
+							}
+						},
+						"additionalProperties": false
+					}
 				}
 			},
 			"additionalProperties": false

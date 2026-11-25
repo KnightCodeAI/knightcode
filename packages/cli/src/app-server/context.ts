@@ -26,8 +26,8 @@ export interface AppServerContext {
 	/** Tests pin threads to the faux model; production leaves this unset. */
 	defaultModel?: Model<Api>;
 	connections: Set<Subscriber>;
-	onDispose(cleanup: () => void): void;
-	dispose(): void;
+	onDispose(cleanup: () => void | Promise<void>): void;
+	dispose(): Promise<void>;
 	broadcast<M extends NotificationMethod>(method: M, params: NotificationParams<M>): void;
 }
 
@@ -50,8 +50,8 @@ export async function createAppServerContext(options: CreateAppServerContextOpti
 		allowModelNetwork: false,
 	});
 	const connections = new Set<Subscriber>();
-	const cleanups = new Set<() => void>();
-	let disposed = false;
+	const cleanups = new Set<() => void | Promise<void>>();
+	let disposal: Promise<void> | undefined;
 	return {
 		models,
 		credentials,
@@ -61,14 +61,31 @@ export async function createAppServerContext(options: CreateAppServerContextOpti
 		defaultModel: options.defaultModel,
 		connections,
 		onDispose(cleanup) {
-			if (disposed) cleanup();
+			if (disposal)
+				disposal = Promise.allSettled([disposal, Promise.resolve().then(cleanup)]).then((results) => {
+					for (const result of results)
+						if (result.status === "rejected") process.stderr.write(`App server cleanup: ${String(result.reason)}\n`);
+				});
 			else cleanups.add(cleanup);
 		},
 		dispose() {
-			if (disposed) return;
-			disposed = true;
-			for (const cleanup of cleanups) cleanup();
+			if (disposal) return disposal;
+			const settled = Promise.withResolvers<void>();
+			disposal = settled.promise;
+			const work = [...cleanups].map((cleanup) => {
+				try {
+					return Promise.resolve(cleanup());
+				} catch (error) {
+					return Promise.reject(error);
+				}
+			});
 			cleanups.clear();
+			void Promise.allSettled(work).then((results) => {
+				for (const result of results)
+					if (result.status === "rejected") process.stderr.write(`App server cleanup: ${String(result.reason)}\n`);
+				settled.resolve();
+			});
+			return disposal;
 		},
 		broadcast(method, params) {
 			for (const connection of connections) connection.notify(method, params);

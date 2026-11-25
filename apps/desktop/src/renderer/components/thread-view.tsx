@@ -25,11 +25,12 @@ import {
 } from "./icons.tsx";
 import { BackgroundShellTab, commandLabel } from "./background-terminals.tsx";
 import type React from "react";
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { basename, clockTime, dayLabel, SEPARATOR_GAP_MS } from "../format.ts";
 import { bindingLabel, matches, useBinding, useBindings } from "../keys.ts";
 import {
 	activateTab,
+	getState,
 	closeTab,
 	copyLastCodeBlock,
 	discardFileTab,
@@ -45,13 +46,13 @@ import {
 	openThread,
 	type PanelTab,
 	rename,
-	restoreWorktree,
 	selectUnread,
 	send,
 	sendViewEvent,
 	setFinding,
 	setPanel,
-	type State,
+	toast,
+	selectPanelContribution,
 	toggleTerminal,
 	useStore,
 } from "../store.ts";
@@ -59,23 +60,32 @@ import { ConfirmDialog } from "./dialog.tsx";
 import { FileTab } from "./file-tab.tsx";
 import { FilesPanel, FilesTab } from "./files-panel.tsx";
 import { StripSlot, StripTab } from "./strip-tab.tsx";
-import { BottomRegion } from "./terminal.tsx";
-import { PreviewTab, previewTitle } from "./preview.tsx";
-import { type AppItem, McpAppView } from "./mcp-app.tsx";
+import {
+	AppHost,
+	appItemOf,
+	PreviewHost,
+	TerminalHost,
+	WorkspaceSurface,
+	workspaceContext,
+} from "../extensions/panel.tsx";
+import { experimental_workspaceServices } from "@knightcodeai/cli/desktop";
+import { previewTitle } from "./preview.tsx";
 import { FileIcon } from "./file-icon.tsx";
-import { ApprovalCard } from "./approval.tsx";
-import { DialogCard, QuestionsCard } from "./request-card.tsx";
+import { ThreadHeaderSurface, RequestsSurface, bindTranscript } from "../extensions/conversation.tsx";
+import { controllers } from "../extensions/controllers.ts";
 import { Button, IconButton } from "./button.tsx";
 import { ChangesPane } from "./changes.tsx";
 import { FindBar } from "./find-bar.tsx";
 import { ThreadSummary } from "./git.tsx";
 import { Composer } from "./composer.tsx";
-import { TurnView, UserBubble } from "./items.tsx";
+import { TurnView, UserBubble } from "../builtins/conversation/items.tsx";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "./menu.tsx";
 import { boundActions, DeleteThreadDialog, RenameThreadDialog, threadActions } from "./thread-actions.tsx";
 import { Tooltip } from "./tooltip.tsx";
 import { WidgetPanel } from "./view.tsx";
 import { followDrag } from "../drag.ts";
+import { desktopExtensions } from "../extensions/runtime.ts";
+import { SurfaceEntry } from "../extensions/surface.tsx";
 
 const NO_PINS: string[] = [];
 
@@ -88,69 +98,6 @@ function DateSeparator({ at }: { at: number }) {
 				<span className="font-medium">{day}</span> {clockTime(at)}
 			</time>
 		</div>
-	);
-}
-
-/** Codex's "Chat actions" menu: an icon on every row, the copies gathered under one Copy submenu (thread-actions.tsx). */
-function ThreadMenu({ thread }: { thread: { id: string; cwd: string; name: string; sessionFile?: string } }) {
-	const { id } = thread;
-	const pinned = useStore((s) => (s.desktop?.pinnedThreads ?? NO_PINS).includes(id));
-	const unread = useStore((s) => selectUnread(s).includes(id));
-	const [dialog, setDialog] = useState<"rename" | "delete">();
-	const items = threadActions(thread, {
-		pinned,
-		unread,
-		open: true,
-		onRename: () => setDialog("rename"),
-		onDelete: () => setDialog("delete"),
-	});
-	// The open thread's shortcuts run the same actions as its menu, and Codex's "Copy last code block", which no menu
-	// lists.
-	useBindings([...boundActions(items), { binding: "desktop.thread.copyCode", run: () => copyLastCodeBlock(id) }]);
-	return (
-		<>
-			<Menu>
-				<MenuTrigger>
-					<IconButton label="Chat actions" className="no-drag">
-						<MoreHorizontal size={16} />
-					</IconButton>
-				</MenuTrigger>
-				<MenuContent align="end">
-					{items.map((item, i) => {
-						if (item === "-") return <MenuSeparator key={i} />;
-						const Icon = item.icon;
-						if ("items" in item)
-							return (
-								<MenuSub key={item.label} icon={Icon ? <Icon /> : undefined} label={item.label}>
-									{item.items.map((sub) => (
-										<MenuItem
-											key={sub.label}
-											hint={sub.binding ? bindingLabel(sub.binding) : undefined}
-											danger={sub.danger}
-											onSelect={sub.run}
-										>
-											{sub.label}
-										</MenuItem>
-									))}
-								</MenuSub>
-							);
-						return (
-							<MenuItem
-								key={item.label}
-								icon={Icon ? <Icon /> : undefined}
-								hint={item.binding ? bindingLabel(item.binding) : undefined}
-								danger={item.danger}
-								onSelect={item.run}
-							>
-								{item.label}
-							</MenuItem>
-						);
-					})}
-				</MenuContent>
-			</Menu>
-			{dialog === "rename" ? <RenameThreadDialog threadId={id} onClose={() => setDialog(undefined)} /> : null}
-			{dialog === "delete" ? <DeleteThreadDialog thread={thread} onClose={() => setDialog(undefined)} /> : null}
-		</>
 	);
 }
 
@@ -215,24 +162,18 @@ function PanelResizeHandle() {
 	);
 }
 
-/** The call a full-screen app tab belongs to, from the thread's turns. */
-function appItemOf(threadId: string, itemId: string) {
-	return (s: State) =>
-		s.held[threadId]?.turns
-			.flatMap((t) => t.items)
-			.find((i): i is AppItem => i.id === itemId && i.type === "toolCall" && i.mcpApp !== undefined);
-}
-
 function TabButton({
 	threadId,
 	tab,
 	index,
 	active,
+	onSelect,
 }: {
 	threadId: string;
 	tab: PanelTab;
 	index: number;
 	active: boolean;
+	onSelect(): void;
 }) {
 	const app = useStore(tab.kind === "mcpApp" ? appItemOf(threadId, tab.itemId) : () => undefined);
 	return (
@@ -268,21 +209,13 @@ function TabButton({
 			italic={tab.kind === "file" && tab.preview}
 			dirty={tab.kind === "file" && tab.draft !== undefined}
 			active={active}
-			onSelect={() => activateTab(threadId, index)}
+			onSelect={() => {
+				onSelect();
+				activateTab(threadId, index);
+			}}
 			onKeep={() => keepTab(threadId, index)}
 			onClose={() => closeTab(threadId, index)}
 		/>
-	);
-}
-
-/** An app full screen (section 12.2): the call's app filling the panel; gone with its call. */
-function AppTab({ threadId, itemId }: { threadId: string; itemId: string }) {
-	const item = useStore(appItemOf(threadId, itemId));
-	if (!item) return <div className="p-4 text-sm text-tertiary">This app's call is no longer in the thread.</div>;
-	return (
-		<div className="flex min-h-0 flex-1 flex-col p-2">
-			<McpAppView threadId={threadId} item={item} mode="fullscreen" />
-		</div>
 	);
 }
 
@@ -292,6 +225,18 @@ function SidePanel({ id }: { id: string }) {
 	const full = useStore((s) => s.panel.full ?? false);
 	const { tabs, active } = useStore((s) => s.tabs[id] ?? NO_TABS);
 	const shown = tabs[active];
+	useSyncExternalStore(desktopExtensions.subscribe, desktopExtensions.getSnapshot, desktopExtensions.getSnapshot);
+	const thread = useStore((s) => s.held[id]?.thread);
+	const sidebarOpen = useStore((s) => s.sidebarOpen);
+	const target = thread && { threadId: id, cwd: thread.cwd, projectCwd: thread.projectCwd };
+	const selection = useStore((s) => s.panelContributions[id]);
+	const context = target
+		? { ...workspaceContext(target, sidebarOpen), file: selection?.file && { target, ...selection.file } }
+		: { sidebarOpen };
+	const extensionTabs = desktopExtensions.panelTabs(context);
+	const selectedExtension = extensionTabs.find((entry) => entry.id === selection?.id);
+	const selectExtension = (idToSelect?: string) =>
+		selectPanelContribution(id, idToSelect ? { id: idToSelect } : undefined);
 	const discarding = useStore((s) => s.discarding);
 	const strip = useRef<HTMLDivElement>(null);
 	// A strip wider than the panel scrolls the chosen tab, close button included, into sight.
@@ -303,10 +248,14 @@ function SidePanel({ id }: { id: string }) {
 	useBinding(
 		"desktop.panel.closeTab",
 		() => {
+			if (selectedExtension) {
+				selectExtension(undefined);
+				return;
+			}
 			if (active === 0) return false;
 			closeTab(id, active);
 		},
-		active !== 0,
+		active !== 0 || !!selectedExtension,
 	);
 	return (
 		<aside
@@ -341,8 +290,26 @@ function SidePanel({ id }: { id: string }) {
 							}
 							divider={i !== active && i + 1 !== active && i !== tabs.length - 1}
 						>
-							<TabButton threadId={id} tab={tab} index={i} active={i === active} />
+							<TabButton
+								threadId={id}
+								tab={tab}
+								index={i}
+								active={!selectedExtension && i === active}
+								onSelect={() => selectExtension(undefined)}
+							/>
 						</StripSlot>
+					))}
+					{extensionTabs.map((entry) => (
+						<button
+							key={entry.id}
+							type="button"
+							role="tab"
+							aria-selected={selectedExtension === entry}
+							className="shrink-0 px-3 py-2 text-sm text-secondary"
+							onClick={() => selectExtension(entry.id)}
+						>
+							{entry.contribution.label}
+						</button>
 					))}
 				</div>
 				{/* New tab, right after the tabs: a preview on its new tab page. */}
@@ -362,36 +329,47 @@ function SidePanel({ id }: { id: string }) {
 				</IconButton>
 			</div>
 			{/* Changes stays mounted behind a file tab, keeping its scope, scroll and drafts. */}
-			<div className={active === 0 ? "contents" : "hidden"}>
+			<div className={!selectedExtension && active === 0 ? "contents" : "hidden"}>
 				<ChangesPane threadId={id} />
 			</div>
-			{/* File tabs and "Open file" share one tree, kept as it is from one file to the next. */}
-			{shown?.kind === "file" || shown?.kind === "files" ? (
-				<FilesPanel threadId={id} autoFocus={shown.kind === "files"}>
-					{(beside) =>
-						shown.kind === "file" ? (
-							<FileTab
-								key={shown.path}
-								threadId={id}
-								path={shown.path}
-								line={shown.line}
-								used={shown.used}
-								compare={shown.compare}
-								draft={shown.draft}
-								beside={beside}
-							/>
-						) : (
-							<FilesTab threadId={id} />
-						)
-					}
-				</FilesPanel>
+			{selectedExtension ? (
+				<div className="flex min-h-0 flex-1 flex-col overflow-auto" role="tabpanel">
+					<SurfaceEntry entry={selectedExtension} context={context} fallback={<ChangesPane threadId={id} />} />
+				</div>
 			) : null}
-			{shown?.kind === "mcpApp" ? <AppTab key={shown.itemId} threadId={id} itemId={shown.itemId} /> : null}
-			{shown?.kind === "backgroundShell" ? <BackgroundShellTab key={shown.id} threadId={id} id={shown.id} /> : null}
-			{/* Previews stay mounted behind the other tabs, keeping their pages. */}
-			{tabs.map((tab, i) =>
-				tab.kind === "preview" ? <PreviewTab key={tab.id} threadId={id} tab={tab} active={i === active} /> : null,
-			)}
+			<div className={selectedExtension ? "hidden" : "contents"}>
+				{/* File tabs and "Open file" share one tree, kept as it is from one file to the next. */}
+				{shown?.kind === "file" || shown?.kind === "files" ? (
+					<FilesPanel threadId={id} autoFocus={shown.kind === "files"}>
+						{(beside) =>
+							shown.kind === "file" ? (
+								<FileTab
+									key={shown.path}
+									threadId={id}
+									path={shown.path}
+									line={shown.line}
+									used={shown.used}
+									compare={shown.compare}
+									draft={shown.draft}
+									beside={beside}
+								/>
+							) : (
+								<FilesTab threadId={id} />
+							)
+						}
+					</FilesPanel>
+				) : null}
+				{shown?.kind === "mcpApp" && target ? (
+					<AppHost key={shown.itemId} target={target} itemId={shown.itemId} />
+				) : null}
+				{shown?.kind === "backgroundShell" ? <BackgroundShellTab key={shown.id} threadId={id} id={shown.id} /> : null}
+				{/* Previews stay mounted behind the other tabs, keeping their pages. */}
+				{tabs.map((tab, i) =>
+					tab.kind === "preview" && target ? (
+						<PreviewHost key={tab.id} target={target} id={tab.id} active={!selectedExtension && i === active} />
+					) : null,
+				)}
+			</div>
 			{discarding?.threadId === id ? (
 				<ConfirmDialog
 					title="Discard file changes?"
@@ -418,14 +396,11 @@ export function ThreadView({ id }: { id: string }) {
 	if (panelOpen && !panelShown) setPanelShown("opened");
 	const progress = useStore((s) => s.progress[id]);
 	const scroller = useRef<HTMLDivElement>(null);
-	const header = useRef<HTMLElement>(null);
 	const [pinned, setPinned] = useState(true);
-	const [renaming, setRenaming] = useState<string | undefined>();
 	const [loadingEarlier, setLoadingEarlier] = useState(false);
 
 	useEffect(() => {
 		setPinned(true);
-		setRenaming(undefined);
 	}, [id]);
 	useLayoutEffect(() => {
 		const el = scroller.current;
@@ -443,7 +418,29 @@ export function ThreadView({ id }: { id: string }) {
 		void loadTerminals(id).catch(() => {});
 	}, [id]);
 	const finding = useStore((s) => s.finding);
-	useBinding("desktop.thread.find", () => setFinding(true), !finding);
+	useBinding(
+		"desktop.thread.find",
+		() => {
+			controllers.experimental_runCommand("builtin.composer/find", {
+				sidebarOpen: getState().sidebarOpen,
+				thread: { id, cwd },
+				composer: { threadId: id },
+			});
+		},
+		!finding,
+	);
+	useLayoutEffect(
+		() =>
+			bindTranscript(id, {
+				scroll(to) {
+					const element = scroller.current;
+					if (!element) return;
+					setPinned(to === "bottom");
+					element.scrollTop = to === "bottom" ? element.scrollHeight : 0;
+				},
+			}),
+		[id],
+	);
 	// A find belongs to the thread it searched.
 	useEffect(() => () => setFinding(false), [id]);
 
@@ -452,11 +449,6 @@ export function ThreadView({ id }: { id: string }) {
 	useBinding("desktop.terminal.toggle", () => toggleTerminal(id, cwd), Boolean(view));
 	useBinding("desktop.terminal.new", () => void newTerminal(id, cwd), Boolean(view));
 	useBinding("desktop.preview.open", () => openPreview(id), Boolean(view));
-	const commitRename = () => {
-		const value = renaming?.trim();
-		setRenaming(undefined);
-		if (value && value !== name) void rename(id, value);
-	};
 
 	// An extension's title names the window while this thread is open in it; the thread's own name stays the user's.
 	const extensionTitle = view?.ui.title;
@@ -478,64 +470,7 @@ export function ThreadView({ id }: { id: string }) {
 			<div className="@container flex min-h-0 min-w-0 flex-1">
 				{/* Hidden, not unmounted, while the side panel is full screen, so the transcript and a draft stay put. */}
 				<div className={`h-full min-w-0 flex-1 flex-col ${panelFull ? "hidden" : "flex"}`}>
-					<header ref={header} className="flex h-[52px] shrink-0 items-center gap-2 ps-3.5 pe-1.5">
-						<Tooltip content={cwd} side="bottom" align="start">
-							<span
-								role="img"
-								aria-label={workspace?.mode === "worktree" ? `Worktree of ${project}` : `Project: ${project}`}
-								className="flex size-7 shrink-0 items-center justify-center text-tertiary"
-							>
-								{workspace?.mode === "worktree" ? <GitBranchPlus size={16} /> : <Folder size={16} />}
-							</span>
-						</Tooltip>
-						{renaming !== undefined ? (
-							<input
-								autoFocus
-								aria-label="Thread title"
-								value={renaming}
-								onChange={(e) => setRenaming(e.target.value)}
-								onBlur={commitRename}
-								onKeyDown={(e) => {
-									if (matches(e, "desktop.item.activate")) commitRename();
-									if (matches(e, "desktop.picker.dismiss")) {
-										e.preventDefault();
-										setRenaming(undefined);
-									}
-								}}
-								className="kc-input h-7 min-w-0 flex-1 text-base font-medium"
-							/>
-						) : (
-							<Tooltip content={name} side="bottom" align="start" overflow>
-								<button
-									type="button"
-									onDoubleClick={() => setRenaming(name)}
-									className="min-w-0 truncate px-1.5 text-start text-base leading-6 font-medium text-ink"
-								>
-									{name}
-								</button>
-							</Tooltip>
-						)}
-						<div className="flex-1" />
-						{view?.ui.statuses.map((status) => (
-							<Tooltip key={status.key} content={status.text} side="bottom">
-								<span className="max-w-[200px] shrink truncate rounded-md border border-line px-2 text-sm text-secondary">
-									{status.text}
-								</span>
-							</Tooltip>
-						))}
-						<div className="flex items-center gap-1.5">
-							<ThreadMenu thread={{ id, cwd, name, sessionFile: view?.thread.sessionFile }} />
-							{view ? <ThreadSummary thread={view.thread} anchor={header} /> : null}
-							{panelOpen ? null : (
-								<>
-									<div className="mx-px h-4 w-px bg-line" />
-									<IconButton label="Show tabs" className="no-drag" onClick={() => setPanel({ open: true })}>
-										<SquarePlus size={16} />
-									</IconButton>
-								</>
-							)}
-						</div>
-					</header>
+					<ThreadHeaderSurface threadId={id} />
 					{finding ? <FindBar root={scroller} onClose={() => setFinding(false)} /> : null}
 					<div
 						ref={scroller}
@@ -579,7 +514,22 @@ export function ThreadView({ id }: { id: string }) {
 										variant="soft"
 										color="danger"
 										size="sm"
-										onClick={() => void (deleted ? restoreWorktree(id) : openThread(id))}
+										onClick={() => {
+											if (!deleted || !summary) {
+												void openThread(id);
+												return;
+											}
+											void experimental_workspaceServices()
+												.experimental_git({
+													threadId: id,
+													cwd: summary.cwd,
+													projectCwd: summary.projectCwd,
+												})
+												.experimental_run({ kind: "restore" })
+												.then((result) => {
+													if (result?.problem) toast(result.problem.message, "error");
+												});
+										}}
 									>
 										{deleted ? "Restore" : "Retry"}
 									</Button>
@@ -640,7 +590,13 @@ export function ThreadView({ id }: { id: string }) {
 								pill
 								aria-label="Scroll to bottom"
 								tabIndex={pinned ? -1 : 0}
-								onClick={() => setPinned(true)}
+								onClick={() =>
+									controllers.experimental_runCommand("builtin.composer/scroll-bottom", {
+										sidebarOpen: getState().sidebarOpen,
+										thread: { id, cwd },
+										composer: { threadId: id },
+									})
+								}
 								className={`absolute -top-14 left-1/2 -translate-x-1/2 bg-surface text-secondary transition-opacity duration-150 ${pinned ? "pointer-events-none opacity-0" : "opacity-100"}`}
 							>
 								<ArrowDown size={20} className="text-ink" />
@@ -657,13 +613,7 @@ export function ThreadView({ id }: { id: string }) {
 					{/* A request takes the composer's place; the composer stays mounted so a draft survives. */}
 					{/* Positioned so it paints over the transcript it overlaps. */}
 					<div className="relative">
-						{asking?.method === "item/toolCall/requestApproval" ? (
-							<ApprovalCard key={String(asking.id)} threadId={id} approval={asking} cwd={cwd} />
-						) : asking?.method === "ui/dialog" ? (
-							<DialogCard key={String(asking.id)} threadId={id} dialog={asking} />
-						) : asking?.method === "item/toolCall/requestUserInput" ? (
-							<QuestionsCard key={String(asking.id)} threadId={id} request={asking} />
-						) : null}
+						<RequestsSurface threadId={id} />
 						<div className={asking ? "hidden" : undefined}>
 							<Composer threadId={id} />
 						</div>
@@ -683,7 +633,16 @@ export function ThreadView({ id }: { id: string }) {
 					</div>
 				) : null}
 			</div>
-			{bottomOpen && view ? <BottomRegion threadId={id} cwd={cwd} /> : null}
+			{bottomOpen && view
+				? (() => {
+						const target = { threadId: id, cwd, projectCwd: view.thread.projectCwd };
+						return (
+							<WorkspaceSurface target={target} surface="terminal">
+								<TerminalHost target={target} />
+							</WorkspaceSurface>
+						);
+					})()
+				: null}
 		</div>
 	);
 }

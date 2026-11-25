@@ -126,6 +126,26 @@
               "path": "extensions.md"
             },
             {
+              "title": "Build Desktop Extensions",
+              "path": "desktop-extensions.md"
+            },
+            {
+              "title": "Native Desktop Extensions Preview",
+              "path": "desktop-extensions-preview.md"
+            },
+            {
+              "title": "Desktop Extension API",
+              "path": "desktop-api.md"
+            },
+            {
+              "title": "Desktop Backend API",
+              "path": "desktop-backend-api.md"
+            },
+            {
+              "title": "Desktop Customization Skill",
+              "path": "desktop-customization/SKILL.md"
+            },
+            {
               "title": "Draw Declarative Views",
               "path": "declarative-views.md"
             },

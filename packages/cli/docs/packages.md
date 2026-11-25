@@ -6,6 +6,10 @@ To use a Claude Code or Grok Build plugin, see [Plugins](plugins.md) instead: pl
 
 A package is an ordinary directory or npm package. It can expose conventional resource directories, declare explicit paths under the `knightcode` key in `package.json`, and carry its own runtime dependencies.
 
+Packages can also declare an explicit native `knightcode.desktop` entry. See
+[Desktop extensions](desktop-extensions.md) for its frontend manifest, supported
+imports and separate native consent. Session/plugin trust does not approve it.
+
 ## Install and manage packages
 
 Install from npm, git, or a local path:

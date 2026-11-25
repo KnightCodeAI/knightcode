@@ -267,9 +267,9 @@ cpSync(cliSchemas, schemaOut, { recursive: true })
 
 for (const output of outputs) {
 	const markdown = readFileSync(join(cliDocs, output.file), "utf8")
-	const dir = join(outDir, ...output.segments)
-	mkdirSync(dir, { recursive: true })
-	writeFileSync(join(dir, `${output.slug}.mdx`), transform(markdown, output.file))
+	const destination = join(outDir, ...output.segments, `${output.slug}.mdx`)
+	mkdirSync(dirname(destination), { recursive: true })
+	writeFileSync(destination, transform(markdown, output.file))
 }
 
 for (const meta of metas) {

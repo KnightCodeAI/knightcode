@@ -1,0 +1,9 @@
+{
+  "name": "desktop-failure-example",
+  "type": "module",
+  "knightcode": {
+    "desktop": {
+      "frontend": "./app.ts"
+    }
+  }
+}

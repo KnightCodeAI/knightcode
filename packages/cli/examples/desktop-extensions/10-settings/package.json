@@ -1,0 +1,7 @@
+{
+	"name": "kc-example-settings",
+	"private": true,
+	"type": "module",
+	"description": "Settings sections, a theme preset and a theme preview",
+	"knightcode": { "desktop": { "frontend": "./app.tsx", "backend": "./server.ts" } }
+}

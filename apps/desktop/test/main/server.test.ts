@@ -69,6 +69,21 @@ function connect() {
 /** Let stream events and promise continuations run without moving the fake clock. */
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
+test("an unsent request during backoff rejects immediately and is never replayed", async () => {
+	const { server } = connect();
+	children[0]!.answerInitialize();
+	await flush();
+	children[0]!.emit("exit", 1, null);
+	const rejected = vi.fn();
+	void server.request("desktopExtension/reload", {}).catch(rejected);
+	await flush();
+	expect(rejected).toHaveBeenCalledOnce();
+	await vi.advanceTimersByTimeAsync(500);
+	children[1]!.answerInitialize();
+	await flush();
+	expect(children[1]!.received.some((request) => request.method === "desktopExtension/reload")).toBe(false);
+});
+
 test("an exit restarts the child after a delay that doubles with each exit", async () => {
 	const { states, onExit } = connect();
 	children[0]!.answerInitialize();

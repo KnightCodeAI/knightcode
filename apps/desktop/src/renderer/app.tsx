@@ -1,22 +1,17 @@
-import { CircleAlert, CircleCheck, Info, Minus, Plus, X } from "./components/icons.tsx";
-import { Button, IconButton } from "./components/button.tsx";
-import { Component, type ReactNode, useEffect, useRef, useState } from "react";
+import { CircleAlert } from "./components/icons.tsx";
+import { useEffect } from "react";
 import { customTokens, fontFaces } from "./appearance.ts";
 import { client } from "./client.ts";
-import { Home } from "./components/home.tsx";
 import { Palette } from "./components/palette.tsx";
-import { Rail } from "./components/rail.tsx";
-import { Settings, SettingsNav } from "./components/settings.tsx";
-import { Sidebar } from "./components/sidebar.tsx";
-import { ThreadView } from "./components/thread-view.tsx";
-import { runAppCommand, TitleBar } from "./components/titlebar.tsx";
+import { controllers } from "./extensions/controllers.ts";
+import { LayoutSurface, StructuralSurface } from "./extensions/structural.tsx";
 import { GO_TO_RECENT, GO_TO_THREAD } from "../shared/keybindings.ts";
 import { isEditable, isMac, runBinding, setBindingOverrides, useBinding, useBindings } from "./keys.ts";
+import { FeedbackSurface } from "./extensions/host.tsx";
 import {
 	addProject,
 	autoArchive,
 	clearUnread,
-	dismissToast,
 	goBack,
 	navigate,
 	selectPreferences,
@@ -53,129 +48,8 @@ function ServerBanner() {
 	);
 }
 
-/** A view that throws while rendering shows the error instead of blanking the window; another view starts afresh. */
-class ViewBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
-	state: { error?: Error } = {};
-
-	static getDerivedStateFromError(error: Error) {
-		return { error };
-	}
-
-	render() {
-		const { error } = this.state;
-		if (!error) return this.props.children;
-		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-				<CircleAlert size={20} className="text-danger" />
-				<p className="text-base text-ink">This view hit an error.</p>
-				<p className="max-w-xl text-sm break-words text-secondary">{error.message}</p>
-				<Button variant="surface" size="md" onClick={() => this.setState({ error: undefined })}>
-					Try again
-				</Button>
-			</div>
-		);
-	}
-}
-
-const TOAST_MARKS = { success: CircleCheck, error: CircleAlert, info: Info };
-
-/** The newest three toasts, top centre under the title bar (styles.css, .kc-toast). */
-function Toasts() {
-	const toasts = useStore((s) => s.toasts);
-	return (
-		<div
-			role="status"
-			aria-label="Notifications"
-			className="pointer-events-none fixed inset-x-0 top-12 z-[60] flex flex-col items-center gap-2 px-2"
-		>
-			{toasts.slice(-3).map((t) => {
-				const Mark = TOAST_MARKS[t.kind];
-				return (
-					<div key={t.id} data-kind={t.kind} className="kc-toast max-w-[min(560px,100%)]">
-						<Mark size={16} className="shrink-0" />
-						<span className="min-w-0 [overflow-wrap:anywhere]">{t.text}</span>
-						<Button
-							size="xs"
-							uniform
-							pill
-							aria-label="Close"
-							onClick={() => dismissToast(t.id)}
-							className="text-current"
-						>
-							<X size={16} />
-						</Button>
-					</div>
-				);
-			})}
-		</div>
-	);
-}
-
-/**
- * Codex's zoom banner: the level after a zoom, top right beside the caption buttons (8px down, 16px in), with
- * steppers and Reset. It leaves 2s after the last change unless the pointer is on it. Electron zooms the page itself,
- * so the pill undoes the zoom to stay Codex's size.
- */
-function ZoomBanner() {
-	const [factor, setFactor] = useState(1);
-	const [shown, setShown] = useState<"hidden" | "visible" | "exiting">("hidden");
-	const timer = useRef<number | undefined>(undefined);
-	const hovered = useRef(false);
-	const hide = () => {
-		window.clearTimeout(timer.current);
-		setShown("exiting");
-		timer.current = window.setTimeout(() => setShown("hidden"), 150);
-	};
-	useEffect(() => {
-		const off = client.onHostEvent((event) => {
-			if (event.event !== "zoom") return;
-			setFactor(event.factor);
-			setShown("visible");
-			window.clearTimeout(timer.current);
-			timer.current = window.setTimeout(() => {
-				timer.current = undefined;
-				if (!hovered.current) hide();
-			}, 2000);
-		});
-		return () => {
-			off();
-			window.clearTimeout(timer.current);
-		};
-	}, []);
-	if (shown === "hidden") return null;
-	return (
-		<div
-			className={`pointer-events-none fixed top-0 z-[56] transition-[opacity,translate] duration-150 ease-out motion-reduce:transition-none ${shown === "visible" ? "" : "-translate-y-1 opacity-0"}`}
-			style={{ right: "calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))" }}
-		>
-			<div
-				className="kc-zoom-banner no-drag pointer-events-auto mt-2 me-4 inline-flex h-11 items-center overflow-hidden rounded-[20px] border-[0.5px] border-line bg-surface-secondary px-2 shadow-[0px_8px_16px_-4px_rgba(0,0,0,0.12)]"
-				style={{ zoom: 1 / factor }}
-				onMouseEnter={() => (hovered.current = true)}
-				onMouseLeave={() => {
-					hovered.current = false;
-					if (shown === "visible" && timer.current === undefined) hide();
-				}}
-			>
-				<span aria-live="polite" className="w-12 text-center text-sm font-semibold text-ink tabular-nums">
-					{Math.round(factor * 100)}%
-				</span>
-				<div className="ms-1 flex items-center">
-					<IconButton label="Zoom out" toolbar onClick={() => runAppCommand("zoomOut")}>
-						<Minus size={16} />
-					</IconButton>
-					<IconButton label="Zoom in" toolbar onClick={() => runAppCommand("zoomIn")}>
-						<Plus size={16} />
-					</IconButton>
-				</div>
-				<div className="mx-1 h-4 w-px bg-line" />
-				<Button color="secondary" toolbar disabled={factor === 1} onClick={() => runAppCommand("resetZoom")}>
-					Reset
-				</Button>
-			</div>
-		</div>
-	);
-}
+const runAppCommand = (command: Parameters<typeof controllers.experimental_windowCommand>[0]) =>
+	void controllers.experimental_windowCommand(command);
 
 /**
  * Resolve the theme preference onto <html> and the native caption buttons, and lay the theme's customization
@@ -306,36 +180,11 @@ export function App() {
 	]);
 	return (
 		<div className="kc-app flex h-full flex-col bg-shell">
-			<TitleBar />
+			<StructuralSurface surface="titleBar" />
 			<ServerBanner />
-			{/* Codex leaves 8px under the title bar and 4px at the window's right and bottom edges. */}
-			<div className="kc-app-body flex min-h-0 flex-1 pt-2 pe-1 pb-1">
-				<Rail />
-				{/* Sidebar and content sit in one card beside the rail: 12px corners at the left and top right, 4px at
-				    the bottom right, the sidebar's own panel and a hairline between it and the content (Codex's). */}
-				<div className="kc-app-card flex min-w-0 flex-1 overflow-hidden rounded-tl-[12px] rounded-tr-[12px] rounded-br-[4px] rounded-bl-[12px]">
-					{/* Stays mounted so it can slide shut (styles.css, .kc-sidebar-slot); inert while closed. */}
-					<div className="kc-sidebar-slot flex shrink-0" data-open={sidebarOpen || undefined} inert={!sidebarOpen}>
-						{view.kind === "settings" ? <SettingsNav page={view.page} /> : <Sidebar />}
-					</div>
-					<main className={`flex min-w-0 flex-1 bg-surface ${sidebarOpen ? "border-l border-line" : ""}`}>
-						<ViewBoundary
-							key={view.kind === "thread" ? view.id : view.kind === "settings" ? `settings:${view.page}` : view.kind}
-						>
-							{view.kind === "thread" ? (
-								<ThreadView key={view.id} id={view.id} />
-							) : view.kind === "settings" ? (
-								<Settings page={view.page} />
-							) : (
-								<Home key={view.cwd ?? ""} cwd={view.cwd} />
-							)}
-						</ViewBoundary>
-					</main>
-				</div>
-			</div>
+			<LayoutSurface />
 			{paletteOpen ? <Palette /> : null}
-			<Toasts />
-			<ZoomBanner />
+			<FeedbackSurface />
 		</div>
 	);
 }

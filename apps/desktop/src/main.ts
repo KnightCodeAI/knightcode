@@ -22,11 +22,17 @@ import {
 } from "electron";
 import { type HostEvent, type HostRequest, WINDOW_CHROME } from "./shared/host-protocol.ts";
 import { markQuitting, onWindowClose } from "./main/close.ts";
+import { closeAllWithin } from "./main/quit.ts";
 import { handleHost, openInService } from "./main/host.ts";
 import type { OpenIn } from "./main/open-in.ts";
 import { MCP_APP_SCHEME, McpApps } from "./main/mcp-apps.ts";
 import { clearPreview, guardWebviews } from "./main/preview.ts";
 import { rendererPath } from "./main/protocol-scheme.ts";
+import { ExtensionArtifacts } from "./main/extension-artifacts.ts";
+import { handleDesktopExtensions } from "./main/desktop-extensions.ts";
+import { DesktopExtensionWindows } from "./main/desktop-extension-runtime.ts";
+import { DesktopExtensionHostMethods } from "./shared/desktop-extensions.ts";
+import { ExtensionProviderPreferences } from "./main/extension-preferences.ts";
 import { Router } from "./main/router.ts";
 import { resolveServerCommand, ServerConnection, type ServerState } from "./main/server.ts";
 import { loginShellEnv } from "./main/shell-env.ts";
@@ -41,11 +47,11 @@ const DEV_URL = MAIN_WINDOW_VITE_DEV_SERVER_URL;
 const ORIGIN = DEV_URL ? new URL(DEV_URL).origin : "app://desktop";
 const RENDERER_DIR = join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const CSP =
-	"default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; " +
-	"font-src 'self'; connect-src 'self'; frame-src kc-mcp-app:; worker-src 'self' blob:";
+	"default-src 'none'; script-src 'self' app://ext 'wasm-unsafe-eval'; style-src 'self' app://ext 'unsafe-inline'; img-src 'self' app://ext data: blob: https://avatars.githubusercontent.com; " +
+	"font-src 'self' app://ext; connect-src 'self' app://ext; frame-src kc-mcp-app:; worker-src 'self' blob:";
 
 protocol.registerSchemesAsPrivileged([
-	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 	// MCP Apps' documents, one origin per app instance (main/mcp-apps.ts).
 	{ scheme: MCP_APP_SCHEME, privileges: { standard: true, secure: true } },
 ]);
@@ -66,6 +72,17 @@ const windows = new Map<number, OpenWindow>();
 let nextWindowId = 1;
 let serverState: { state: ServerState; message?: string } = { state: "starting" };
 let quitting = false;
+const safeMode = process.argv.includes("--safe-mode");
+let restartSafe = false;
+/** How long quitting waits for each window's graceful close before destroying a wedged renderer. */
+const QUIT_CLOSE_DEADLINE_MS = 3000;
+
+/** View › Restart without extensions: quit (asking over running threads), then relaunch with --safe-mode. */
+function restartSafeMode(): void {
+	restartSafe = true;
+	app.quit();
+}
+const extensionArtifacts = new ExtensionArtifacts(ORIGIN);
 
 /** host/window/role: the focused window, else the one focused last, acts for all; and what the others hold. */
 function roleOf(id: number): { primary: boolean; heldElsewhere: string[] } {
@@ -104,9 +121,11 @@ const router = new Router({
 });
 
 const state = new StateFile(app.getPath("userData"));
+const extensionProviders = new ExtensionProviderPreferences(state);
 // An app's frame may sit only in this app's own windows.
 const mcpApps = new McpApps(ORIGIN);
 let server: ServerConnection;
+let extensionRuntime: DesktopExtensionWindows;
 let openIn: OpenIn;
 let terminals: Terminals;
 let updates: Updates;
@@ -114,6 +133,7 @@ let updates: Updates;
 /** Serves only the built renderer directory; `..` never escapes it (section 6.3). */
 function serveRenderer(request: Request): Promise<Response> | Response {
 	const url = new URL(request.url);
+	if (url.host === "ext") return extensionArtifacts.serve(request);
 	if (url.host !== "desktop") return new Response(null, { status: 404 });
 	const path = rendererPath(RENDERER_DIR, url.pathname);
 	if (typeof path === "number") return new Response(null, { status: path });
@@ -126,6 +146,7 @@ function serveRenderer(request: Request): Promise<Response> | Response {
 
 function connectPort(id: number, open: OpenWindow): void {
 	open.port?.close();
+	extensionArtifacts.releaseWindow(id);
 	router.detach(id);
 	// The reloaded page attaches to the terminals it shows again, getting their output so far first.
 	terminals.detachWindow(id);
@@ -133,6 +154,7 @@ function connectPort(id: number, open: OpenWindow): void {
 	mcpApps.releaseWindow(id);
 	const { port1, port2 } = new MessageChannelMain();
 	open.port = port1;
+	extensionRuntime.attach(id, (event) => port1.postMessage(event));
 	router.attach({
 		id,
 		send: (message) => port1.postMessage(message),
@@ -144,6 +166,21 @@ function connectPort(id: number, open: OpenWindow): void {
 		if (typeof data !== "object" || data === null) return;
 		smokeStep("page");
 		if ("host" in data) {
+			if (Object.hasOwn(DesktopExtensionHostMethods, data.host)) {
+				void handleDesktopExtensions(data, open.window, id, {
+					server,
+					runtime: extensionRuntime,
+					artifacts: extensionArtifacts,
+					safeMode,
+					providers: extensionProviders,
+					isCurrent: () => open.port === port1 && !open.window.isDestroyed(),
+					providersChanged: () => {
+						for (const [windowId, target] of windows)
+							sendEvent(target, { event: "desktopExtension/providers", providers: extensionProviders.read(windowId) });
+					},
+				}).then((response) => port1.postMessage(response));
+				return;
+			}
 			void handleHost(data, open.window, {
 				state,
 				server,
@@ -156,6 +193,7 @@ function connectPort(id: number, open: OpenWindow): void {
 				role: () => roleOf(id),
 				updates,
 				installUpdate,
+				restartSafe: restartSafeMode,
 			}).then((response) => port1.postMessage(response));
 			return;
 		}
@@ -222,7 +260,7 @@ function createWindow(route?: string): BrowserWindow {
 			// Preview tabs (section 9.8); main/preview.ts decides what each one may attach and do.
 			webviewTag: true,
 			preload: join(__dirname, "preload.cjs"),
-			additionalArguments: [`--kc-origin=${ORIGIN}`, `--kc-window-id=${id}`],
+			additionalArguments: [`--kc-origin=${ORIGIN}`, `--kc-window-id=${id}`, `--kc-safe-mode=${safeMode ? "1" : "0"}`],
 		},
 	});
 	const open: OpenWindow = { window, port: undefined, lastFocusedAt: Date.now(), route };
@@ -244,16 +282,23 @@ function createWindow(route?: string): BrowserWindow {
 		return { action: "deny" };
 	});
 	let lastCrash = 0;
+	window.webContents.on("did-start-navigation", (event) => {
+		if (event.isMainFrame && !event.isSameDocument) extensionRuntime.detach(id);
+	});
 	window.webContents.on("render-process-gone", () => {
+		extensionRuntime.detach(id);
 		const now = Date.now();
 		if (now - lastCrash > 60_000) window.webContents.reload();
 		lastCrash = now;
 	});
 	window.on("closed", () => {
+		extensionRuntime.detach(id);
 		open.port?.close();
 		router.detach(id);
 		terminals.detachWindow(id);
 		mcpApps.releaseWindow(id);
+		extensionArtifacts.releaseWindow(id);
+		extensionProviders.releaseWindow(id);
 		windows.delete(id);
 	});
 	void (DEV_URL ? window.loadURL(DEV_URL) : window.loadURL("app://desktop/index.html"));
@@ -340,6 +385,10 @@ function buildMenu(): void {
 			label: "View",
 			submenu: [
 				{ role: "reload" },
+				{
+					label: "Restart without extensions",
+					click: restartSafeMode,
+				},
 				...(app.isPackaged ? [] : [{ role: "toggleDevTools" as const }]),
 				{ type: "separator" },
 				// The roles' accelerators, through zoom() so the steps and the banner match the renderer's.
@@ -380,10 +429,12 @@ async function start(): Promise<void> {
 	});
 	server = new ServerConnection({
 		command: resolveServerCommand(app.isPackaged, app.getAppPath(), process.resourcesPath),
-		env,
+		// The app server checks each extension's declared desktop range against this version.
+		env: { ...env, KNIGHTCODE_DESKTOP_SAFE_MODE: safeMode ? "1" : "0", KNIGHTCODE_DESKTOP_VERSION: app.getVersion() },
 		logsDir: app.getPath("logs"),
 		clientVersion: app.getVersion(),
 		onMessage: (message) => {
+			if (extensionRuntime.receive(message)) return;
 			router.fromServer(message);
 			endThread(message);
 		},
@@ -393,8 +444,12 @@ async function start(): Promise<void> {
 			else if (smoke && next !== "starting") smokeExit(1);
 			for (const open of windows.values()) sendEvent(open, { event: "server/state", state: next, message });
 		},
-		onExit: () => router.serverRestarted(),
+		onExit: () => {
+			router.serverRestarted();
+			extensionRuntime.serverRestarted();
+		},
 	});
+	extensionRuntime = new DesktopExtensionWindows(server);
 	server.start();
 	updates = new Updates((update) => {
 		for (const open of windows.values()) sendEvent(open, { event: "update", update });
@@ -476,12 +531,19 @@ if (squirrelEvent()) {
 			};
 			const parent = BrowserWindow.getFocusedWindow();
 			const choice = parent ? dialog.showMessageBoxSync(parent, options) : dialog.showMessageBoxSync(options);
-			if (choice !== 0) return;
+			if (choice !== 0) {
+				restartSafe = false;
+				return;
+			}
 		}
 		quitting = true;
 		markQuitting();
-		void server.stop().finally(() => {
+		void server.stop().finally(async () => {
 			terminals.killAll();
+			if (restartSafe)
+				app.relaunch({ args: [...process.argv.slice(1).filter((arg) => arg !== "--safe-mode"), "--safe-mode"] });
+			// A wedged renderer never answers the graceful close that app.quit() starts.
+			await closeAllWithin(BrowserWindow.getAllWindows(), QUIT_CLOSE_DEADLINE_MS);
 			app.quit();
 		});
 	});

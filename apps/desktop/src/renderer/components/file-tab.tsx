@@ -20,6 +20,7 @@ import {
 import { Editor, type EditorFactory } from "@pierre/diffs/edit";
 import { EditProvider, FileDiff, File } from "@pierre/diffs/react";
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { WorkspaceSurface } from "../extensions/panel.tsx";
 import { client } from "../client.ts";
 import diffOverrides from "../diff-overrides.css?raw";
 import { basename, samePath } from "../format.ts";
@@ -732,48 +733,56 @@ export function FileTab({
 						/>
 					) : null}
 					<div ref={body} className="min-h-0 min-w-0 flex-1 overflow-auto">
-						{error && diff && highlighter ? (
-							<FileDiff fileDiff={diff} options={diffOptions} disableWorkerPool />
-						) : error ? (
-							<Notice title="Could not open file" detail={error} />
-						) : !read ? null : read.binary ? (
-							<Notice title="Binary file not shown" detail="Open it in another app to see it." />
-						) : read.tooLarge ? (
-							<Notice
-								title="This file is too large to preview in the side panel"
-								detail="Open it in another app to see it."
-							/>
-						) : previewing && file ? (
-							<div className="mx-auto max-w-3xl px-6 py-5">
-								<Markdown text={draft?.text ?? file.contents} />
-							</div>
-						) : !file || !shown || !highlighter || (compare && !shownBase) ? null : (
-							<EditProvider createEditor={createEditor}>
-								{diff ? (
-									<FileDiff
-										key={`${shown.revision}:${baseKey}`}
-										fileDiff={diff}
-										options={diffOptions}
-										disableWorkerPool
-										selectedLines={selected}
-										edit
-										onEditChange={(e) => edited(e.file.contents)}
-										onEditComplete={() => "reject"}
+						{thread ? (
+							<WorkspaceSurface
+								target={{ threadId, cwd: thread.cwd, projectCwd: thread.projectCwd }}
+								surface={compare ? "diff" : "code"}
+								file={{ path, line }}
+							>
+								{error && diff && highlighter ? (
+									<FileDiff fileDiff={diff} options={diffOptions} disableWorkerPool />
+								) : error ? (
+									<Notice title="Could not open file" detail={error} />
+								) : !read ? null : read.binary ? (
+									<Notice title="Binary file not shown" detail="Open it in another app to see it." />
+								) : read.tooLarge ? (
+									<Notice
+										title="This file is too large to preview in the side panel"
+										detail="Open it in another app to see it."
 									/>
-								) : (
-									<File
-										key={shown.revision}
-										file={file}
-										options={fileOptions}
-										disableWorkerPool
-										selectedLines={selected}
-										edit
-										onEditChange={(e) => edited(e.file.contents)}
-										onEditComplete={() => "reject"}
-									/>
+								) : previewing && file ? (
+									<div className="mx-auto max-w-3xl px-6 py-5">
+										<Markdown text={draft?.text ?? file.contents} />
+									</div>
+								) : !file || !shown || !highlighter || (compare && !shownBase) ? null : (
+									<EditProvider createEditor={createEditor}>
+										{diff ? (
+											<FileDiff
+												key={`${shown.revision}:${baseKey}`}
+												fileDiff={diff}
+												options={diffOptions}
+												disableWorkerPool
+												selectedLines={selected}
+												edit
+												onEditChange={(e) => edited(e.file.contents)}
+												onEditComplete={() => "reject"}
+											/>
+										) : (
+											<File
+												key={shown.revision}
+												file={file}
+												options={fileOptions}
+												disableWorkerPool
+												selectedLines={selected}
+												edit
+												onEditChange={(e) => edited(e.file.contents)}
+												onEditComplete={() => "reject"}
+											/>
+										)}
+									</EditProvider>
 								)}
-							</EditProvider>
-						)}
+							</WorkspaceSurface>
+						) : null}
 					</div>
 				</div>
 			</div>

@@ -4,6 +4,8 @@
  */
 
 import { type Static, type TSchema, Type } from "typebox";
+import type { DesktopExtensionEvent, DesktopExtensionPhase } from "@knightcode/app-server-protocol";
+import { DesktopExtensionHostMethods } from "./desktop-extensions.ts";
 
 function Obj<P extends Record<string, TSchema>>(properties: P) {
 	return Type.Object(properties, { additionalProperties: false });
@@ -94,6 +96,8 @@ export const DesktopState = Obj({
 	}),
 	// Optional so a file written before preferences existed still loads.
 	preferences: Type.Optional(Preferences),
+	/** Main-owned app provider choices. Ordinary renderer state writes cannot overwrite them. */
+	desktopProviders: Type.Optional(Type.Record(Type.String(), Type.String())),
 });
 export type DesktopState = Static<typeof DesktopState>;
 
@@ -150,6 +154,8 @@ export const APP_COMMANDS = [
 	"close",
 	/** Bring the window forward (a clicked notification). */
 	"focus",
+	/** Quit and relaunch with --safe-mode (View › Restart without extensions); main still asks over running threads. */
+	"restartSafe",
 ] as const;
 export type AppCommandName = (typeof APP_COMMANDS)[number];
 export const AppCommand = Type.Unsafe<AppCommandName>(Type.Union(APP_COMMANDS.map((c) => Type.Literal(c))));
@@ -199,6 +205,7 @@ export const UpdateState = Type.Union([
 export type UpdateState = Static<typeof UpdateState>;
 
 export const HostMethods = {
+	...DesktopExtensionHostMethods,
 	/** Show a native context menu at the pointer; resolves with the chosen item's id once it closes. */
 	"host/menu/popup": {
 		params: Obj({ items: Type.Array(NativeMenuItem) }),
@@ -391,6 +398,9 @@ export type HostResponse = { id: number; result: unknown } | { id: number; error
 
 /** Main-originated events that are not protocol notifications. */
 export type HostEvent =
+	| { event: "desktopExtension/phase"; phase: DesktopExtensionPhase }
+	| { event: "desktopExtension/event"; payload: DesktopExtensionEvent }
+	| { event: "desktopExtension/providers"; providers: { app: Record<string, string>; window: Record<string, string> } }
 	| { event: "server/state"; state: "starting" | "ready" | "restarting" | "failed"; message?: string }
 	/** A `knightcode://` link to show (section 6.1). */
 	| { event: "navigate"; route: string }
@@ -404,6 +414,8 @@ export type HostEvent =
 	| { event: "update"; update: UpdateState };
 
 export interface WindowGlobals {
+	/** Native launch mode, available synchronously before any extension cache is read. */
+	safeMode: boolean;
 	platform: NodeJS.Platform;
 	windowId: number;
 	/** A dropped file's path on disk; empty for one that has none (dragged out of another app's memory). */

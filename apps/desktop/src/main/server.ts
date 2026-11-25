@@ -156,7 +156,10 @@ export class ServerConnection {
 		const id = `m:${this.nextId++}`;
 		return new Promise((resolve, reject) => {
 			this.own.set(id, { resolve, reject });
-			this.send({ id, method, params } as Message);
+			if (!this.send({ id, method, params } as Message)) {
+				this.own.delete(id);
+				reject(new Error("the app server is not running"));
+			}
 		});
 	}
 

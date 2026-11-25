@@ -1,0 +1,164 @@
+/** Emit portable desktop read-model types from the existing validated domain schemas. */
+import {
+	ClientRequests,
+	ApprovalMode,
+	ThinkingLevel,
+	DesktopCheckout,
+	DesktopOperation,
+	DesktopOperationProblem,
+	DesktopWorkspaceAction,
+	Environment,
+	WorkspaceRequest,
+	DiffScope,
+	ToolOutput,
+	Item,
+	Turn,
+	Thread,
+	TurnFile,
+	TurnQueue,
+	UiSnapshot,
+	BackgroundShell,
+	BackgroundShellNotice,
+	ImageInput,
+	ApprovalResult,
+	ServerRequests,
+	View,
+} from "@knightcode/app-server-protocol";
+
+interface Schema {
+	"~kind"?: string;
+	additionalProperties?: boolean | Schema;
+	type?: string;
+	const?: unknown;
+	anyOf?: Schema[];
+	allOf?: Schema[];
+	properties?: Record<string, Schema>;
+	required?: string[];
+	items?: Schema;
+	patternProperties?: Record<string, Schema>;
+	$defs?: Record<string, Schema>;
+	$ref?: string;
+}
+
+/** Preserve domain data shapes without exporting protocol clients or workspace-only type imports. */
+export function declarationOf(schema: Schema): string {
+	if (schema.$defs && schema.$ref) {
+		const name = schema.$ref.split("/").at(-1)!;
+		const definition = schema.$defs[name];
+		if (!definition) throw new Error("Unsupported desktop read-model schema reference");
+		return declarationOf(definition);
+	}
+	if (schema.$ref) {
+		if (schema.$ref === "#/$defs/View" || schema.$ref === "View") return "View";
+		throw new Error("Unsupported desktop read-model schema reference");
+	}
+	if (Object.hasOwn(schema, "const")) return JSON.stringify(schema.const);
+	if (schema.anyOf) return `(${schema.anyOf.map(declarationOf).join(" | ")})`;
+	if (schema.allOf) return `(${schema.allOf.map(declarationOf).join(" & ")})`;
+	switch (schema.type) {
+		case "string":
+		case "number":
+		case "boolean":
+		case "null":
+			return schema.type;
+		case "integer":
+			return "number";
+		case "array":
+			return `(${declarationOf(schema.items ?? {})})[]`;
+		case "object": {
+			if (schema.patternProperties)
+				return `Record<string, ${declarationOf(Object.values(schema.patternProperties)[0] ?? {})}>`;
+			const fields = Object.entries(schema.properties ?? {}).map(
+				([name, value]) =>
+					`${JSON.stringify(name)}${schema.required?.includes(name) ? "" : "?"}: ${declarationOf(value)}`,
+			);
+			return `{ ${fields.join("; ")} }`;
+		}
+		case undefined:
+			return "unknown";
+		default:
+			throw new Error(`Unsupported desktop read-model schema type ${schema.type}`);
+	}
+}
+
+/** App-server methods the settings services may call; the renderer refuses every other method. */
+export const SETTINGS_METHODS = [
+	"account/list",
+	"config/read",
+	"config/write",
+	"environment/list",
+	"environment/save",
+	"mcp/add",
+	"mcp/list",
+	"mcp/remove",
+	"mcp/update",
+	"plugin/install",
+	"plugin/list",
+	"plugin/marketplace/add",
+	"plugin/marketplace/list",
+	"plugin/marketplace/remove",
+	"plugin/marketplace/update",
+	"plugin/set",
+	"plugin/uninstall",
+	"plugin/update",
+	"project/trust/read",
+	"project/trust/set",
+	"resource/list",
+	"resource/set",
+	"thread/list",
+	"tool/list",
+	"tool/settings/read",
+	"tool/settings/write",
+	"worktree/delete",
+	"worktree/list",
+] as const satisfies readonly (keyof typeof ClientRequests)[];
+
+/** Generate self-contained types for renderer reads and mediated request replies. */
+export function generateDesktopModels(): string {
+	const schemas = {
+		View,
+		ApprovalMode,
+		ThinkingLevel,
+		DesktopCheckout,
+		DesktopOperation,
+		DesktopOperationProblem,
+		DesktopWorkspaceAction,
+		Environment,
+		WorkspaceRequest,
+		DiffScope,
+		GitStatus: ClientRequests["git/status"].result,
+		GitBranches: ClientRequests["git/branches"].result,
+		FileRead: ClientRequests["file/read"].result,
+		FileList: ClientRequests["file/list"].result,
+		DiffRead: ClientRequests["thread/diff/read"].result,
+		ModelInfo: ClientRequests["model/list"].result.properties.models.items,
+		ToolOutput,
+		Item,
+		Turn,
+		Thread,
+		TurnFile,
+		TurnQueue,
+		UiSnapshot,
+		BackgroundShell,
+		BackgroundShellNotice,
+		ImageInput,
+		ApprovalResult,
+		ApprovalParams: ServerRequests["item/toolCall/requestApproval"].params,
+		DialogParams: ServerRequests["ui/dialog"].params,
+		DialogResult: ServerRequests["ui/dialog"].result,
+		QuestionParams: ServerRequests["item/toolCall/requestUserInput"].params,
+		QuestionResult: ServerRequests["item/toolCall/requestUserInput"].result,
+	};
+	return (
+		"// Generated from app-server-protocol domain schemas. Run generate-desktop-api.ts.\n" +
+		Object.entries(schemas)
+			.map(([name, schema]) => `export type ${name} = ${declarationOf(schema)};`)
+			.join("\n") +
+		"\nexport type SettingsRequests = {\n" +
+		SETTINGS_METHODS.map(
+			(method) =>
+				`\t${JSON.stringify(method)}: { params: ${declarationOf(ClientRequests[method].params)}; result: ${declarationOf(ClientRequests[method].result)} };`,
+		).join("\n") +
+		"\n};\n"
+	);
+}

@@ -130,6 +130,8 @@ export interface HostDeps {
 	updates: Updates;
 	/** host/update/install: asks over running threads, then quits the way the quit question does. */
 	installUpdate: (window: BrowserWindow) => Promise<void>;
+	/** Quit, then relaunch with --safe-mode; shared with the native View menu item. */
+	restartSafe: () => void;
 }
 
 export async function handleHost(request: HostRequest, window: BrowserWindow, deps: HostDeps): Promise<HostResponse> {
@@ -154,7 +156,20 @@ async function run(
 	method: HostMethod,
 	params: Record<string, unknown>,
 	window: BrowserWindow,
-	{ state, server, openIn, terminals, mcpApps, windowId, openWindow, zoom, role, updates, installUpdate }: HostDeps,
+	{
+		state,
+		server,
+		openIn,
+		terminals,
+		mcpApps,
+		windowId,
+		openWindow,
+		zoom,
+		role,
+		updates,
+		installUpdate,
+		restartSafe,
+	}: HostDeps,
 ): Promise<unknown> {
 	switch (method) {
 		case "host/mcpApp/serve":
@@ -352,6 +367,9 @@ async function run(
 					break;
 				case "quit":
 					app.quit();
+					break;
+				case "restartSafe":
+					restartSafe();
 					break;
 			}
 			return {};

@@ -99,6 +99,7 @@ function getAliases(): Record<string, string> {
 
 	_aliases = {
 		"@knightcodeai/cli": knightCliEntry,
+		"@knightcodeai/cli/desktop-backend": path.resolve(__dirname, "../../desktop-backend.js"),
 		"@knightcode/agent": knightAgentEntry,
 		"@knightcode/tui": knightTuiEntry,
 		"@knightcode/ai/providers/all": knightAiProvidersEntry,
@@ -656,6 +657,12 @@ async function loadExtensionModule(extensionPath: string, cacheToken?: Extension
 }
 
 async function importExtensionModule(extensionPath: string): Promise<ExtensionFactory | undefined> {
+	const factory = await importExtensionDefault(extensionPath);
+	return typeof factory === "function" ? (factory as ExtensionFactory) : undefined;
+}
+
+/** Import a trusted explicit entry with the session loader's bundled jiti resolver. */
+export async function importExtensionDefault(extensionPath: string): Promise<unknown> {
 	const createJitiImpl = await getCreateJiti();
 	// Compiled binaries and the bundled Node distribution use embedded modules.
 	// Source TypeScript reuses host modules and root tsconfig paths. Unbundled
@@ -670,12 +677,7 @@ async function importExtensionModule(extensionPath: string): Promise<ExtensionFa
 		...resolutionOptions,
 	});
 
-	const module = await jiti.import(canonicalizePath(extensionPath), { default: true });
-	const factory = module as ExtensionFactory;
-	if (typeof factory !== "function") {
-		return undefined;
-	}
-	return factory;
+	return jiti.import(canonicalizePath(extensionPath), { default: true });
 }
 
 /**

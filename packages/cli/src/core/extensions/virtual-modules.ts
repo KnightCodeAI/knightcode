@@ -9,6 +9,7 @@ import * as bundledTypeboxValue from "typebox/value";
 // This import is safe because loader.ts exports are not re-exported from index.ts.
 // Extensions can therefore import from @knightcodeai/cli.
 import * as bundledKnightCli from "../../index.ts";
+import * as bundledDesktopBackend from "../../desktop-backend.ts";
 import * as bundledKnightAiExtensionView from "./knightcode-ai-extension-view.ts";
 
 /** Modules available to extensions in source and compiled binary runtimes. */
@@ -28,4 +29,5 @@ export const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@knightcode/ai/oauth": bundledKnightAiOauth,
 	"@knightcode/ai/providers/all": bundledKnightAiProviders,
 	"@knightcodeai/cli": bundledKnightCli,
+	"@knightcodeai/cli/desktop-backend": bundledDesktopBackend,
 };

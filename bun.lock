@@ -32,6 +32,8 @@
         "radix-ui": "1.4.3",
       },
       "devDependencies": {
+        "@babel/parser": "7.29.8",
+        "@babel/types": "7.29.8",
         "@electron-forge/cli": "8.0.1",
         "@electron-forge/maker-deb": "8.0.1",
         "@electron-forge/maker-dmg": "8.0.1",
@@ -43,6 +45,7 @@
         "@electron/fuses": "2.1.3",
         "@knightcode/app-server-protocol": "workspace:*",
         "@knightcode/remote": "workspace:*",
+        "@knightcodeai/cli": "workspace:*",
         "@playwright/test": "1.64.1",
         "@tailwindcss/postcss": "4.3.3",
         "@types/react": "19.2.7",
@@ -199,7 +202,7 @@
     },
     "packages/cli": {
       "name": "@knightcodeai/cli",
-      "version": "0.23.6",
+      "version": "0.24.0",
       "bin": {
         "knightcode": "./dist/bundle/cli.js",
       },
@@ -209,6 +212,8 @@
         "quickjs-wasi": "3.6.2",
       },
       "devDependencies": {
+        "@babel/parser": "7.29.8",
+        "@babel/types": "7.29.8",
         "@knightcode/agent": "workspace:*",
         "@knightcode/ai": "workspace:*",
         "@knightcode/app-server-protocol": "workspace:*",
@@ -231,6 +236,7 @@
         "lovely-mermaid": "0.3.3",
         "marked": "18.0.11",
         "minimatch": "11.0.3",
+        "postcss": "8.5.26",
         "proper-lockfile": "4.1.2",
         "semver": "7.8.5",
         "typebox": "1.3.27",

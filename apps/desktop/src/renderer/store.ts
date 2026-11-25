@@ -5,6 +5,7 @@
  */
 
 import { useSyncExternalStore } from "react";
+import type { experimental_Toast, experimental_ComposerDraft } from "@knightcodeai/cli/desktop";
 import type {
 	ApprovalMode,
 	ApprovalResult,
@@ -153,10 +154,20 @@ export const NO_TERMINALS: ThreadTerminals = { tabs: [], active: 0, open: false 
 
 export type { SettingsPage };
 export type View =
-	{ kind: "thread"; id: string } | { kind: "new"; cwd?: string } | { kind: "settings"; page: SettingsPage };
+	| { kind: "thread"; id: string }
+	| { kind: "new"; cwd?: string }
+	| { kind: "settings"; page: SettingsPage }
+	| { kind: "page"; id: string };
 export type Accounts = ResultOf<"account/list">;
 
+export interface ComposerDraft extends experimental_ComposerDraft {
+	restorations?: Pick<experimental_ComposerDraft, "text" | "images">[];
+}
+const EMPTY_COMPOSER_DRAFT: ComposerDraft = { text: "", images: [], revision: 0 };
+
 export interface State {
+	/** Canonical drafts and revisions outlive layout/provider and editor mounts. */
+	composerDrafts: Record<string, ComposerDraft>;
 	server: { state: "starting" | "ready" | "restarting" | "failed"; message?: string };
 	/** Turns whose edits were undone (by turn id), so their card offers Reapply after it remounts. */
 	undoneTurns: Record<string, true>;
@@ -196,6 +207,7 @@ export interface State {
 	panel: { open: boolean; width: number; scope?: DiffScope; full?: boolean; fileTree?: boolean; fileSplit?: boolean };
 	/** Each thread's side panel tabs: Changes first, then the files it opened. */
 	tabs: Record<string, ThreadTabs>;
+	panelContributions: Record<string, { id: string; file?: { path: string; line?: number } } | undefined>;
 	/** The bottom region's height in px (section 9.7), 0 until dragged (then 280); each thread has it open or not. */
 	bottom: { height: number };
 	/** Each thread's terminals, in tab order, and the one shown. */
@@ -211,6 +223,7 @@ export interface State {
 }
 
 let state: State = {
+	composerDrafts: {},
 	server: { state: "starting" },
 	undoneTurns: {},
 	desktop: undefined,
@@ -232,6 +245,7 @@ let state: State = {
 	update: { state: "unavailable" },
 	panel: { open: false, width: 0 },
 	tabs: {},
+	panelContributions: {},
 	bottom: { height: 0 },
 	terminals: {},
 	attachments: {},
@@ -247,16 +261,91 @@ function set(update: (draft: State) => State): void {
 }
 
 export function useStore<T>(select: (s: State) => T): T {
+	const read = () => select(state);
+	// The same snapshot serves server rendering (host tests render settings sections to markup).
 	return useSyncExternalStore(
 		(listener) => {
 			listeners.add(listener);
 			return () => listeners.delete(listener);
 		},
-		() => select(state),
+		read,
+		read,
 	);
 }
 
 export const getState = (): State => state;
+
+/** Read one composer draft without allocating an empty snapshot on each subscription read. */
+export const composerDraftOf = (s: State, key: string): ComposerDraft => s.composerDrafts[key] ?? EMPTY_COMPOSER_DRAFT;
+
+/** Update the host-owned draft; surface disposal never clears it. */
+export function setComposerDraft(key: string, update: (draft: ComposerDraft) => Omit<ComposerDraft, "revision">): void {
+	set((s) => {
+		const before = composerDraftOf(s, key);
+		const next = update(before);
+		const changed =
+			next.text !== before.text ||
+			next.images.length !== before.images.length ||
+			next.images.some((path, i) => path !== before.images[i]);
+		const selection = next.text !== before.text && next.selection === before.selection ? undefined : next.selection;
+		const sameSelection =
+			selection === before.selection ||
+			(selection &&
+				before.selection &&
+				selection.start === before.selection.start &&
+				selection.end === before.selection.end &&
+				selection.direction === before.selection.direction);
+		if (
+			!changed &&
+			sameSelection &&
+			next.focused === before.focused &&
+			next.composing === before.composing &&
+			next.locked === before.locked &&
+			next.restorations === before.restorations
+		)
+			return s;
+		return {
+			...s,
+			composerDrafts: {
+				...s.composerDrafts,
+				[key]: {
+					...next,
+					...(selection !== next.selection ? { selection } : {}),
+					revision: before.revision + Number(changed),
+				},
+			},
+		};
+	});
+}
+
+/** A failed start can arrive during newer typing; keep its draft until the current composition ends. */
+export function queueComposerRestoration(
+	key: string,
+	failed: Pick<experimental_ComposerDraft, "text" | "images">,
+): void {
+	setComposerDraft(key, (d) => ({ ...d, restorations: [...(d.restorations ?? []), failed] }));
+}
+
+/** Restore rejected input before newer text without overwriting it or losing a retained selection. */
+export function applyComposerRestorations(key: string): boolean {
+	const before = composerDraftOf(state, key);
+	if (before.composing || before.locked || !before.restorations?.length) return false;
+	const failed = before.restorations;
+	setComposerDraft(key, (d) => {
+		const texts = failed.map((value) => value.text).filter((value) => value.length > 0);
+		const prefix = texts.length ? texts.join("\n\n") + (d.text ? "\n\n" : "") : "";
+		return {
+			...d,
+			text: prefix + d.text,
+			images: [...new Set([...failed.flatMap((value) => value.images), ...d.images])],
+			selection: d.selection
+				? { ...d.selection, start: d.selection.start + prefix.length, end: d.selection.end + prefix.length }
+				: undefined,
+			restorations: undefined,
+		};
+	});
+	return true;
+}
 
 const NO_PROJECTS: DesktopState["projects"] = [];
 /** Selectors must return stable values: a fresh `[]` per read re-renders forever. */
@@ -381,11 +470,7 @@ function updateThread(id: string, fn: (view: ThreadView) => ThreadView): void {
 
 let toastId = 0;
 /** A note over the window: an error, a confirmation ("Committed …"), or anything else. */
-export interface Toast {
-	id: number;
-	text: string;
-	kind: "error" | "success" | "info";
-}
+export type Toast = experimental_Toast;
 
 export function toast(text: string, kind: Toast["kind"] = "info"): void {
 	const id = ++toastId;
@@ -945,9 +1030,11 @@ export async function startThread(
 	},
 	images?: ImageInput[],
 ): Promise<void> {
+	const origin = state.view;
 	const { thread, warnings, ui } = await client.request("thread/start", { cwd, ...options });
 	for (const warning of warnings) toast(warning.message);
-	navigate({ kind: "thread", id: thread.id });
+	// The admitted prompt still runs, but its delayed result must not replace a newer view.
+	if (state.view === origin) navigate({ kind: "thread", id: thread.id });
 	set((s) => ({
 		...s,
 		held: {
@@ -1086,15 +1173,19 @@ export function dismissPending(threadId: string, clientMessageId: string): void 
 	updateThread(threadId, (v) => ({ ...v, pending: v.pending.filter((p) => p.clientMessageId !== clientMessageId) }));
 }
 
-export function answerApproval(threadId: string, approval: Approval, result: ApprovalResult): void {
+export function answerApproval(threadId: string, approval: Approval, result: ApprovalResult): boolean {
+	if (state.held[threadId]?.requests[0] !== approval || approval.params.threadId !== threadId) return false;
 	client.respond<"item/toolCall/requestApproval">(approval.id, result);
 	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== approval.id) }));
+	return true;
 }
 
 /** Answer a dialog: `value` for a select, input or editor, `confirmed` for a confirm, nothing to cancel. */
-export function answerDialog(threadId: string, dialog: Dialog, result: ServerRequestResult<"ui/dialog">): void {
+export function answerDialog(threadId: string, dialog: Dialog, result: ServerRequestResult<"ui/dialog">): boolean {
+	if (state.held[threadId]?.requests[0] !== dialog || dialog.params.threadId !== threadId) return false;
 	client.respond<"ui/dialog">(dialog.id, result);
 	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== dialog.id) }));
+	return true;
 }
 
 /** Answer ask_user's questions: each by its id, skipped ones left out; `{}` dismisses them and stops the turn. */
@@ -1102,9 +1193,11 @@ export function answerQuestions(
 	threadId: string,
 	request: UserInput,
 	result: ServerRequestResult<"item/toolCall/requestUserInput">,
-): void {
+): boolean {
+	if (state.held[threadId]?.requests[0] !== request || request.params.threadId !== threadId) return false;
 	client.respond<"item/toolCall/requestUserInput">(request.id, result);
 	updateThread(threadId, (v) => ({ ...v, requests: v.requests.filter((r) => r.id !== request.id) }));
+	return true;
 }
 
 export async function updateSettings(
@@ -1119,15 +1212,16 @@ export async function updateSettings(
 	}
 }
 
-export async function archive(threadId: string): Promise<void> {
+export async function archive(threadId: string): Promise<boolean> {
 	try {
 		await stopAndArchive(threadId);
 	} catch (e) {
 		// Refused: the thread stays open where the user is.
 		toast(errorText(e), "error");
-		return;
+		return false;
 	}
 	if (state.view.kind === "thread" && state.view.id === threadId) showNew();
+	return true;
 }
 
 /** Archive a thread, stopping it first if it runs (the server archives only idle threads). */
@@ -1184,8 +1278,14 @@ export function copyLastCodeBlock(threadId: string): void {
 	void copyText(code).then((ok) => ok && toast("Copied the code block", "success"));
 }
 
-export async function rename(threadId: string, name: string): Promise<void> {
-	await client.request("thread/name/set", { threadId, name }).catch((e: unknown) => toast(errorText(e), "error"));
+export async function rename(threadId: string, name: string): Promise<boolean> {
+	try {
+		await client.request("thread/name/set", { threadId, name });
+		return true;
+	} catch (error) {
+		toast(errorText(error), "error");
+		return false;
+	}
 }
 
 export async function compact(threadId: string): Promise<void> {
@@ -1570,11 +1670,33 @@ const tabKey = (path: string) => {
 	return window.knightcode.platform === "win32" ? slashes.toLowerCase() : slashes;
 };
 
+export function selectPanelContribution(threadId: string, selection?: State["panelContributions"][string]): void {
+	set((s) => ({
+		...s,
+		panelContributions: {
+			...s.panelContributions,
+			[threadId]:
+				selection && selection.id === s.panelContributions[threadId]?.id && !("file" in selection)
+					? s.panelContributions[threadId]
+					: selection,
+		},
+		...(selection ? { panel: { ...s.panel, open: true } } : {}),
+	}));
+}
+
 function updateTabs(threadId: string, fn: (tabs: ThreadTabs) => ThreadTabs, open = false): void {
 	set((s) => ({
 		...s,
 		tabs: { ...s.tabs, [threadId]: fn(s.tabs[threadId] ?? NO_TABS) },
-		...(open ? { panel: { ...s.panel, open: true } } : {}),
+		...(open
+			? {
+					panel: { ...s.panel, open: true },
+					panelContributions: {
+						...s.panelContributions,
+						[threadId]: undefined,
+					},
+				}
+			: {}),
 	}));
 }
 
@@ -1669,6 +1791,7 @@ export function openFileInView(path: string, line?: number): void {
 }
 
 export function activateTab(threadId: string, index: number): void {
+	if (state.panelContributions[threadId]) selectPanelContribution(threadId);
 	const used = ++tabClock;
 	updateTabs(threadId, ({ tabs }) => ({
 		tabs: tabs.map((t, i) => (i === index && t.kind === "file" ? { ...t, used } : t)),
@@ -1824,6 +1947,8 @@ const saving = new Map<string, Promise<unknown>>();
 export async function saveFileDraft(
 	threadId: string,
 	path: string,
+	admitted = () => true,
+	expectedCwd?: string,
 ): Promise<{ text: string; mtimeMs: number } | undefined> {
 	const key = `${threadId}\0${tabKey(path)}`;
 	while (saving.has(key)) await saving.get(key);
@@ -1832,8 +1957,14 @@ export async function saveFileDraft(
 		return tab?.kind === "file" ? tab.draft : undefined;
 	};
 	const draft = draftOf();
-	if (!draft) return undefined;
-	const write = client.request("file/write", { threadId, path, text: draft.text, expectedMtimeMs: draft.mtimeMs });
+	if (!draft || !admitted()) return undefined;
+	const write = client.request("file/write", {
+		threadId,
+		path,
+		text: draft.text,
+		expectedMtimeMs: draft.mtimeMs,
+		expectedCwd,
+	});
 	saving.set(
 		key,
 		write.catch(() => {}),

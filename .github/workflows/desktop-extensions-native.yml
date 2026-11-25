@@ -1,0 +1,130 @@
+name: desktop-extensions-native
+
+# Native desktop extension acceptance on macOS and Linux (S9 of the desktop extension API plan). The CI desktop
+# job already runs the whole e2e suite on Windows and Ubuntu; this workflow adds macOS and runs the extension cases
+# and screenshot parity on each native platform. Parity baselines are per platform
+# (apps/desktop/test/parity/baselines/<platform>/), and only win32 has recorded ones, so a first run must record:
+# start it with `record` checked, inspect the uploaded images, then commit them in a separate change and run again
+# without `record`. Run by hand only: it takes about an hour per platform.
+
+on:
+  workflow_dispatch:
+    inputs:
+      record:
+        description: Record missing parity baselines for this platform instead of comparing (first run only)
+        type: boolean
+        default: false
+
+concurrency:
+  group: desktop-extensions-native-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  native:
+    name: native (${{ matrix.platform }}-${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: darwin
+            arch: arm64
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.3
+
+      # Parity's @ suggestions need fd; xvfb gives Electron a display on Linux.
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fd-find xvfb
+          sudo ln -s "$(which fdfind)" /usr/local/bin/fd
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fd
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Hydrate model data
+        run: bun run hydrate:model-data
+
+      - name: Check types
+        working-directory: apps/desktop
+        run: bun run check-types
+
+      - name: Desktop unit tests
+        working-directory: apps/desktop
+        run: bun run test
+
+      - name: Package
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          bun run apps/desktop/scripts/stage-server.ts --platform="$PLATFORM" --arch="$ARCH"
+          cd apps/desktop && bun run package
+
+      # Extension acceptance through the real loader. The packaged Windows-only proofs (backend-extensions,
+      # extension-authoring) skip themselves here; their native layouts are not covered yet.
+      - name: Extension end-to-end tests
+        working-directory: apps/desktop
+        run: |
+          # Both globs match some files (extension-*.e2e.ts and *-extensions.e2e.ts); list each once.
+          files=()
+          while IFS= read -r file; do files+=("$file"); done < <(printf '%s\n' test/e2e/*extensions*.e2e.ts test/e2e/extension-*.e2e.ts | sort -u)
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a bun x playwright test --retries=0 "${files[@]}"
+          else
+            bun x playwright test --retries=0 "${files[@]}"
+          fi
+
+      - name: Screenshot parity
+        working-directory: apps/desktop
+        env:
+          RECORD: ${{ inputs.record }}
+        run: |
+          args=()
+          if [ "$RECORD" = "true" ]; then args=(--update-snapshots=missing); fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a bun run test:parity "${args[@]}"
+          else
+            bun run test:parity "${args[@]}"
+          fi
+
+      - name: Upload recorded baselines
+        if: inputs.record
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: parity-baselines-${{ matrix.platform }}
+          path: apps/desktop/test/parity/baselines/${{ matrix.platform }}/
+          retention-days: 14
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-extensions-native-${{ matrix.platform }}
+          path: apps/desktop/test-results/
+          retention-days: 7
