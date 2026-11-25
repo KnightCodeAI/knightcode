@@ -256,6 +256,8 @@ The account and gateway IDs can come from the process environment or the credent
 
 `CLOUDFLARE_API_KEY` authenticates KnightCode to the gateway. Upstream access can use Cloudflare unified billing, credentials stored in the gateway, or an `Authorization` header configured for the provider in `models.json`.
 
+When no model is selected, KnightCode prefers DeepSeek V4.1 Flash for both AI Gateway and Workers AI.
+
 ### Cloudflare Workers AI
 
 Workers AI requires a token and account ID:
