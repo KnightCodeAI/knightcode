@@ -1,4 +1,4 @@
-import { knightCodeClassifierApi } from "../api/knightcode-classifier.lazy.ts";
+import { knightCodeDecisionApi } from "../api/knightcode-decision.lazy.ts";
 import { knightCodeMessagesApi } from "../api/knightcode-messages.lazy.ts";
 import { envApiKeyAuth, lazyOAuth } from "../auth/helpers.ts";
 import { loadRadiusOAuth } from "../auth/oauth/load.ts";
@@ -20,7 +20,7 @@ export interface RadiusProviderOptions {
 	gateway?: string;
 }
 
-type RadiusModel = Model<"knightcode-messages"> | ClassifierModel<"knightcode-classifier">;
+type RadiusModel = Model<"knightcode-messages"> | ClassifierModel<"knightcode-decision">;
 
 /** Radius gateway provider with a persisted, dynamically refreshed catalog. */
 export function radiusProvider(options: RadiusProviderOptions = {}): Provider<"knightcode-messages"> {
@@ -35,7 +35,7 @@ export function radiusProvider(options: RadiusProviderOptions = {}): Provider<"k
 	// the shipped baseline instead of overlaying it. The baseline only covers the time before any catalog exists.
 	let dynamicModels: RadiusModel[] | undefined;
 	const streams = knightCodeMessagesApi();
-	const classifiers = knightCodeClassifierApi();
+	const classifiers = knightCodeDecisionApi();
 
 	return {
 		id,
@@ -52,10 +52,19 @@ export function radiusProvider(options: RadiusProviderOptions = {}): Provider<"k
 		refreshModels: async (context) => {
 			const stored = context.stored;
 			if (stored) {
-				const restored = stored.models.filter(
-					(model): model is RadiusModel =>
-						model.provider === id && (isModelType(model, "chat") || isModelType(model, "classifier")),
-				);
+				const restored = stored.models.flatMap((model): RadiusModel[] => {
+					if (model.provider !== id) return [];
+					if (isModelType(model, "chat") && model.api === "knightcode-messages") {
+						return [{ ...model, api: "knightcode-messages", compat: undefined }];
+					}
+					if (isModelType(model, "classifier")) {
+						// Catalogs saved before the route change still contain the old adapter ID.
+						if (model.api === "knightcode-classifier" || model.api === "knightcode-decision") {
+							return [{ ...model, api: "knightcode-decision", compat: undefined }];
+						}
+					}
+					return [];
+				});
 				if (
 					!(await context.publish({
 						update: () => {

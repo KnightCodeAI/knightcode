@@ -94,6 +94,46 @@ describe("Radius provider catalogs", () => {
 		expect(models.getModels("radius").map((model) => model.id)).toEqual(["balanced", "organization-only"]);
 	});
 
+	it("uses the decision adapter for a cached Radius classifier without refreshing the catalog", async () => {
+		const store = new InMemoryModelsStore();
+		await store.write("radius", {
+			models: [
+				{
+					type: "classifier",
+					id: "jev-latest",
+					name: "Jev Latest",
+					api: "knightcode-classifier",
+					provider: "radius",
+					baseUrl: "https://radius.example/v1",
+					input: ["text"],
+					cost: { input: 0.1, output: 0.2, cacheRead: 0, cacheWrite: 0 },
+					contextWindow: 262144,
+				},
+			],
+			checkedAt: Date.now(),
+		});
+		const models = createModels({ modelsStore: store });
+		models.setProvider(radiusProvider());
+		const fetchMock = vi
+			.spyOn(globalThis, "fetch")
+			.mockResolvedValue(Response.json({ answers: { approved: { type: "bool", probability: 0.91 } } }));
+		await models.refresh({ providers: ["radius"], allowNetwork: false });
+		const classifier = models.getModelOfType("classifier", "radius", "jev-latest")!;
+		expect(classifier.api).toBe("knightcode-decision");
+		const result = await models.classify(
+			classifier,
+			{
+				state: {},
+				questions: {
+					approved: { type: "bool", instructions: "Approved?", criteria: { true: "yes", false: "no" } },
+				},
+			},
+			{ apiKey: "radius-key" },
+		);
+		expect(result.stopReason).toBe("stop");
+		expect(fetchMock).toHaveBeenCalledExactlyOnceWith(new URL("https://radius.example/v1/decision"), expect.anything());
+	});
+
 	it("exposes no models when the organization disabled all of them", async () => {
 		vi.spyOn(globalThis, "fetch").mockResolvedValue(
 			new Response(JSON.stringify({ baseUrl: "https://radius.example/v1", models: [] }), {
@@ -133,7 +173,7 @@ describe("Radius provider catalogs", () => {
 					headers: { "content-type": "application/json" },
 				});
 			}
-			if (url === "https://radius.example/v1/classify") {
+			if (url === "https://radius.example/v1/decision") {
 				return new Response(
 					JSON.stringify({
 						answers: { approved: { type: "bool", probability: 0.91 } },
@@ -164,7 +204,7 @@ describe("Radius provider catalogs", () => {
 		const classifier = models.getModelOfType("classifier", "radius", "jev-latest");
 		expect(classifier).toMatchObject({
 			type: "classifier",
-			api: "knightcode-classifier",
+			api: "knightcode-decision",
 			provider: "radius",
 			baseUrl: "https://radius.example/v1",
 			contextWindow: 262144,
