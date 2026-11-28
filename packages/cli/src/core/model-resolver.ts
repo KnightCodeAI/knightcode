@@ -15,7 +15,7 @@ export const defaultModelPerProvider: Partial<Record<KnownProvider, string>> = {
 	// fallback priority in findInitialModel step 4.
 	openrouter: "moonshotai/kimi-k2.7-code",
 	"amazon-bedrock": "us.anthropic.claude-opus-5-5",
-	"ant-ling": "Ring-2.6-1T",
+	"ant-ling": "Ling-3.1-flash",
 	anthropic: "claude-opus-5-5",
 	openai: "gpt-6.2-sol",
 	azure: "gpt-6.2-sol",

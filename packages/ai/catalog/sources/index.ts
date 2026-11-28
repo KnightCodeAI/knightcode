@@ -1,9 +1,11 @@
 import {
 	DEFAULT_RADIUS_GATEWAY,
+	getRadiusClassifierModelsFromConfig,
+	getRadiusImageModelsFromConfig,
 	getRadiusModelsFromConfig,
 	loadRadiusGatewayConfig,
 } from "../../src/providers/radius-config.ts";
-import type { Model } from "../../src/types.ts";
+import type { ClassifierModel, ImageModel, Model } from "../../src/types.ts";
 import { type AgentRouterRates, fetchAgentRouterRates } from "./agentrouter.ts";
 import {
 	MODELS_DEV_DECISIONS_URL,
@@ -16,6 +18,12 @@ import { type AiGatewayCatalog, fetchAiGatewayCatalog } from "./vercel-ai-gatewa
 
 export const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
+export interface RadiusCatalog {
+	chat: Model<"knightcode-messages">[];
+	images: ImageModel<"knightcode-image">[];
+	classifiers: ClassifierModel<"knightcode-decision">[];
+}
+
 /** Everything fetched from upstream before the catalog is built. */
 export interface CatalogSources {
 	modelsDev: ModelsDevV2Catalog;
@@ -24,7 +32,7 @@ export interface CatalogSources {
 	aiGateway: AiGatewayCatalog;
 	/** Live NVIDIA NIM ids, keyed by both the raw and the normalized id. */
 	nvidiaModelIds: Map<string, string>;
-	radius: Model<"knightcode-messages">[];
+	radius: RadiusCatalog;
 	/** AgentRouter's rate table, or why it could not be read: its provider then keeps the committed catalog. */
 	agentRouter: { rates: AgentRouterRates } | { failure: string };
 }
@@ -49,11 +57,15 @@ async function fetchNvidiaModelIds(): Promise<Map<string, string>> {
 	return modelIds;
 }
 
-async function fetchRadiusModels(): Promise<Model<"knightcode-messages">[]> {
+export async function fetchRadiusCatalog(): Promise<RadiusCatalog> {
 	const config = await loadRadiusGatewayConfig(DEFAULT_RADIUS_GATEWAY);
-	const models = getRadiusModelsFromConfig("radius", config);
-	if (models.length === 0) throw new Error("Radius API returned no models");
-	return models;
+	const chat = getRadiusModelsFromConfig("radius", config);
+	if (chat.length === 0) throw new Error("Radius API returned no models");
+	return {
+		chat,
+		images: getRadiusImageModelsFromConfig("radius", config),
+		classifiers: getRadiusClassifierModelsFromConfig("radius", config),
+	};
 }
 
 /**
@@ -92,7 +104,11 @@ export async function loadCatalogSources(strict: boolean): Promise<CatalogSource
 	});
 	if (strict && openRouter.images.length === 0) throw new Error("OpenRouter API returned no usable image models");
 	const aiGateway = await load("Vercel AI Gateway models", fetchAiGatewayCatalog, { chat: [], classifiers: [] });
-	const radius = await load("Radius models", fetchRadiusModels, []);
+	const radius = await load("Radius models", fetchRadiusCatalog, {
+		chat: [],
+		images: [],
+		classifiers: [],
+	});
 	// Not through `load`: AgentRouter answers datacenter IPs with an interstitial, so even a strict run keeps going
 	// and its provider falls back to the committed catalog.
 	console.log("Fetching AgentRouter rates...");

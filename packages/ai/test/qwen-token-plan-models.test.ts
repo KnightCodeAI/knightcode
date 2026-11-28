@@ -81,10 +81,8 @@ const INDIVIDUAL_TEXT_MODELS = [
 	"qwen3.7-plus",
 	"qwen3.8-flash",
 	"qwen3.8-max",
+	"qwen4-max",
 ];
-
-// The preview is allowed, but the live catalog does not always list it.
-const INDIVIDUAL_PREVIEW_MODEL = "qwen4-max-preview";
 
 const IMAGE_MODELS = ["qwen-image-2.0", "qwen-image-2.0-pro", "wan2.7-image", "wan2.7-image-pro"];
 
@@ -112,12 +110,9 @@ const QWEN_THINKING_MODEL_CASES: QwenTokenPlanModelCase[] = [
 	...(["qwen-token-plan", "qwen-token-plan-cn"] as const).flatMap((provider) =>
 		QWEN_THINKING_MODELS.map((modelId) => ({ provider, modelId })),
 	),
-	...(["qwen-token-plan-individual", "qwen-token-plan-individual-cn"] as const).flatMap((provider) => [
-		...INDIVIDUAL_TEXT_MODELS.map((modelId) => ({ provider, modelId })),
-		...getModels(provider)
-			.filter((model) => model.id === INDIVIDUAL_PREVIEW_MODEL)
-			.map(({ id: modelId }) => ({ provider, modelId })),
-	]),
+	...(["qwen-token-plan-individual", "qwen-token-plan-individual-cn"] as const).flatMap((provider) =>
+		INDIVIDUAL_TEXT_MODELS.map((modelId) => ({ provider, modelId })),
+	),
 ];
 
 const QWEN_REASONING_EFFORT_MODELS = ["deepseek-v4-pro", "glm-5", "glm-5.1", "glm-5.2"] as const;
@@ -144,11 +139,10 @@ const QWEN38_MODEL_CASES: QwenTokenPlanModelCase[] = (
 describe("Qwen Token Plan models", () => {
 	// #9021
 	it.each(["qwen-token-plan-individual", "qwen-token-plan-individual-cn"] as const)(
-		"exposes the documented Individual text models on %s without requiring the preview",
+		"exposes exactly the documented Individual text models on %s",
 		(provider) => {
 			const modelIds = getModels(provider)
 				.map((model) => model.id)
-				.filter((id) => id !== INDIVIDUAL_PREVIEW_MODEL)
 				.sort();
 
 			expect(modelIds).toEqual([...INDIVIDUAL_TEXT_MODELS].sort());

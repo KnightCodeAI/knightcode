@@ -1,5 +1,5 @@
 import type { OAuthCredential } from "../auth/types.ts";
-import type { ClassifierModel, Model, ThinkingLevelMap } from "../types.ts";
+import type { ClassifierModel, ImageModel, Model, ThinkingLevelMap } from "../types.ts";
 import { ownedSlice } from "../utils/text.ts";
 
 // Radius is a third-party hosted service; its hostname is not ours to rebrand.
@@ -24,10 +24,19 @@ export type RadiusGatewayClassifierModel = {
 	contextWindow: number;
 };
 
+export type RadiusGatewayImageModel = {
+	id: string;
+	name: string;
+	input: ("text" | "image")[];
+	output: ("text" | "image")[];
+	cost: ImageModel<"knightcode-image">["cost"];
+};
+
 export type RadiusGatewayConfig = {
 	baseUrl: string;
 	models: RadiusGatewayModel[];
-	classifiers?: RadiusGatewayClassifierModel[];
+	decision?: RadiusGatewayClassifierModel[];
+	images?: RadiusGatewayImageModel[];
 };
 
 export type RadiusOAuthCredential = OAuthCredential & {
@@ -68,6 +77,25 @@ function isRadiusGatewayClassifierModel(value: unknown): value is RadiusGatewayC
 	);
 }
 
+function sanitizeModalities(values: readonly unknown[]): ("text" | "image")[] {
+	return values.filter((value): value is "text" | "image" => value === "text" || value === "image");
+}
+
+function isRadiusGatewayImageModel(value: unknown): value is RadiusGatewayImageModel {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const model = value as Partial<RadiusGatewayImageModel>;
+	return (
+		typeof model.id === "string" &&
+		typeof model.name === "string" &&
+		Array.isArray(model.input) &&
+		Array.isArray(model.output) &&
+		model.output.includes("image") &&
+		typeof model.cost === "object" &&
+		model.cost !== null &&
+		!Array.isArray(model.cost)
+	);
+}
+
 function isRadiusGatewayModel(value: unknown): value is RadiusGatewayModel {
 	if (!isRadiusGatewayClassifierModel(value)) return false;
 	const model = value as Partial<RadiusGatewayModel>;
@@ -76,7 +104,7 @@ function isRadiusGatewayModel(value: unknown): value is RadiusGatewayModel {
 
 function sanitizeRadiusGatewayConfig(config: unknown): RadiusGatewayConfig | undefined {
 	if (typeof config !== "object" || config === null || Array.isArray(config)) return undefined;
-	const { baseUrl, models, classifiers } = config as Partial<RadiusGatewayConfig>;
+	const { baseUrl, models, decision, images } = config as Partial<RadiusGatewayConfig>;
 	if (typeof baseUrl !== "string" || !Array.isArray(models)) return undefined;
 	// An empty list is a real catalog: the organization disabled every model, and refresh replaces the
 	// shipped baseline with it. A config that contains an invalid entry is still rejected whole, so a
@@ -85,8 +113,17 @@ function sanitizeRadiusGatewayConfig(config: unknown): RadiusGatewayConfig | und
 	return {
 		baseUrl,
 		models: models.map((model) => ({ ...model })),
-		...(Array.isArray(classifiers)
-			? { classifiers: classifiers.filter(isRadiusGatewayClassifierModel).map((model) => ({ ...model })) }
+		...(Array.isArray(decision)
+			? { decision: decision.filter(isRadiusGatewayClassifierModel).map((model) => ({ ...model })) }
+			: {}),
+		...(Array.isArray(images)
+			? {
+					images: images.filter(isRadiusGatewayImageModel).map((model) => ({
+						...model,
+						input: sanitizeModalities(model.input),
+						output: sanitizeModalities(model.output),
+					})),
+				}
 			: {}),
 	};
 }
@@ -112,19 +149,40 @@ export function getRadiusModelsFromConfig(
 	}));
 }
 
+export function getRadiusClassifierModelsFromConfig(
+	providerId: string,
+	config: RadiusGatewayConfig,
+): ClassifierModel<"knightcode-decision">[] {
+	return (config.decision ?? []).map((model) => ({
+		...model,
+		type: "classifier",
+		api: "knightcode-decision",
+		provider: providerId,
+		baseUrl: config.baseUrl,
+	}));
+}
+
+export function getRadiusImageModelsFromConfig(
+	providerId: string,
+	config: RadiusGatewayConfig,
+): ImageModel<"knightcode-image">[] {
+	return (config.images ?? []).map((model) => ({
+		...model,
+		type: "image",
+		api: "knightcode-image",
+		provider: providerId,
+		baseUrl: config.baseUrl,
+	}));
+}
+
 export function getRadiusAllModelsFromConfig(
 	providerId: string,
 	config: RadiusGatewayConfig,
-): (Model<"knightcode-messages"> | ClassifierModel<"knightcode-decision">)[] {
+): (Model<"knightcode-messages"> | ClassifierModel<"knightcode-decision"> | ImageModel<"knightcode-image">)[] {
 	return [
 		...getRadiusModelsFromConfig(providerId, config),
-		...(config.classifiers ?? []).map((model): ClassifierModel<"knightcode-decision"> => ({
-			...model,
-			type: "classifier",
-			api: "knightcode-decision",
-			provider: providerId,
-			baseUrl: config.baseUrl,
-		})),
+		...getRadiusClassifierModelsFromConfig(providerId, config),
+		...getRadiusImageModelsFromConfig(providerId, config),
 	];
 }
 
