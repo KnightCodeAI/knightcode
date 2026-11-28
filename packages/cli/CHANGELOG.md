@@ -1,5 +1,47 @@
 # @knightcodeai/cli
 
+## 0.26.0
+
+### Added
+
+- Added `--agent-dir <dir>` to use another config directory for one run. It takes precedence over `KNIGHTCODE_CODING_AGENT_DIR`, works with subcommands, is passed to processes KnightCode starts, and appears in the resume command printed on exit.
+
+- Added Ant Ling models from models.dev. The `ant-ling` thinking format still works as a deprecated alias of `deepseek`.
+
+- Added aspect ratio and size options for image generation. `models.generateImages(model, { input }, { aspectRatio, size })` in `codemode` passes them to OpenRouter, and option keys other than these two throw instead of being dropped.
+
+- Added session resume for terminals that support the Program Resume Protocol (OSC 7577). KnightCode tells the terminal the command that brings the session back, including `--agent-dir`, `--session-dir` and the restriction and resource flags it was started with, and removes `OSC7577_TOKEN` from every process it starts.
+
+- Added Radius image models. Image models from the organization's Radius config are listed by `models.getAvailableOfType("image")`, are kept for offline use, and are served through the new `knightcode-image` API.
+
+- Added terminal setup instructions for resetting a terminal after KnightCode was killed and left key, mouse or paste reporting on.
+
+### Fixed
+
+- Fixed `!!` command output counting toward the context token estimate even though it is never sent to the model.
+
+- Fixed Amazon Bedrock models that take a flat `reasoning_effort` not receiving the effort models.dev lists for them, and Kimi K3 on Bedrock failing when earlier reasoning was sent back.
+
+- Fixed `codemode` results not saying when a nested tool returned truncated text. The result now warns which calls were cut, with their full-output notice.
+
+- Fixed GitHub Copilot losing the prompt cache when the thinking level or the tool list changed mid-conversation, and Copilot reasoning not being sent back to Chat Completions models that need it.
+
+- Fixed the follow-up key (Alt+Enter) submitting the typed text instead of the highlighted autocomplete suggestion. It now applies the suggestion first, as Enter does.
+
+- Fixed exported HTML sessions dropping `$` signs from messages and code.
+
+- Fixed image output being priced at the text rate. Usage now reports image output tokens separately, and models with an image output price charge those tokens at that rate.
+
+- Fixed Kitty images in regular mode: image IDs stay within the signed 32-bit range some terminals require, and a new image is appended without redrawing the whole screen.
+
+- Fixed OpenRouter image requests that failed with HTTP 200 being reported as an empty success. A failing `finish_reason`, a choice error or a reply without choices now returns an error result, and OpenRouter's reported cost is used when it has one.
+
+- Fixed models that providers retired still being referenced: Qwen Token Plan Individual now lists Qwen4 Max instead of the retired preview, and Together models removed from the catalog are gone.
+
+- Fixed Ctrl+Break on Windows ending KnightCode without restoring the terminal. It now shuts down like SIGTERM and leaves the alternate screen, mouse reporting and keyboard modes.
+
+- Fixed WSL not being detected when the WSL environment variables are missing, which broke clipboard access and other WSL-specific paths.
+
 ## 0.25.0
 
 ### Added
