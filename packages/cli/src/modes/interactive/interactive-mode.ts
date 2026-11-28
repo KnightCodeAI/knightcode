@@ -27,6 +27,7 @@ import type {
 	MarkdownTheme,
 	OverlayHandle,
 	OverlayOptions,
+	ProgramResumeCommand,
 	SlashCommand,
 	TuiMainScreenRenderState,
 } from "@knightcode/tui";
@@ -65,6 +66,7 @@ import {
 	getConfiguredSelfUpdateArgv,
 	getDebugLogPath,
 	getDocsPath,
+	usesDefaultAgentDir,
 	VERSION,
 } from "../../config.ts";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
@@ -147,7 +149,7 @@ import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipb
 import { flushStdout } from "../../utils/flush-stdout.ts";
 import { parseGitUrl } from "../../utils/git.ts";
 import { ensurePngTranscoder } from "../../utils/image-convert.ts";
-import { getCwdRelativePath, shortenHomePath } from "../../utils/paths.ts";
+import { getCwdRelativePath, pathsEqual, resolvePath, shortenHomePath } from "../../utils/paths.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { loadAllHighlightLanguages } from "../../utils/syntax-highlight.ts";
 import { stripBom } from "../../utils/text.ts";
@@ -209,6 +211,7 @@ import { UserMessageSelectorComponent } from "./components/user-message-selector
 import { editInExternalEditor } from "./external-editor.ts";
 import { refreshModelCatalogs } from "./model-catalog-refresh.ts";
 import { getModelSearchText } from "./model-search.ts";
+import { ProgramResumeReporter } from "./program-resume-reporter.ts";
 import { type BlockedStatus, dialogBlockedStatus, ProgramStatusReporter } from "./program-status-reporter.ts";
 import { shareSession } from "./session-share.ts";
 import { SPINNER_VERBS } from "./spinner-verbs.ts";
@@ -356,19 +359,46 @@ function quoteIfNeeded(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-export function formatResumeCommand(sessionManager: SessionManager): string | undefined {
-	if (!process.stdout.isTTY) return undefined;
+/** Arguments that open the session in a new process, or undefined while the session has no file to open. */
+function getResumeArgs(sessionManager: SessionManager): string[] | undefined {
 	if (!sessionManager.isPersisted()) return undefined;
 
 	const sessionFile = sessionManager.getSessionFile();
 	if (!sessionFile || !fs.existsSync(sessionFile)) return undefined;
 
 	const args = [APP_NAME];
+	if (!usesDefaultAgentDir()) {
+		args.push("--agent-dir", resolvePath(getAgentDir()));
+	}
 	if (!sessionManager.usesDefaultSessionDir()) {
-		args.push("--session-dir", quoteIfNeeded(sessionManager.getSessionDir()));
+		args.push("--session-dir", sessionManager.getSessionDir());
 	}
 	args.push("--session", sessionManager.getSessionId());
-	return args.join(" ");
+	return args;
+}
+
+/** The resume command as shell text for the user to copy. */
+export function formatResumeCommand(sessionManager: SessionManager): string | undefined {
+	if (!process.stdout.isTTY) return undefined;
+	return getResumeArgs(sessionManager)?.map(quoteIfNeeded).join(" ");
+}
+
+/**
+ * The command a terminal runs to bring this session back (OSC 7577): the command printed on exit plus the
+ * restriction and resource flags KnightCode was started with, run in the session's directory. Undefined, so the terminal
+ * clears it, when there is no session file, or when flags were typed in another directory than the session's:
+ * a relative path in them would point elsewhere, and a session without its restrictions must not come back.
+ */
+export function getProgramResumeCommand(
+	sessionManager: SessionManager,
+	resumeFlags: readonly string[],
+): ProgramResumeCommand | undefined {
+	const argv = getResumeArgs(sessionManager);
+	if (!argv) return undefined;
+	const cwd = sessionManager.getCwd();
+	// KnightCode never changes its working directory, so it is still the one the flags were typed in.
+	if (resumeFlags.length > 0 && !pathsEqual(cwd, process.cwd())) return undefined;
+	return { argv: [...argv, ...resumeFlags], cwd };
 }
 
 function hasDefaultModelProvider(providerId: string): providerId is keyof typeof defaultModelPerProvider {
@@ -464,6 +494,13 @@ export interface InteractiveModeOptions {
 	initialThemeSetting?: string;
 	/** Terminal implementation. Defaults to the current process terminal. */
 	terminal?: Terminal;
+	/**
+	 * Token the terminal set in `OSC7577_TOKEN`, taken out of the environment before any child process starts.
+	 * When set, KnightCode tells the terminal how to resume the session after the terminal restarts.
+	 */
+	programResumeToken?: string;
+	/** Restriction and resource flags as typed (`Args.resumeFlags`), repeated in the OSC 7577 resume command. */
+	programResumeFlags?: readonly string[];
 }
 
 interface ExtensionChangelogUpdate {
@@ -632,6 +669,9 @@ export class InteractiveMode {
 		() => this.sessionManager.getSessionName(),
 	);
 
+	/** Reports how to resume the session to terminals that support OSC 7577. Undefined without a token. */
+	private readonly programResume: ProgramResumeReporter | undefined;
+
 	/** The `/bug` hint is shown at most once per session so error output stays readable. */
 	private bugReportHintShown = false;
 	private installChangeWarningShown = false;
@@ -701,6 +741,13 @@ export class InteractiveMode {
 		const tuiMode = options.tuiMode ?? this.settingsManager.getTuiMode();
 		this.options = { ...options, tuiMode };
 		this.autoTrustOnReloadCwd = options.autoTrustOnReloadCwd;
+		if (options.programResumeToken) {
+			this.programResume = new ProgramResumeReporter(
+				options.programResumeToken,
+				() => this.ui.terminal,
+				() => getProgramResumeCommand(this.sessionManager, options.programResumeFlags ?? []),
+			);
+		}
 		this.runtimeHost.setBeforeSessionInvalidate(() => {
 			this.resetExtensionUI();
 		});
@@ -1121,6 +1168,7 @@ export class InteractiveMode {
 		this.ui.start();
 		this.isInitialized = true;
 		this.programStatus.report();
+		this.programResume?.report();
 		this.ensurePngTranscoder();
 
 		this.themeController.applyFromSettings();
@@ -2289,6 +2337,7 @@ export class InteractiveMode {
 		this.unsubscribe?.();
 		this.unsubscribe = undefined;
 		this.programStatus.reset();
+		this.programResume?.report();
 		this.applyRuntimeSettings();
 
 		if (options.renderBeforeBind) {
@@ -2369,7 +2418,7 @@ export class InteractiveMode {
 		this.bugReportHintShown = true;
 		this.chatContainer.addChild(
 			new ThemedText(
-				() => theme.fg("muted", `If this looks like a ${APP_NAME} bug, /bug sends a report to the developers.`),
+				() => theme.fg("muted", `If this looks like a ${APP_NAME} bug, use /bug to send a report to the developers.`),
 				this.outputPad,
 				0,
 			),
@@ -3634,6 +3683,9 @@ export class InteractiveMode {
 
 		this.footer.invalidate();
 		this.programStatus.handleEvent(event);
+		// The session file, and with it the resume command, appears when the first prompt is written, which
+		// happens after its message_end reaches listeners. The reply's message_start or the run's end sees it.
+		if (event.type === "message_start" || event.type === "agent_settled") this.programResume?.reportIfNone();
 
 		switch (event.type) {
 			case "agent_start":
@@ -4549,7 +4601,7 @@ export class InteractiveMode {
 		// dispatch and re-sends the signal if only its own listeners remain.
 
 		if (options?.fromSignal) {
-			// Signal-triggered shutdown (SIGTERM/SIGHUP). Emit extension cleanup
+			// Signal-triggered shutdown (SIGTERM/SIGHUP, SIGBREAK on Windows). Emit extension cleanup
 			// (session_shutdown) BEFORE touching the terminal. Extension teardown
 			// such as removing sockets does not write to the tty, so it must not be
 			// skipped if a later terminal-restore write fails on a dead or stalled
@@ -4572,6 +4624,8 @@ export class InteractiveMode {
 		// This prevents escape sequences from leaking to the parent shell over slow SSH.
 		this.themeController.disableAutoSync();
 		await this.ui.terminal.drainInput(1000);
+		// The user ended KnightCode, so the terminal must not bring it back. Signal shutdowns above keep the command.
+		this.programResume?.clear();
 
 		this.stop();
 		await this.runtimeHost.dispose();
@@ -4649,6 +4703,11 @@ export class InteractiveMode {
 		this.unregisterSignalHandlers();
 
 		const signals: NodeJS.Signals[] = ["SIGTERM", "SIGHUP"];
+		// Without a listener, a console Ctrl+Break ends the process without running any JavaScript,
+		// leaving the alternate screen, mouse reporting and keyboard modes on. Raw mode does
+		// not block it, and a console child calling GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT) on a
+		// process that is not a group leader sends it to every process in the console.
+		if (process.platform === "win32") signals.push("SIGBREAK");
 
 		for (const signal of signals) {
 			const handler = () => {
@@ -4713,6 +4772,7 @@ export class InteractiveMode {
 			clearInterval(suspendKeepAlive);
 			process.removeListener("SIGINT", ignoreSigint);
 			this.ui.start();
+			this.programResume?.reportAgain();
 			this.ui.requestRender(true);
 		});
 
