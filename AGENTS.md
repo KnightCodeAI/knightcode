@@ -53,6 +53,7 @@ change flags, settings, keybindings, providers, or the session format.
 - `.prettierignore` covers what must not be touched: generated model catalogs, test fixtures (several are deliberately malformed), Changesets-owned changelogs, and `apps/` (own config and toolchain). Don't format those by hand either.
 - No `any` unless absolutely necessary.
 - No runtime checks of values whose types TypeScript already guarantees (no `typeof`/`instanceof`/`Array.isArray`/shape guards on typed parameters, typed callback results or typed declarations). Validate only at decided trust boundaries (wire input, schema-checked arguments and params).
+- Never compare values by serializing them (`JSON.stringify`, canonical JSON, a joined text key): it allocates on every comparison, also when nothing changed. Compare by identity where the value is shared, else field by field (a set of names: same size and each name in the other). Where a text key is unavoidable (a `Map` key), build it once and keep it.
 - Inline single-line helpers that have only one call site.
 - Check `node_modules` for external API types; don't guess.
 - **No inline imports** (`await import()`, `import("pkg").Type`, dynamic type imports). Top-level imports only.
