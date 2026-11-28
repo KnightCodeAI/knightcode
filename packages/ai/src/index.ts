@@ -20,6 +20,11 @@ export type {
 	KnightCodeDecisionResponse,
 } from "./api/knightcode-decision.ts";
 export type {
+	KnightCodeImageOptions,
+	KnightCodeImageRequest,
+	KnightCodeImageResponse,
+} from "./api/knightcode-image.ts";
+export type {
 	KnightCodeMessagesEvent,
 	KnightCodeMessagesOptions,
 	KnightCodeMessagesRewriteImpact,

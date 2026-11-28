@@ -1122,7 +1122,7 @@ describe("ModelRegistry", () => {
 				openrouter: {
 					modelOverrides: {
 						"anthropic/claude-sonnet-4.5": {
-							cost: { input: 99 },
+							cost: { input: 99, imageOutput: 60 },
 						},
 					},
 				},
@@ -1134,6 +1134,7 @@ describe("ModelRegistry", () => {
 
 			// Input cost should be overridden
 			expect(sonnet?.cost.input).toBe(99);
+			expect(sonnet?.cost.imageOutput).toBe(60);
 			// Other cost fields should be preserved from built-in
 			expect(sonnet?.cost.output).toBeGreaterThan(0);
 		});
