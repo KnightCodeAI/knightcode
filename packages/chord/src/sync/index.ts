@@ -28,6 +28,7 @@ export {
 	type JsonObject,
 	LOG_START,
 	type PutBatchResult,
+	type RefusalReason,
 	type RemoteHistory,
 	type RemoteListing,
 	remoteHead,
